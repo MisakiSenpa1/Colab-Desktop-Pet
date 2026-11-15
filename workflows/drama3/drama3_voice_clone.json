@@ -1,0 +1,868 @@
+{
+  "id": "0e5a5f03-7e19-4014-b91c-4311d4434b1e",
+  "revision": 0,
+  "last_node_id": 11,
+  "last_link_id": 11,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "MarkdownNote",
+      "pos": [
+        20,
+        20
+      ],
+      "size": [
+        560,
+        640
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "## Fish Audio Drama 3 · 声音克隆工作流\n\n**已预置模型**\n- `models/diffusion_models/drama3_fp8experts_bf16.safetensors` (38.6 GB, FP8 满血版)\n- `models/vae/drama3_codec.safetensors` (1.57 GB)\n- `models/asr/qwen3_asr_1.7b_bf16.safetensors` (4.08 GB)\n\n**使用步骤**\n1. 在 **Load Reference Audio** 下拉选一条已预置的 `main_01_...wav` 参考音频（也可直接拖 `.wav` 到桌宠上传）。\n2. **Qwen3-ASR Transcribe** 会自动转写参考音频台词送入 Encode Voice。\n3. 在 **Drama 3 Generate** 里写你要合成的台词，可在任意位置加 `[sighs]`、`[laughs]`、`[whispers]`、`[像是在强忍着笑意]` 等表演指令，点 **Queue** 生成。\n4. 桌宠会自动把生成的 `.wav` 拉回本地 `_downloads/all/`。\n\n**保存音色复用**\n选中 **Save Drama 3 Voice** 按 `Ctrl+M` 取消静音并运行一次，会在 `output/drama3_voices` 生成几 KB 的音色文件；之后可用 **Load Drama 3 Voice** 替代参考音频 + ASR 节点。"
+      ],
+      "widgets_values_named": {
+        "text": "## Fish Audio Drama 3 · 声音克隆工作流\n\n**已预置模型**\n- `models/diffusion_models/drama3_fp8experts_bf16.safetensors` (38.6 GB, FP8 满血版)\n- `models/vae/drama3_codec.safetensors` (1.57 GB)\n- `models/asr/qwen3_asr_1.7b_bf16.safetensors` (4.08 GB)\n\n**使用步骤**\n1. 在 **Load Reference Audio** 下拉选一条已预置的 `main_01_...wav` 参考音频（也可直接拖 `.wav` 到桌宠上传）。\n2. **Qwen3-ASR Transcribe** 会自动转写参考音频台词送入 Encode Voice。\n3. 在 **Drama 3 Generate** 里写你要合成的台词，可在任意位置加 `[sighs]`、`[laughs]`、`[whispers]`、`[像是在强忍着笑意]` 等表演指令，点 **Queue** 生成。\n4. 桌宠会自动把生成的 `.wav` 拉回本地 `_downloads/all/`。\n\n**保存音色复用**\n选中 **Save Drama 3 Voice** 按 `Ctrl+M` 取消静音并运行一次，会在 `output/drama3_voices` 生成几 KB 的音色文件；之后可用 **Load Drama 3 Voice** 替代参考音频 + ASR 节点。"
+      },
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 2,
+      "type": "Drama3Loader",
+      "pos": [
+        620,
+        20
+      ],
+      "size": [
+        360,
+        182
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "model_name",
+          "name": "model_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "model_name"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "experts",
+          "name": "experts",
+          "type": "COMBO",
+          "widget": {
+            "name": "experts"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "expert_cache_gb",
+          "name": "expert_cache_gb",
+          "type": "FLOAT",
+          "widget": {
+            "name": "expert_cache_gb"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "second_gpu",
+          "name": "second_gpu",
+          "type": "COMBO",
+          "widget": {
+            "name": "second_gpu"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "split_layer",
+          "name": "split_layer",
+          "type": "INT",
+          "widget": {
+            "name": "split_layer"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "pin_experts",
+          "name": "pin_experts",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "pin_experts"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "DRAMA3_MODEL",
+          "name": "DRAMA3_MODEL",
+          "type": "DRAMA3_MODEL",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Drama3Loader"
+      },
+      "widgets_values": [
+        "drama3_fp8experts_bf16.safetensors",
+        "in RAM",
+        0,
+        "none",
+        0,
+        true
+      ],
+      "widgets_values_named": {
+        "model_name": "drama3_fp8experts_bf16.safetensors",
+        "experts": "in RAM",
+        "expert_cache_gb": 0,
+        "second_gpu": "none",
+        "split_layer": 0,
+        "pin_experts": true
+      }
+    },
+    {
+      "id": 3,
+      "type": "Drama3CodecLoader",
+      "pos": [
+        620,
+        260
+      ],
+      "size": [
+        360,
+        58
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "codec_name",
+          "name": "codec_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "codec_name"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "DRAMA3_CODEC",
+          "name": "DRAMA3_CODEC",
+          "type": "DRAMA3_CODEC",
+          "links": [
+            2,
+            5
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Drama3CodecLoader"
+      },
+      "widgets_values": [
+        "drama3_codec.safetensors"
+      ],
+      "widgets_values_named": {
+        "codec_name": "drama3_codec.safetensors"
+      }
+    },
+    {
+      "id": 4,
+      "type": "Drama3LoadReferenceAudio",
+      "pos": [
+        620,
+        380
+      ],
+      "size": [
+        360,
+        230
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "type": "COMBO",
+          "widget": {
+            "name": "audio"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "audioUI",
+          "name": "audioUI",
+          "type": "AUDIO_UI",
+          "widget": {
+            "name": "audioUI"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "choose file to upload",
+          "name": "upload",
+          "type": "AUDIOUPLOAD",
+          "widget": {
+            "name": "upload"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "trim",
+          "name": "trim",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "trim"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "length",
+          "name": "length",
+          "type": "COMBO",
+          "widget": {
+            "name": "length"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "AUDIO",
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            3,
+            9
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Drama3LoadReferenceAudio"
+      },
+      "widgets_values": [
+        "main_01_我操宝宝原来你长这样.wav",
+        "",
+        true,
+        "20 s"
+      ],
+      "widgets_values_named": {
+        "audio": "main_01_我操宝宝原来你长这样.wav",
+        "upload": "",
+        "trim": true,
+        "length": "20 s"
+      }
+    },
+    {
+      "id": 5,
+      "type": "Drama3EncodeVoice",
+      "pos": [
+        1020,
+        610
+      ],
+      "size": [
+        380,
+        108
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "codec",
+          "name": "codec",
+          "type": "DRAMA3_CODEC",
+          "link": 2
+        },
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 3
+        },
+        {
+          "localized_name": "transcript",
+          "name": "transcript",
+          "type": "STRING",
+          "widget": {
+            "name": "transcript"
+          },
+          "link": 10
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "DRAMA3_VOICE",
+          "name": "DRAMA3_VOICE",
+          "type": "DRAMA3_VOICE",
+          "links": [
+            4,
+            11
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Drama3EncodeVoice"
+      },
+      "widgets_values": [
+        ""
+      ],
+      "widgets_values_named": {
+        "transcript": ""
+      }
+    },
+    {
+      "id": 6,
+      "type": "Drama3Generate",
+      "pos": [
+        1020,
+        20
+      ],
+      "size": [
+        380,
+        372
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "model",
+          "name": "model",
+          "type": "DRAMA3_MODEL",
+          "link": 1
+        },
+        {
+          "localized_name": "voice0",
+          "name": "voices.voice0",
+          "shape": 7,
+          "type": "DRAMA3_VOICE",
+          "link": 4
+        },
+        {
+          "localized_name": "voice1",
+          "name": "voices.voice1",
+          "shape": 7,
+          "type": "DRAMA3_VOICE",
+          "link": null
+        },
+        {
+          "localized_name": "text",
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "seed",
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "temperature",
+          "name": "temperature",
+          "type": "FLOAT",
+          "widget": {
+            "name": "temperature"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "top_p",
+          "name": "top_p",
+          "type": "FLOAT",
+          "widget": {
+            "name": "top_p"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "top_k",
+          "name": "top_k",
+          "type": "INT",
+          "widget": {
+            "name": "top_k"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "max_frames",
+          "name": "max_frames",
+          "type": "INT",
+          "widget": {
+            "name": "max_frames"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "split_long_text",
+          "name": "split_long_text",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "split_long_text"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "speakers",
+          "name": "speakers",
+          "type": "COMBO",
+          "widget": {
+            "name": "speakers"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "voice_guidance",
+          "name": "voice_guidance",
+          "type": "FLOAT",
+          "widget": {
+            "name": "voice_guidance"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "DRAMA3_CODES",
+          "name": "DRAMA3_CODES",
+          "type": "DRAMA3_CODES",
+          "links": [
+            6
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Drama3Generate"
+      },
+      "widgets_values": [
+        "[sighs] 哎，这都第几次了？[laughs] 算了，看在今天心情不错的份上，就勉强原谅你这一次吧。",
+        1,
+        "randomize",
+        1,
+        0.9,
+        0,
+        0,
+        true,
+        "one take per line",
+        0.0
+      ],
+      "widgets_values_named": {
+        "text": "[sighs] 哎，这都第几次了？[laughs] 算了，看在今天心情不错的份上，就勉强原谅你这一次吧。",
+        "seed": 1,
+        "control_after_generate": "randomize",
+        "temperature": 1,
+        "top_p": 0.9,
+        "top_k": 0,
+        "max_frames": 0,
+        "split_long_text": true,
+        "speakers": "one take per line",
+        "voice_guidance": 0.0
+      }
+    },
+    {
+      "id": 7,
+      "type": "Drama3Decode",
+      "pos": [
+        1440,
+        20
+      ],
+      "size": [
+        260,
+        74
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "codec",
+          "name": "codec",
+          "type": "DRAMA3_CODEC",
+          "link": 5
+        },
+        {
+          "localized_name": "codes",
+          "name": "codes",
+          "type": "DRAMA3_CODES",
+          "link": 6
+        },
+        {
+          "localized_name": "shorten_long_pauses",
+          "name": "shorten_long_pauses",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "shorten_long_pauses"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "AUDIO",
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            7
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Drama3Decode"
+      },
+      "widgets_values_named": {
+        "shorten_long_pauses": true
+      },
+      "widgets_values": [
+        true
+      ]
+    },
+    {
+      "id": 8,
+      "type": "SaveAudio",
+      "pos": [
+        1440,
+        140
+      ],
+      "size": [
+        360,
+        112
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 7
+        },
+        {
+          "localized_name": "filename_prefix",
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "audioUI",
+          "name": "audioUI",
+          "type": "AUDIO_UI",
+          "widget": {
+            "name": "audioUI"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "type": "AUDIO",
+          "links": null
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "drama3/drama3"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "drama3/drama3"
+      }
+    },
+    {
+      "id": 9,
+      "type": "Qwen3ASRLoader",
+      "pos": [
+        620,
+        660
+      ],
+      "size": [
+        360,
+        58
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "model_name",
+          "name": "model_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "model_name"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "QWEN3_ASR_MODEL",
+          "name": "QWEN3_ASR_MODEL",
+          "type": "QWEN3_ASR_MODEL",
+          "links": [
+            8
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Qwen3ASRLoader"
+      },
+      "widgets_values": [
+        "qwen3_asr_1.7b_bf16.safetensors"
+      ],
+      "widgets_values_named": {
+        "model_name": "qwen3_asr_1.7b_bf16.safetensors"
+      }
+    },
+    {
+      "id": 10,
+      "type": "Qwen3ASRTranscribe",
+      "pos": [
+        1020,
+        380
+      ],
+      "size": [
+        380,
+        180
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "model",
+          "name": "model",
+          "type": "QWEN3_ASR_MODEL",
+          "link": 8
+        },
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 9
+        },
+        {
+          "localized_name": "language",
+          "name": "language",
+          "type": "COMBO",
+          "widget": {
+            "name": "language"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "context",
+          "name": "context",
+          "type": "STRING",
+          "widget": {
+            "name": "context"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "max_new_tokens",
+          "name": "max_new_tokens",
+          "type": "INT",
+          "widget": {
+            "name": "max_new_tokens"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "text",
+          "name": "text",
+          "type": "STRING",
+          "links": [
+            10
+          ]
+        },
+        {
+          "localized_name": "language",
+          "name": "language",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Qwen3ASRTranscribe"
+      },
+      "widgets_values": [
+        "Chinese",
+        "",
+        4096
+      ],
+      "widgets_values_named": {
+        "language": "Chinese",
+        "context": "",
+        "max_new_tokens": 4096
+      }
+    },
+    {
+      "id": 11,
+      "type": "Drama3SaveVoice",
+      "pos": [
+        1440,
+        610
+      ],
+      "size": [
+        360,
+        58
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 2,
+      "inputs": [
+        {
+          "localized_name": "voice",
+          "name": "voice",
+          "type": "DRAMA3_VOICE",
+          "link": 11
+        },
+        {
+          "localized_name": "name",
+          "name": "name",
+          "type": "STRING",
+          "widget": {
+            "name": "name"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "Drama3SaveVoice"
+      },
+      "widgets_values": [
+        "drama3/voice"
+      ],
+      "widgets_values_named": {
+        "name": "drama3/voice"
+      }
+    }
+  ],
+  "links": [
+    [
+      2,
+      3,
+      0,
+      5,
+      0,
+      "DRAMA3_CODEC"
+    ],
+    [
+      3,
+      4,
+      0,
+      5,
+      1,
+      "AUDIO"
+    ],
+    [
+      5,
+      3,
+      0,
+      7,
+      0,
+      "DRAMA3_CODEC"
+    ],
+    [
+      6,
+      6,
+      0,
+      7,
+      1,
+      "DRAMA3_CODES"
+    ],
+    [
+      7,
+      7,
+      0,
+      8,
+      0,
+      "AUDIO"
+    ],
+    [
+      1,
+      2,
+      0,
+      6,
+      0,
+      "DRAMA3_MODEL"
+    ],
+    [
+      4,
+      5,
+      0,
+      6,
+      1,
+      "DRAMA3_VOICE"
+    ],
+    [
+      8,
+      9,
+      0,
+      10,
+      0,
+      "QWEN3_ASR_MODEL"
+    ],
+    [
+      9,
+      4,
+      0,
+      10,
+      1,
+      "AUDIO"
+    ],
+    [
+      10,
+      10,
+      0,
+      5,
+      2,
+      "STRING"
+    ],
+    [
+      11,
+      5,
+      0,
+      11,
+      0,
+      "DRAMA3_VOICE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.75,
+      "offset": [
+        0,
+        0
+      ]
+    }
+  },
+  "version": 0.4
+}

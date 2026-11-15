@@ -1,0 +1,26 @@
+# 运行期状态、日志与私密凭据（禁止提交）
+.cf_tunnel_secret.json
+colab_pet/pet_state.json
+colab_pet/pet_error.log
+loras_manifest.json
+rclone.conf
+.env
+*.log
+
+# 按 ASSETS_NOTICE.txt 版权要求，公开仓库不跟踪第三方人物立绘图片
+colab_pet/assets/*.png
+colab_pet/assets/*.jpg
+colab_pet/assets/*.jpeg
+colab_pet/assets/*.webp
+
+# 本地模型、参考音频与拉回的输出缓存
+_downloads/
+loras/
+drama3_refs/
+
+# Python 与系统临时文件
+__pycache__/
+*.py[cod]
+*$py.class
+.DS_Store
+Thumbs.db

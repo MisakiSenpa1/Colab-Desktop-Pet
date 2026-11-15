@@ -1,0 +1,5188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Colab 桌宠</title>
+  <style>
+    :root {
+      --edge-bg: #221f52;
+      --bubble-bg-top: #f5f0ff;
+      --bubble-bg-bot: #eaf2ff;
+      --bubble-border: #9d7ff7;
+      --ink-main: #231942;
+      --ink-sub: #5b4e83;
+      --ink-muted: #7e73a6;
+      --accent: #7c3aed;
+      --pet-scale: 1;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      outline: none !important;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--edge-bg) !important;
+      font-family: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+      color: var(--ink-main);
+    }
+
+    .stage {
+      width: 392px;
+      height: 548px;
+      padding: 8px 12px 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      transform-origin: top left;
+      transform: scale(var(--pet-scale));
+      position: relative;
+    }
+
+    /* ========== 收起气泡时显示在头顶的迷你余额牌 ========== */
+    .mini-pill {
+      position: relative;
+      isolation: isolate;
+      display: none;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 17px;
+      border-radius: 0;
+      background: var(--bubble-border);
+      border: none;
+      box-shadow: 0 0 0 4px var(--bubble-border);
+      color: #3b0764;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      margin-bottom: 10px;
+    }
+
+    .mini-pill::before {
+      content: "";
+      position: absolute;
+      inset: 2px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #f5f0ff, #eaf2ff);
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    .mini-pill.show {
+      display: inline-flex;
+    }
+
+    /* ========== 顶部云朵思维气泡 (Star-Suite 风格) ========== */
+    .bubble-area {
+      width: 356px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 2px;
+    }
+
+    .bubble-area.collapsed {
+      display: none;
+    }
+
+    .bubble {
+      width: 100%;
+      min-height: 256px;
+      background: var(--bubble-border);
+      border: none;
+      box-shadow: 0 0 0 5px var(--bubble-border);
+      border-radius: 0;
+      padding: 12px 16px 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      isolation: isolate;
+      transform-origin: center bottom;
+      transition: background 0.15s, box-shadow 0.15s;
+    }
+
+    .bubble::before {
+      content: "";
+      position: absolute;
+      inset: 2.5px;
+      border-radius: 13.5px;
+      background: linear-gradient(155deg, var(--bubble-bg-top) 0%, var(--bubble-bg-bot) 100%);
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    .stage.drag-over .bubble,
+    .stage.drag-over .mini-pill {
+      background: #6d28d9;
+      box-shadow: 0 0 0 5px #6d28d9;
+    }
+
+    .stage.edge-peeking .mini-pill,
+    .stage.edge-peeking .side-tools {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .bubble-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #ddd6fe;
+      cursor: move;
+    }
+
+    .bubble-title {
+      font-size: 13.5px;
+      font-weight: 800;
+      color: #4c1d95;
+      letter-spacing: 0.2px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    #page-title {
+      display: inline-block;
+    }
+
+    #page-title.slide-next {
+      animation: titleSlideFromRight 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    #page-title.slide-prev {
+      animation: titleSlideFromLeft 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    @keyframes titleSlideFromRight {
+      from { opacity: 0; transform: translateX(10px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes titleSlideFromLeft {
+      from { opacity: 0; transform: translateX(-10px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .pager {
+      display: flex;
+      align-items: center;
+      background: #e9e2ff;
+      border: 1px solid #c4b5fd;
+      border-radius: 999px;
+      padding: 2px 5px;
+      gap: 3px;
+      font-size: 11.5px;
+      color: #4c1d95;
+      font-weight: 700;
+    }
+
+    .pager-dots {
+      display: inline-flex;
+      align-items: center;
+      gap: 3.5px;
+      padding: 0 2px;
+    }
+
+    .page-dot {
+      border: none;
+      padding: 0;
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(109, 40, 217, 0.28);
+      cursor: pointer;
+      transition: width 0.24s cubic-bezier(0.22, 1, 0.36, 1), background 0.2s ease, transform 0.16s ease;
+    }
+
+    .page-dot:hover {
+      background: rgba(109, 40, 217, 0.55);
+      transform: scale(1.12);
+    }
+
+    .page-dot.active {
+      width: 14px;
+      background: #7c3aed;
+    }
+
+    .page-ind-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .icon-btn {
+      width: 22px;
+      height: 22px;
+      border: none;
+      border-radius: 50%;
+      background: #ece5ff;
+      color: #5b21b6;
+      font-size: 12.5px;
+      line-height: 22px;
+      text-align: center;
+      cursor: pointer;
+      padding: 0;
+      transition: background 0.15s, transform 0.15s;
+    }
+
+    .icon-btn:hover {
+      background: #d8cbff;
+    }
+
+    .icon-btn:active {
+      transform: scale(0.9);
+    }
+
+    .pager .icon-btn {
+      width: 18px;
+      height: 18px;
+      line-height: 18px;
+      background: transparent;
+      font-size: 12.5px;
+    }
+
+    .pager .icon-btn:hover {
+      background: #d8cbff;
+    }
+
+    .spin {
+      animation: spin360 0.8s linear infinite;
+    }
+
+    @keyframes spin360 {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    /* 分页横向阻尼滑轨 */
+    .pages-viewport {
+      width: 100%;
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      align-items: stretch;
+    }
+
+    .pages-track {
+      display: flex;
+      flex-direction: row;
+      width: 100%;
+      min-width: 100%;
+      will-change: transform;
+      transform: translate3d(0%, 0, 0);
+      transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .pages-track.no-anim {
+      transition: none !important;
+    }
+
+    .page-body {
+      flex: 0 0 100%;
+      width: 100%;
+      min-width: 100%;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 7px;
+      padding-top: 6px;
+      opacity: 0.32;
+      transform: scale(0.985);
+      transition: opacity 0.24s ease, transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .page-body.active {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .page-body[data-page="1"].entering .stat-card {
+      animation: statRise 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    .page-body[data-page="1"].entering .stat-card:nth-child(2) { animation-delay: 0.03s; }
+    .page-body[data-page="1"].entering .stat-card:nth-child(3) { animation-delay: 0.06s; }
+    .page-body[data-page="1"].entering .stat-card:nth-child(4) { animation-delay: 0.09s; }
+
+    @keyframes statRise {
+      from { opacity: 0.45; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* 第 1 页：ComfyUI 实时状态微卡片 */
+    .comfy-strip {
+      background: rgba(255, 255, 255, 0.78);
+      border: 1px solid #d8ccff;
+      border-radius: 12px;
+      padding: 7px 10px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .comfy-strip.error {
+      background: #fff1f2;
+      border-color: #fda4af;
+    }
+
+    .comfy-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #4c1d95;
+    }
+
+    .comfy-strip.error #comfy-left {
+      color: #be123c;
+    }
+
+    #comfy-left {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #comfy-vram {
+      flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+      color: var(--ink-sub);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .comfy-track {
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      background: #dfd8fa;
+      overflow: hidden;
+    }
+
+    .comfy-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #10b981, #34d399);
+      transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1), background 0.25s;
+    }
+
+    .comfy-fill.sampling {
+      background: repeating-linear-gradient(
+        -45deg,
+        #7c3aed 0px,
+        #7c3aed 6px,
+        #a78bfa 6px,
+        #a78bfa 12px
+      );
+      background-size: 17px 17px;
+      animation: stripeFlow 0.75s linear infinite;
+    }
+
+    @keyframes stripeFlow {
+      from { background-position: 0 0; }
+      to { background-position: 17px 0; }
+    }
+
+    .comfy-fill.warn {
+      background: linear-gradient(90deg, #f59e0b, #fb923c);
+    }
+
+    .comfy-fill.danger {
+      background: linear-gradient(90deg, #f43f5e, #e11d48);
+    }
+
+    .comfy-fill.offline {
+      background: #cbd5e1;
+    }
+
+    /* 第 1 页：总览 */
+    .hero-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .cu-number-wrap {
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+    }
+
+    .cu-number {
+      font-size: 28px;
+      font-weight: 800;
+      color: #2e1065;
+      line-height: 1.05;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .cu-unit {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #6d28d9;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 700;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+
+    .status-pill.running {
+      background: #ede9fe;
+      color: #5b21b6;
+      border-color: #c4b5fd;
+    }
+
+    .status-pill.idle {
+      background: #dcfce7;
+      color: #166534;
+      border-color: #86efac;
+    }
+
+    .status-pill.warn {
+      background: #fef3c7;
+      color: #92400e;
+      border-color: #fcd34d;
+    }
+
+    .status-pill.danger, .status-pill.error {
+      background: #ffe4e6;
+      color: #9f1239;
+      border-color: #fda4af;
+    }
+
+    .dot-pulse {
+      width: 6.5px;
+      height: 6.5px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .status-pill.running .dot-pulse {
+      animation: pulseDot 1.3s ease-in-out infinite;
+    }
+
+    @keyframes pulseDot {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.45); opacity: 0.45; }
+    }
+
+    .bar-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .bar-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--ink-sub);
+      font-weight: 600;
+    }
+
+    .bar-track {
+      width: 100%;
+      height: 8px;
+      border-radius: 999px;
+      background: #dfd8fa;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #8b5cf6, #6366f1);
+      transition: width 0.55s cubic-bezier(0.22, 1, 0.36, 1), background 0.3s;
+    }
+
+    .bar-fill.warn {
+      background: linear-gradient(90deg, #f59e0b, #fb923c);
+    }
+
+    .bar-fill.danger {
+      background: linear-gradient(90deg, #f43f5e, #e11d48);
+    }
+
+    .bar-fill.idle {
+      background: linear-gradient(90deg, #10b981, #34d399);
+    }
+
+    .meta-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 2px;
+      font-size: 11px;
+      color: var(--ink-muted);
+    }
+
+    .session-badges {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
+      max-width: 245px;
+    }
+
+    .session-tag {
+      padding: 2px 8px;
+      border-radius: 7px;
+      background: #e5deff;
+      color: #4c1d95;
+      font-weight: 700;
+      font-size: 10.5px;
+      white-space: nowrap;
+    }
+
+    .session-tag.orphan {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    /* 第 2 页：今日小账本 */
+    .ledger-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .stat-card {
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid #d8ccff;
+      border-radius: 12px;
+      padding: 10px 10px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      min-width: 0;
+    }
+
+    .stat-card.primary-bal {
+      background: linear-gradient(145deg, #ffffff 0%, #f3eeff 100%);
+      border: 1.5px solid #b794f4;
+      padding: 9.5px 9.5px;
+      box-shadow: 0 2px 6px rgba(124, 58, 237, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+    }
+
+    .stat-k {
+      font-size: 10.5px;
+      line-height: 16px;
+      color: var(--ink-muted);
+      margin-bottom: 4px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-k.stat-k-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      overflow: visible;
+    }
+
+    .stat-badge {
+      display: inline-flex;
+      align-items: center;
+      background: linear-gradient(135deg, #7c3aed, #6366f1);
+      color: #ffffff;
+      font-size: 10px;
+      font-weight: 800;
+      line-height: 14px;
+      padding: 1px 6.5px;
+      border-radius: 999px;
+      flex-shrink: 0;
+      letter-spacing: 0.2px;
+    }
+
+    .stat-sub {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--ink-sub);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-variant-numeric: tabular-nums;
+      min-width: 0;
+    }
+
+    .stat-v {
+      font-size: 16px;
+      line-height: 21px;
+      font-weight: 800;
+      color: #3b0764;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-v.warn {
+      color: #b45309;
+    }
+
+    .stat-card.primary-bal .stat-v {
+      font-size: 16.5px;
+      color: #2e1065;
+    }
+
+    .stat-card.primary-bal .stat-v.warn {
+      color: #b45309;
+    }
+
+    .ledger-note {
+      background: rgba(255, 255, 255, 0.62);
+      border: 1px solid #e4dcff;
+      border-radius: 8px;
+      padding: 4px 10px;
+      font-size: 11px;
+      color: var(--ink-sub);
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* 第 3 页：快捷控制台（选卡开机舱 / 7步直播 / 运维控制） */
+    .page-body[data-page="2"] {
+      justify-content: space-between;
+      gap: 5px;
+      padding-top: 5px;
+    }
+
+    .console-top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .console-tabs {
+      position: relative;
+      display: inline-flex;
+      background: #e7e0ff;
+      border-radius: 9px;
+      padding: 2.5px;
+      gap: 2px;
+    }
+
+    .seg-glider {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 0;
+      height: 0;
+      border-radius: 7px;
+      background: #7c3aed;
+      box-shadow: 0 2px 6px rgba(124, 58, 237, 0.25);
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0;
+      transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), width 0.24s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.14s ease;
+    }
+
+    .seg-glider.no-anim {
+      transition: none !important;
+    }
+
+    .console-tab-btn {
+      position: relative;
+      z-index: 1;
+      border: none;
+      background: transparent;
+      color: #4c1d95;
+      font-size: 11.5px;
+      font-weight: 700;
+      padding: 3.5px 10px;
+      border-radius: 7px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.14s, color 0.16s;
+    }
+
+    .console-tab-btn.active {
+      background: #7c3aed;
+      color: #ffffff;
+    }
+
+    .console-tabs[data-glider-ready="1"] .console-tab-btn.active,
+    .seg-group[data-glider-ready="1"] .seg-btn.active {
+      background: transparent;
+    }
+
+    @keyframes subPaneIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .stock-pill {
+      border: 1px solid #c4b5fd;
+      background: #ffffff;
+      color: #4c1d95;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3.5px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+      white-space: nowrap;
+      max-width: 152px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .stock-pill.warn {
+      background: #fffbeb;
+      border-color: #fcd34d;
+      color: #b45309;
+    }
+
+    .stock-pill.danger {
+      background: #fff1f2;
+      border-color: #fda4af;
+      color: #be123c;
+    }
+
+    .console-pane {
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      gap: 6px;
+      flex: 1;
+    }
+
+    .console-pane.active {
+      display: flex;
+      animation: subPaneIn 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .boot-subview {
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .boot-subview.active {
+      display: flex;
+      animation: subPaneIn 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .boot-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    /* 外层工作流选择舱 */
+    .wf-trigger-btn {
+      flex: 1;
+      min-width: 0;
+      height: 30px;
+      padding: 0 8px 0 9px;
+      border-radius: 10px;
+      border: 1.5px solid #cbbcf9;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 2px 6px rgba(109, 40, 217, 0.08), inset 0 1px 0 #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      cursor: pointer;
+      color: #3b0764;
+      transition: border-color 0.16s, background 0.16s, box-shadow 0.16s, scale 0.12s ease-out;
+    }
+
+    .wf-trigger-btn:hover {
+      border-color: #8b5cf6;
+      background: #ffffff;
+      box-shadow: 0 3px 9px rgba(109, 40, 217, 0.15);
+    }
+
+    .wf-trigger-btn:active {
+      scale: 0.985;
+    }
+
+    /* 键盘无障碍焦点环：显式突破全局 outline 重置，仅键盘导航时高亮显示 */
+    .wf-trigger-btn:focus-visible,
+    .wf-cat-btn:focus-visible,
+    .wf-card:focus-visible,
+    .wf-mod-chip:focus-visible,
+    .wf-drawer-close:focus-visible,
+    .act-btn:focus-visible,
+    .gpu-card:focus-visible,
+    .mini-chip:focus-visible,
+    .boot-start-btn:focus-visible {
+      outline: 2px solid #5b21b6 !important;
+      outline-offset: 1.5px;
+    }
+
+    .wf-trig-main {
+      display: inline-flex;
+      align-items: center;
+      gap: 4.5px;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .wf-trig-main.bump-next {
+      animation: wfBumpNext 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .wf-trig-main.bump-prev {
+      animation: wfBumpPrev 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    @keyframes wfBumpNext {
+      from { opacity: 0.4; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes wfBumpPrev {
+      from { opacity: 0.4; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .wf-trig-icon {
+      font-size: 13px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    .wf-trig-name {
+      font-size: 12px;
+      font-weight: 800;
+      color: #3b0764;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .wf-trig-sub {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: #6d5cae;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .wf-trig-badges {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .wf-trig-mod-badge {
+      font-size: 9.5px;
+      font-weight: 800;
+      padding: 1px 5px;
+      border-radius: 999px;
+      background: #ede9fe;
+      border: 1px solid #d4c8fc;
+      color: #5b21b6;
+      white-space: nowrap;
+    }
+
+    .wf-trig-mod-badge.muted {
+      background: #f5f3ff;
+      border-color: #ddd6fe;
+      color: #7c6ca8;
+    }
+
+    .wf-trig-mod-badge.hidden {
+      display: none;
+    }
+
+    .wf-trig-rec {
+      font-size: 9.5px;
+      font-weight: 800;
+      padding: 1px 5px;
+      border-radius: 6px;
+      background: #f3e8ff;
+      color: #6d28d9;
+      white-space: nowrap;
+    }
+
+    .wf-trig-arrow {
+      color: #6d28d9;
+      flex-shrink: 0;
+      transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .wf-trigger-btn[aria-expanded="true"] .wf-trig-arrow {
+      transform: rotate(180deg);
+    }
+
+    .mini-chip {
+      height: 30px;
+      padding: 0 9px;
+      border-radius: 10px;
+      border: 1px solid #c4b5fd;
+      background: #ffffff;
+      color: #5b21b6;
+      font-size: 11px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: border-color 0.15s, background 0.15s, color 0.15s, scale 0.12s ease-out;
+    }
+
+    .mini-chip:hover {
+      border-color: #8b5cf6;
+      background: #f5f3ff;
+    }
+
+    .mini-chip:active {
+      scale: 0.96;
+    }
+
+    .mini-chip.active {
+      background: #7c3aed;
+      border-color: #6d28d9;
+      color: #ffffff;
+    }
+
+    .mini-chip.locked {
+      background: #ede9fe;
+      border-color: #c4b5fd;
+      color: #6d28d9;
+      cursor: not-allowed;
+      opacity: 0.92;
+    }
+
+    .mini-chip.locked:hover {
+      background: #ede9fe;
+      border-color: #c4b5fd;
+    }
+
+    .mini-chip.locked:active {
+      scale: 1;
+    }
+
+    .mini-chip.hidden {
+      display: none;
+    }
+
+    /* 气泡内滑出式毛玻璃工作流抽屉（严格约束于 2.5px 纯色抗磨损边框内侧） */
+    .wf-drawer-layer {
+      position: absolute;
+      top: 40px;
+      left: 2.5px;
+      right: 2.5px;
+      bottom: 2.5px;
+      border-radius: 0 0 13.5px 13.5px;
+      overflow: hidden;
+      z-index: 25;
+      pointer-events: none;
+      visibility: hidden;
+      opacity: 0;
+      transition: opacity 0.16s ease, visibility 0s linear 0.16s;
+    }
+
+    .wf-drawer-layer.open {
+      pointer-events: auto;
+      visibility: visible;
+      opacity: 1;
+      transition: opacity 0.16s ease, visibility 0s linear 0s;
+    }
+
+    .wf-drawer-scrim {
+      position: absolute;
+      inset: 0;
+      background: rgba(59, 7, 100, 0.16);
+      backdrop-filter: blur(2.5px);
+    }
+
+    .wf-drawer-sheet {
+      position: relative;
+      z-index: 1;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(165deg, rgba(252, 250, 255, 0.97) 0%, rgba(242, 236, 255, 0.98) 100%);
+      transform-origin: top left;
+    }
+
+    .wf-drawer-layer.open .wf-drawer-sheet {
+      animation: wfSheetFade 150ms ease-out both;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .wf-drawer-layer.open .wf-drawer-sheet {
+        animation: wfSheetGrow 260ms ease-out both, wfSheetFade 150ms ease-out both;
+        animation: wfSheetGrow 260ms linear(0, 0.52 18%, 1.04 42%, 0.99 68%, 1) both, wfSheetFade 150ms ease-out both;
+      }
+    }
+
+    @keyframes wfSheetGrow {
+      from { scale: 0.94; translate: 0 -6px; }
+    }
+
+    @keyframes wfSheetFade {
+      from { opacity: 0; }
+    }
+
+    .wf-drawer-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 3px;
+      padding: 5px 6px 4.5px;
+      border-bottom: 1px solid #e4dcff;
+      background: rgba(255, 255, 255, 0.65);
+    }
+
+    /* 分类标签栏：强制单行不折行，隐藏滚动条，确保 6 枚胶囊单行同屏完整可见零裁切 */
+    .wf-cat-tabs,
+    #wf-cat-bar {
+      display: flex;
+      align-items: center;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+      gap: 1.5px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .wf-cat-tabs::-webkit-scrollbar,
+    #wf-cat-bar::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* 单个分类 Tab 胶囊：选中态严禁改动 font-weight 与 padding，防止尺寸抖动 */
+    .wf-cat-btn {
+      flex: none;
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 24px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: #5b4b8a;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2.5px 4.5px;
+      border-radius: 999px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.14s, color 0.14s, border-color 0.14s, scale 0.12s ease-out;
+    }
+
+    .wf-cat-btn:hover {
+      background: #ede9fe;
+      color: #4c1d95;
+    }
+
+    .wf-cat-btn:active {
+      scale: 0.96;
+    }
+
+    .wf-cat-btn[aria-selected="true"],
+    .wf-cat-btn.active {
+      background: #7c3aed;
+      border-color: #5b21b6;
+      color: #ffffff;
+    }
+
+    /* 非纯色选中态指示器：附加高对比琥珀底边线，满足色觉无障碍要求且不占布局高度 */
+    .wf-cat-btn[aria-selected="true"]::after {
+      content: "";
+      position: absolute;
+      left: 4.5px;
+      right: 4.5px;
+      bottom: 1.5px;
+      border-block-end: 2px solid #fbbf24;
+      border-radius: 999px;
+      pointer-events: none;
+    }
+
+    .wf-drawer-close {
+      border: 1px solid #cbbcf9;
+      background: #f5f3ff;
+      color: #5b21b6;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2.5px 6px;
+      border-radius: 999px;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: background 0.14s, border-color 0.14s, scale 0.12s ease-out;
+    }
+
+    .wf-drawer-close:hover {
+      background: #ede9fe;
+      border-color: #8b5cf6;
+    }
+
+    .wf-drawer-close:active {
+      scale: 0.96;
+    }
+
+    /* 工作流抽屉滚动列表：块级布局 + 高对比细滚动条 + 粘性滚动边缘阴影提示 */
+    .wf-drawer-list {
+      --scrollbar-thumb: #7c3aed;
+      --scrollbar-track: #ede9fe;
+      display: block;
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      margin-right: 2px;
+      padding: 6px 8px 8px 10px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+      container-type: scroll-state;
+    }
+
+    .wf-drawer-list:hover {
+      --scrollbar-thumb: #6d28d9;
+    }
+
+    .wf-drawer-list.dragging,
+    .wf-drawer-list.dragging .wf-card {
+      cursor: grabbing;
+    }
+
+    /* 相邻卡片间距改用兄弟外边距，确保 sticky 滚动阴影伪元素零高度占用 */
+    .wf-drawer-list > .wf-card + .wf-card,
+    .wf-drawer-list > .wf-card + .wf-ext-note,
+    .wf-drawer-list > .wf-empty-card + .wf-ext-note,
+    .wf-drawer-list > .wf-empty-card + .wf-empty-card {
+      margin-top: 5px;
+    }
+
+    @supports not (scrollbar-color: auto) {
+      .wf-drawer-list::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .wf-drawer-list::-webkit-scrollbar-track {
+        background: var(--scrollbar-track);
+        border-radius: 999px;
+      }
+
+      .wf-drawer-list::-webkit-scrollbar-thumb {
+        background: var(--scrollbar-thumb);
+        border-radius: 999px;
+      }
+    }
+
+    /* 上下边缘粘性渐变阴影：仅在对应方向存在可滚动溢出内容时显隐 */
+    .wf-drawer-list::before,
+    .wf-drawer-list::after {
+      content: "";
+      display: block;
+      position: sticky;
+      block-size: 10px;
+      z-index: 2;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.18s;
+    }
+
+    .wf-drawer-list::before {
+      inset-block-start: 0;
+      margin-block-end: -10px;
+      background: radial-gradient(farthest-side at 50% 0, rgba(76, 29, 149, 0.16), transparent);
+    }
+
+    .wf-drawer-list::after {
+      inset-block-end: 0;
+      margin-block-start: -10px;
+      background: radial-gradient(farthest-side at 50% 100%, rgba(76, 29, 149, 0.16), transparent);
+    }
+
+    @container scroll-state(scrollable: block-start) {
+      .wf-drawer-list::before {
+        opacity: 1;
+      }
+    }
+
+    @container scroll-state(scrollable: block-end) {
+      .wf-drawer-list::after {
+        opacity: 1;
+      }
+    }
+
+    @supports not (container-type: scroll-state) {
+      .wf-drawer-list::before,
+      .wf-drawer-list::after {
+        animation: wfScrollShadow linear both;
+        animation-timeline: scroll();
+      }
+
+      .wf-drawer-list::before {
+        animation-range: 0 18px;
+      }
+
+      .wf-drawer-list::after {
+        animation-direction: reverse;
+        animation-range: calc(100% - 18px) 100%;
+      }
+    }
+
+    @keyframes wfScrollShadow {
+      to {
+        opacity: 1;
+      }
+    }
+
+    .wf-card {
+      border: 1.5px solid #dcd1ff;
+      background: rgba(255, 255, 255, 0.92);
+      border-radius: 10px;
+      padding: 6px 9px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s, box-shadow 0.15s, scale 0.12s ease-out;
+    }
+
+    .wf-card:hover {
+      border-color: #a78bfa;
+      background: #ffffff;
+    }
+
+    .wf-card:active {
+      scale: 0.99;
+    }
+
+    .wf-card.active {
+      border-color: #7c3aed;
+      background: linear-gradient(135deg, #f5f0ff 0%, #ede4ff 100%);
+      box-shadow: 0 2px 8px rgba(124, 58, 237, 0.14);
+    }
+
+    .wf-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .wf-card-title-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .wf-card-icon {
+      font-size: 13px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    .wf-card-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: #3b0764;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .wf-card-meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+
+    .wf-card-rec {
+      font-size: 9.5px;
+      font-weight: 800;
+      padding: 1px 6px;
+      border-radius: 6px;
+      background: #ede9fe;
+      color: #5b21b6;
+      white-space: nowrap;
+    }
+
+    .wf-card-check {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 1.5px solid #c4b5fd;
+      background: #ffffff;
+      color: transparent;
+      font-size: 10px;
+      font-weight: 900;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    .wf-card.active .wf-card-check {
+      background: #7c3aed;
+      border-color: #6d28d9;
+      color: #ffffff;
+    }
+
+    .wf-card-desc {
+      font-size: 10.5px;
+      line-height: 14px;
+      color: var(--ink-sub);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .wf-card-mods {
+      margin-top: 2px;
+      padding-top: 4px;
+      border-top: 1px dashed #e4dcff;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .wf-mods-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #6d5cae;
+    }
+
+    .wf-mod-chip {
+      border: 1px solid #cbbcf9;
+      background: #ffffff;
+      color: #5b21b6;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 999px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.14s, border-color 0.14s, color 0.14s, scale 0.12s ease-out;
+    }
+
+    .wf-mod-chip:hover {
+      border-color: #8b5cf6;
+      background: #f5f3ff;
+    }
+
+    .wf-mod-chip:active {
+      scale: 0.96;
+    }
+
+    .wf-mod-chip.active {
+      background: #7c3aed;
+      border-color: #6d28d9;
+      color: #ffffff;
+    }
+
+    /* 枚举循环切换子模块胶囊样式（如量化档位、上下文长度） */
+    .wf-mod-chip.choice {
+      background: #f5f0ff;
+      border-color: #a78bfa;
+      color: #4c1d95;
+    }
+
+    .wf-mod-chip.choice:hover {
+      background: #ede4ff;
+      border-color: #7c3aed;
+    }
+
+    .wf-ext-note {
+      margin-top: 1px;
+      padding: 5px 8px;
+      border-radius: 8px;
+      border: 1px dashed #d4c8fc;
+      background: rgba(255, 255, 255, 0.55);
+      color: #6d5cae;
+      font-size: 10px;
+      line-height: 14px;
+      text-align: center;
+    }
+
+    .wf-empty-card {
+      padding: 18px 12px;
+      border-radius: 10px;
+      border: 1.5px dashed #cbbcf9;
+      background: rgba(255, 255, 255, 0.72);
+      color: #5b4b8a;
+      font-size: 11px;
+      line-height: 17px;
+      text-align: center;
+    }
+
+    .gpu-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 5px;
+    }
+
+    .gpu-card {
+      border: 1.5px solid #d4c8fc;
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 5px 3px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      cursor: pointer;
+      transition: border-color 0.16s, background 0.18s, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease;
+    }
+
+    .gpu-card:hover {
+      border-color: #8b5cf6;
+      background: #f5f3ff;
+      transform: translateY(-1px);
+    }
+
+    .gpu-card:active {
+      transform: scale(0.95);
+    }
+
+    .gpu-card.active {
+      background: linear-gradient(135deg, #7c3aed, #6366f1);
+      border-color: #5b21b6;
+      color: #ffffff;
+      transform: translateY(-1px);
+      box-shadow: 0 3px 8px rgba(109, 40, 217, 0.24);
+    }
+
+    .gpu-card.scarce {
+      border-color: #fbbf24;
+      background: #fffbeb;
+    }
+
+    .gpu-card.scarce.active {
+      background: linear-gradient(135deg, #d97706, #ea580c);
+      border-color: #b45309;
+      color: #ffffff;
+    }
+
+    .gpu-card.restricted {
+      border-style: dashed;
+      border-color: #fda4af;
+      background: #fff1f2;
+      color: #9f1239;
+    }
+
+    .gpu-card.restricted.active {
+      background: linear-gradient(135deg, #e11d48, #be123c);
+      border-style: solid;
+      border-color: #9f1239;
+      color: #ffffff;
+    }
+
+    .gpu-name {
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.15;
+      white-space: nowrap;
+    }
+
+    .gpu-meta {
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1.15;
+      opacity: 0.92;
+      white-space: nowrap;
+    }
+
+    .gpu-cu {
+      font-size: 9.5px;
+      font-weight: 700;
+      line-height: 1.1;
+      opacity: 0.85;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .gpu-card.active .gpu-cu {
+      opacity: 0.96;
+      color: #f3e8ff;
+    }
+
+    .boot-spec-hint {
+      min-height: 27px;
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid #dcd1ff;
+      border-radius: 9px;
+      padding: 4px 7px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 5px;
+      font-size: 10.5px;
+      line-height: 15px;
+      font-weight: 600;
+      color: var(--ink-sub);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .spec-main {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: left;
+    }
+
+    .spec-rate-badge {
+      flex-shrink: 0;
+      padding: 1.5px 6px;
+      border-radius: 999px;
+      background: #ede9fe;
+      border: 1px solid #d4c8fc;
+      color: #5b21b6;
+      font-size: 10px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .spec-rate-badge.measured {
+      background: #dcfce7;
+      border-color: #86efac;
+      color: #166534;
+    }
+
+    .spec-rate-badge.hm-hot {
+      background: #fef3c7;
+      border-color: #fcd34d;
+      color: #92400e;
+    }
+
+    .boot-spec-hint.warn {
+      background: #fffbeb;
+      border-color: #fcd34d;
+      color: #b45309;
+      justify-content: center;
+      font-weight: 700;
+    }
+
+    .boot-spec-hint.danger {
+      background: #fff1f2;
+      border-color: #fda4af;
+      color: #be123c;
+      justify-content: center;
+      font-weight: 700;
+    }
+
+    .boot-start-btn {
+      width: 100%;
+      border: 1.5px solid #6d28d9;
+      background: linear-gradient(135deg, #7c3aed, #6366f1);
+      color: #ffffff;
+      border-radius: 11px;
+      padding: 8px 10px;
+      font-size: 12.5px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.15s;
+    }
+
+    .boot-start-btn:hover {
+      background: linear-gradient(135deg, #6d28d9, #4f46e5);
+    }
+
+    .boot-start-btn:active {
+      transform: scale(0.97);
+    }
+
+    .boot-start-btn.armed {
+      background: linear-gradient(135deg, #e11d48, #be123c);
+      border-color: #9f1239;
+    }
+
+    /* 7 步开机进度直播卡 */
+    .deploy-card {
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid #c4b5fd;
+      border-radius: 12px;
+      padding: 9px 11px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .deploy-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      color: #3b0764;
+    }
+
+    #deploy-stage-title {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .deploy-metrics {
+      flex-shrink: 0;
+      font-size: 11px;
+      font-weight: 700;
+      color: #6d28d9;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .deploy-sub {
+      font-size: 11px;
+      line-height: 15px;
+      color: var(--ink-sub);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .step-dots-row {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+    }
+
+    .step-dot {
+      border-radius: 7px;
+      padding: 5px 1px;
+      text-align: center;
+      font-size: 10.5px;
+      font-weight: 700;
+      background: #e9e2ff;
+      color: #6b5fa3;
+      border: 1px solid #d8ccff;
+      white-space: nowrap;
+    }
+
+    .step-dot.done {
+      background: #dcfce7;
+      border-color: #86efac;
+      color: #166534;
+    }
+
+    .step-dot.current {
+      background: #7c3aed;
+      border-color: #5b21b6;
+      color: #ffffff;
+      animation: pulseDot 1.4s ease-in-out infinite;
+    }
+
+    .deploy-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .deploy-foot-hint {
+      font-size: 10.5px;
+      color: var(--ink-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+    }
+
+    .deploy-cancel-btn {
+      border: 1px solid #fda4af;
+      background: #fff1f2;
+      color: #9f1239;
+      border-radius: 8px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .deploy-cancel-btn.armed {
+      background: #e11d48;
+      color: #ffffff;
+      border-color: #be123c;
+    }
+
+    .action-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+    }
+
+    .act-btn {
+      border: 1.5px solid #c4b5fd;
+      background: #ffffff;
+      color: #3b0764;
+      border-radius: 11px;
+      padding: 8px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      white-space: nowrap;
+      transition: transform 0.12s, background 0.15s, border-color 0.15s, color 0.15s;
+    }
+
+    /* 幂等复制按钮已复制反馈态（严禁设置 disabled，保持盒尺寸零抖动） */
+    .act-btn[data-copied] {
+      background: #dcfce7;
+      border-color: #34d399;
+      color: #166534;
+    }
+
+    .act-btn[data-copied]:hover {
+      background: #d1fae5;
+      border-color: #10b981;
+    }
+
+    .act-btn:hover {
+      background: #f5f3ff;
+      border-color: #8b5cf6;
+    }
+
+    .act-btn:active {
+      transform: scale(0.95);
+    }
+
+    .act-btn.primary {
+      background: linear-gradient(135deg, #7c3aed, #6366f1);
+      color: #ffffff;
+      border-color: #6d28d9;
+    }
+
+    .act-btn.primary:hover {
+      background: linear-gradient(135deg, #6d28d9, #4f46e5);
+    }
+
+    .act-btn.stop {
+      border-color: #fda4af;
+      background: #fff1f2;
+      color: #9f1239;
+    }
+
+    .act-btn.stop.armed {
+      background: #e11d48;
+      color: #ffffff;
+      border-color: #be123c;
+    }
+
+    .act-btn.upload-bar {
+      grid-column: span 2;
+      padding: 7px 10px;
+      font-size: 11.5px;
+      background: #f5f3ff;
+      border-style: dashed;
+    }
+
+    .act-hint {
+      font-size: 10.5px;
+      color: var(--ink-muted);
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+
+    /* 第 4 页：设置 */
+    .page-body[data-page="3"] {
+      gap: 3px;
+      padding-top: 3px;
+      justify-content: center;
+    }
+
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--ink-sub);
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.58);
+      border: 1px solid #e4dcff;
+      border-radius: 8px;
+      padding: 2px 9px;
+    }
+
+    .seg-group {
+      position: relative;
+      display: inline-flex;
+      background: #e7e0ff;
+      border-radius: 7px;
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .seg-group .seg-glider {
+      border-radius: 5.5px;
+    }
+
+    .seg-btn {
+      position: relative;
+      z-index: 1;
+      border: none;
+      background: transparent;
+      color: #4c1d95;
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 1.5px 7px;
+      border-radius: 5.5px;
+      cursor: pointer;
+      transition: color 0.16s, background 0.14s;
+    }
+
+    .seg-btn.active {
+      background: #7c3aed;
+      color: #ffffff;
+    }
+
+    /* 思维气泡小尾巴 ○ o */
+    .thought-dots {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      margin-top: 4px;
+    }
+
+    .thought-dot-1 {
+      position: relative;
+      isolation: isolate;
+      width: 14px;
+      height: 14px;
+      border-radius: 0;
+      background: var(--bubble-border);
+      border: none;
+      box-shadow: 0 0 0 3px var(--bubble-border);
+      transform: translateX(-18px);
+    }
+
+    .thought-dot-1::before {
+      content: "";
+      position: absolute;
+      inset: 2px;
+      border-radius: 50%;
+      background: #efeaff;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    .thought-dot-2 {
+      position: relative;
+      isolation: isolate;
+      width: 10px;
+      height: 10px;
+      border-radius: 0;
+      background: var(--bubble-border);
+      border: none;
+      box-shadow: 0 0 0 3px var(--bubble-border);
+      transform: translateX(-7px);
+    }
+
+    .thought-dot-2::before {
+      content: "";
+      position: absolute;
+      inset: 1.5px;
+      border-radius: 50%;
+      background: #efeaff;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    /* ========== 角色舞台与 Q 弹交互 ========== */
+    .pet-zone {
+      position: relative;
+      width: 356px;
+      height: 236px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      margin-top: 2px;
+    }
+
+    /* 临时互动台词小气泡（严格单行<=28px，外层纯色护边 + ::before 内嵌圆角避免 Skia 接缝渗色） */
+    .speech-toast {
+      position: absolute;
+      isolation: isolate;
+      top: 0px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 352px;
+      height: 28px;
+      background: #8b5cf6;
+      border: none;
+      box-shadow: 0 0 0 4px #8b5cf6;
+      border-radius: 0;
+      padding: 0 15px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #3b0764;
+      white-space: nowrap;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    .speech-toast::before {
+      content: "";
+      position: absolute;
+      inset: 2px;
+      border-radius: 999px;
+      background: #ffffff;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    .speech-toast.show {
+      display: inline-flex;
+    }
+
+    .speech-toast.clickable {
+      pointer-events: auto;
+      cursor: pointer;
+    }
+
+    .speech-toast.error {
+      background: #e11d48;
+      box-shadow: 0 0 0 4px #e11d48;
+      color: #9f1239;
+    }
+
+    .toast-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+
+    .toast-choice-btn {
+      height: 20px;
+      padding: 0 9px;
+      border-radius: 999px;
+      border: 1px solid #8b5cf6;
+      background: #ede9fe;
+      color: #4c1d95;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 18px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .toast-choice-btn.primary {
+      background: #7c3aed;
+      border-color: #6d28d9;
+      color: #ffffff;
+    }
+
+    /* 常驻迷你工具胶囊（位于 Form.Region 内，外层纯色护边 + ::before 内嵌圆角胶囊） */
+    .side-tools {
+      position: absolute;
+      isolation: isolate;
+      right: 6px;
+      bottom: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      padding: 7px 6px;
+      border-radius: 0;
+      background: var(--bubble-border);
+      border: none;
+      box-shadow: 0 0 0 4px var(--bubble-border);
+      z-index: 15;
+    }
+
+    .side-tools::before {
+      content: "";
+      position: absolute;
+      inset: 2px;
+      border-radius: 999px;
+      background: #f5f0ff;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    .tool-pill {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: none;
+      background: #e9e2ff;
+      color: #4c1d95;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      transition: background 0.15s, transform 0.12s;
+    }
+
+    .tool-pill:hover {
+      background: #d8cbff;
+    }
+
+    .tool-pill:active {
+      transform: scale(0.9);
+    }
+
+    .pet-hit {
+      position: relative;
+      width: 250px;
+      height: 209px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      cursor: grab;
+      transform-origin: 50% 100%;
+    }
+
+    .pet-hit:active {
+      cursor: grabbing;
+    }
+
+    /* 保持容器纯布局职责，改由 JS RAF 与 Form.Region 锁步驱动形变，消除呼吸微缩露框 */
+    .pet-breathe {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      transform-origin: 50% 100%;
+    }
+
+    .pet-squash {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      transform-origin: 50% 100%;
+      will-change: transform;
+    }
+
+    /* 互动轻触内部星光点缀，限制在角色实体发丝内侧上飘渐隐 */
+    .pet-sparkle {
+      position: absolute;
+      pointer-events: none;
+      font-size: 13px;
+      font-weight: 800;
+      color: #fde047;
+      text-shadow: 0 0 4px #7c3aed, 0 1px 2px #3b0764;
+      z-index: 12;
+      animation: sparklePop 0.56s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    @keyframes sparklePop {
+      0%   { opacity: 0; transform: translateY(4px) scale(0.5); }
+      25%  { opacity: 1; transform: translateY(-2px) scale(1.08); }
+      100% { opacity: 0; transform: translateY(-14px) scale(0.8); }
+    }
+
+    #pet-img {
+      width: 250px;
+      height: 209px;
+      object-fit: contain;
+      display: block;
+      pointer-events: none;
+      transform-origin: 50% 100%;
+    }
+
+    #pet-img.flipped {
+      transform: scaleX(-1);
+    }
+  </style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <!-- 气泡收起时的头顶迷你状态胶囊 -->
+    <div class="mini-pill" id="mini-pill" title="点击展开完整面板">
+      <span>✦</span>
+      <span id="mini-cu">--.-- CU</span>
+      <span id="mini-state">· 待机</span>
+    </div>
+
+    <!-- 顶部思维气泡 -->
+    <div class="bubble-area" id="bubble-area">
+      <div class="bubble" id="bubble-box">
+        <div class="bubble-header" id="drag-header" title="按住此处或小人均可拖动">
+          <div class="bubble-title">
+            <span>✦</span>
+            <span id="page-title">Colab · 积分看板</span>
+          </div>
+          <div class="header-controls">
+            <div class="pager">
+              <button class="icon-btn" id="btn-prev" title="上一页">‹</button>
+              <div class="pager-dots" id="pager-dots" aria-label="快捷切换分页">
+                <button class="page-dot active" data-page="0" title="积分看板 (1/4)"></button>
+                <button class="page-dot" data-page="1" title="今日小账本 (2/4)"></button>
+                <button class="page-dot" data-page="2" title="快捷控制台 (3/4)"></button>
+                <button class="page-dot" data-page="3" title="偏好设置 (4/4)"></button>
+              </div>
+              <span id="page-ind" class="page-ind-hidden">1/4</span>
+              <button class="icon-btn" id="btn-next" title="下一页">›</button>
+            </div>
+            <button class="icon-btn" id="btn-refresh" title="立即刷新">↻</button>
+            <button class="icon-btn" id="btn-collapse" title="收起气泡">×</button>
+          </div>
+        </div>
+
+        <div class="pages-viewport" id="pages-viewport">
+          <div class="pages-track" id="pages-track">
+        <!-- Page 1: 状态总览 -->
+        <div class="page-body active" data-page="0">
+          <div class="hero-row">
+            <div class="cu-number-wrap">
+              <span class="cu-number" id="cu-balance">--.--</span>
+              <span class="cu-unit">CU</span>
+            </div>
+            <span class="status-pill running" id="status-pill">
+              <span class="dot-pulse"></span>
+              <span id="status-label">初始化中</span>
+            </span>
+          </div>
+
+          <div class="bar-group">
+            <div class="bar-label">
+              <span>余额水位</span>
+              <span id="balance-pct-text">--% (-- / --)</span>
+            </div>
+            <div class="bar-track">
+              <div class="bar-fill" id="balance-bar"></div>
+            </div>
+          </div>
+
+          <div class="bar-group">
+            <div class="bar-label">
+              <span id="rate-text">当前耗速: -- CU/hr</span>
+              <span id="eta-text">续航: --</span>
+            </div>
+            <div class="bar-track">
+              <div class="bar-fill" id="rate-bar"></div>
+            </div>
+          </div>
+
+          <div class="comfy-strip" id="comfy-strip">
+            <div class="comfy-row">
+              <span id="comfy-left">💤 未开机 · 拖入模型可预传云盘</span>
+              <span id="comfy-vram">零耗电待机</span>
+            </div>
+            <div class="comfy-track">
+              <div class="comfy-fill offline" id="comfy-bar" style="width: 100%;"></div>
+            </div>
+          </div>
+
+          <div class="meta-footer">
+            <div class="session-badges" id="session-badges">
+              <span class="session-tag">读取会话中...</span>
+            </div>
+            <span id="updated-time">--:--:--</span>
+          </div>
+        </div>
+
+        <!-- Page 2: 今日小账本 -->
+        <div class="page-body" data-page="1">
+          <div class="ledger-grid">
+            <div class="stat-card primary-bal">
+              <div class="stat-k stat-k-row" id="ledger-start-k">
+                <span class="stat-badge">现有余额</span>
+                <span class="stat-sub" id="ledger-start-sub">起始 --</span>
+              </div>
+              <div class="stat-v" id="ledger-start">--.-- CU</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-k" id="ledger-consumed-k">今日实耗统计</div>
+              <div class="stat-v" id="ledger-consumed">0.00 CU</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-k">本次连续开机</div>
+              <div class="stat-v" id="ledger-uptime">未运行</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-k">最近观测变动</div>
+              <div class="stat-v" id="ledger-delta">0.000 CU</div>
+            </div>
+          </div>
+          <div class="ledger-note" id="ledger-date">账本日: ---- -- -- · 充值不会冲减今日实耗</div>
+        </div>
+
+        <!-- Page 3: 快捷控制台 -->
+        <div class="page-body" data-page="2">
+          <div class="console-top-bar">
+            <div class="console-tabs" id="console-tabs">
+              <button class="console-tab-btn active" data-tab="boot">⚡ 选卡开机</button>
+              <button class="console-tab-btn" data-tab="ops">🛠️ 运维控制</button>
+            </div>
+            <button class="stock-pill" id="gpu-stock-pill" title="点击实时读取 Colab 可用显卡算力池">⚪ 待测算力 ↻</button>
+          </div>
+
+          <!-- 子视图 A: 选卡配置与 7 步直播 -->
+          <div class="console-pane active" id="boot-pane">
+            <div class="boot-subview active" id="boot-config-pane">
+              <div class="boot-row">
+                <button
+                  class="wf-trigger-btn"
+                  id="wf-trigger-btn"
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-expanded="false"
+                  aria-controls="wf-drawer-layer"
+                  title="点击展开工作流库 · 悬停拨动滚轮可直接秒切"
+                >
+                  <span class="wf-trig-main" id="wf-trig-main">
+                    <span class="wf-trig-icon" id="wf-trig-icon">🎨</span>
+                    <span class="wf-trig-name" id="wf-trig-name">Anima</span>
+                    <span class="wf-trig-sub" id="wf-trig-sub">极速生图</span>
+                  </span>
+                  <span class="wf-trig-badges">
+                    <span class="wf-trig-mod-badge hidden" id="wf-trig-mod-badge"></span>
+                    <span class="wf-trig-rec" id="wf-trig-rec">L4★</span>
+                    <svg class="wf-trig-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                  </span>
+                </button>
+                <button class="mini-chip" id="chip-hm" title="申请 High-RAM 高内存规格（L4 原生高存）">高内存</button>
+              </div>
+
+              <div class="gpu-grid" id="gpu-grid">
+                <button class="gpu-card" data-gpu="T4"><span class="gpu-name">T4</span><span class="gpu-meta">16G</span><span class="gpu-cu">1.15/h</span></button>
+                <button class="gpu-card active" data-gpu="L4"><span class="gpu-name">L4★</span><span class="gpu-meta">24G高</span><span class="gpu-cu">1.94/h</span></button>
+                <button class="gpu-card" data-gpu="A100"><span class="gpu-name">A100</span><span class="gpu-meta">40G</span><span class="gpu-cu">~5.5/h</span></button>
+                <button class="gpu-card" data-gpu="G4"><span class="gpu-name">G4</span><span class="gpu-meta">96G</span><span class="gpu-cu">10.05/h</span></button>
+                <button class="gpu-card" data-gpu="H100"><span class="gpu-name">H100</span><span class="gpu-meta">80G</span><span class="gpu-cu">~12.6/h</span></button>
+              </div>
+
+              <div class="boot-spec-hint" id="boot-spec-hint">
+                <span class="spec-main">L4 · 24G显存 · 53G高存 · 约2.5m</span>
+                <span class="spec-rate-badge measured">实测 1.94 CU/h</span>
+              </div>
+              <button class="boot-start-btn" id="btn-boot-start">⚡ 一键开机部署 Anima · L4</button>
+            </div>
+
+            <div class="boot-subview" id="boot-live-pane">
+              <div class="deploy-card">
+                <div class="deploy-head">
+                  <span id="deploy-stage-title">[0/7] 准备开机部署</span>
+                  <span class="deploy-metrics"><span id="deploy-pct-text">0%</span> · <span id="deploy-elapsed">00:00</span></span>
+                </div>
+                <div class="deploy-sub" id="deploy-sub-detail">正在等待 Colab 返回算力分配...</div>
+                <div class="comfy-track">
+                  <div class="comfy-fill sampling" id="deploy-bar" style="width: 4%;"></div>
+                </div>
+              </div>
+              <div class="step-dots-row" id="deploy-step-dots">
+                <span class="step-dot" data-step="1">1检</span>
+                <span class="step-dot" data-step="2">2具</span>
+                <span class="step-dot" data-step="3">3境</span>
+                <span class="step-dot" data-step="4">4模</span>
+                <span class="step-dot" data-step="5">5盘</span>
+                <span class="step-dot" data-step="6">6启</span>
+                <span class="step-dot" data-step="7">7隧</span>
+              </div>
+              <div class="deploy-footer">
+                <span class="deploy-foot-hint" id="deploy-foot-hint">直播中 · 第 1 页同步可见进度</span>
+                <button class="deploy-cancel-btn" id="btn-boot-cancel">✕ 中止</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 子视图 B: 运维控制 -->
+          <div class="console-pane" id="ops-pane">
+            <div class="action-grid">
+              <button class="act-btn primary" id="act-comfy" type="button">🚀 打开 ComfyUI</button>
+              <button class="act-btn" id="act-sync" type="button">📥 拉回成图</button>
+              <button class="act-btn" id="act-colab" type="button">🔗 Colab 网页</button>
+              <button class="act-btn stop" id="act-stop" type="button">🛑 一键停卡</button>
+              <button class="act-btn upload-bar" id="act-upload" type="button">📤 传图到云端</button>
+            </div>
+            <div class="act-hint" id="action-status" role="status" aria-live="polite" aria-atomic="true">支持拖入参考图 · PNG/JSON直铺画布 · LoRA模型</div>
+          </div>
+        </div>
+
+        <!-- Page 4: 设置与贴心提示 -->
+        <div class="page-body" data-page="3">
+          <div class="setting-row">
+            <span>窗口置顶</span>
+            <div class="seg-group" id="seg-top">
+              <button class="seg-btn active" data-val="1">置顶</button>
+              <button class="seg-btn" data-val="0">普通</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span>刷新间隔</span>
+            <div class="seg-group" id="seg-poll">
+              <button class="seg-btn" data-val="30">30s</button>
+              <button class="seg-btn active" data-val="60">60s</button>
+              <button class="seg-btn" data-val="120">2m</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span>桌宠体型</span>
+            <div class="seg-group" id="seg-scale">
+              <button class="seg-btn" data-val="0.85">小</button>
+              <button class="seg-btn active" data-val="1">中</button>
+              <button class="seg-btn" data-val="1.15">大</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span>长时忘关提醒</span>
+            <div class="seg-group" id="seg-long">
+              <button class="seg-btn" data-val="60">1h</button>
+              <button class="seg-btn active" data-val="180">3h</button>
+              <button class="seg-btn" data-val="300">5h</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span>出图自动拉回</span>
+            <div class="seg-group" id="seg-autopull">
+              <button class="seg-btn active" data-val="1">自动</button>
+              <button class="seg-btn" data-val="0">手动</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span>防断连保活</span>
+            <div class="seg-group" id="seg-keepalive">
+              <button class="seg-btn" data-val="smart" title="活跃期每10分钟保活，连续空闲45分钟停止续命">智能</button>
+              <button class="seg-btn active" data-val="stop60" title="智能保活 + 连续空闲满1小时自动归档停卡">闲1h停</button>
+              <button class="seg-btn" data-val="off" title="关闭保活心跳（约30分钟闲置由官方自动回收）">关闭</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span>贴边半隐藏</span>
+            <div class="seg-group" id="seg-edge">
+              <button class="seg-btn active" data-val="1">自动</button>
+              <button class="seg-btn" data-val="0">常驻</button>
+            </div>
+          </div>
+        </div>
+          </div>
+        </div>
+
+        <!-- 气泡内滑出式工作流选择抽屉（严格贴合内层 2.5px 圆角边界，关闭态默认挂载 inert 隔离键盘焦点） -->
+        <div class="wf-drawer-layer" id="wf-drawer-layer" role="dialog" aria-modal="true" aria-label="选择云端模型工作流" aria-hidden="true" inert>
+          <div class="wf-drawer-scrim" id="wf-drawer-scrim"></div>
+          <div class="wf-drawer-sheet" id="wf-drawer-sheet">
+            <div class="wf-drawer-head">
+              <div class="wf-cat-tabs" id="wf-cat-bar" role="tablist" aria-label="工作流分类">
+                <button class="wf-cat-btn active" type="button" role="tab" data-cat="all" aria-selected="true" tabindex="0">全部</button>
+                <button class="wf-cat-btn" type="button" role="tab" data-cat="image" aria-selected="false" tabindex="-1">🎨生图</button>
+                <button class="wf-cat-btn" type="button" role="tab" data-cat="video" aria-selected="false" tabindex="-1">🎬视频</button>
+                <button class="wf-cat-btn" type="button" role="tab" data-cat="audio" aria-selected="false" tabindex="-1">🎙️语音</button>
+                <button class="wf-cat-btn" type="button" role="tab" data-cat="llm" aria-selected="false" tabindex="-1">🧠对话</button>
+                <button class="wf-cat-btn" type="button" role="tab" data-cat="custom" aria-selected="false" tabindex="-1">🔧其他</button>
+              </div>
+              <button class="wf-drawer-close" id="wf-drawer-close" type="button">完成 ✓</button>
+            </div>
+            <div class="wf-drawer-list" id="wf-drawer-list" role="tabpanel" aria-label="可选工作流列表"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="thought-dots" id="thought-dots">
+        <div class="thought-dot-1" id="dot-1"></div>
+        <div class="thought-dot-2" id="dot-2"></div>
+      </div>
+    </div>
+
+    <!-- 下方人物立绘与常驻操作胶囊 -->
+    <div class="pet-zone">
+      <div class="speech-toast" id="speech-toast">随时为你盯着 Colab 积分哟～</div>
+
+      <div class="side-tools" id="side-tools">
+        <button class="tool-pill" id="tool-bubble" title="展开/收起信息气泡">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </button>
+        <button class="tool-pill" id="tool-refresh" title="刷新余额">↻</button>
+        <button class="tool-pill" id="tool-quit" title="退出桌宠">✕</button>
+      </div>
+
+      <div class="pet-hit" id="pet-hit" title="点我刷新/互动 · 按住可拖动 · 双击切换气泡">
+        <div class="pet-breathe">
+          <div class="pet-squash" id="pet-squash">
+            <img id="pet-img" src="/assets/idle.png" alt="Colab 桌宠" draggable="false" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const PAGE_TITLES = [
+      "Colab · 积分看板",
+      "Colab · 今日小账本",
+      "Colab · 快捷控制台",
+      "Colab · 偏好设置"
+    ];
+
+    const LINES_RUNNING = [
+      "GPU 正在呼呼运转，记得按时拉回成图哦~",
+      "当前实时计费中，跑完别忘了点一键停卡！",
+      "我会每分钟帮你瞄一眼算力积分余额的~",
+      "算力稳稳输出中，祝你次次出美图 ✨"
+    ];
+
+    const LINES_IDLE = [
+      "卡片已关停，现在是零消耗省钱模式！",
+      "一个算力也没浪费，本喵今天超级乖~",
+      "待机休息中，随时准备再开机炼丹！",
+      "积分安稳躺在账户里，心情超好 ✦"
+    ];
+
+    const LINES_WARN = [
+      "呜……显卡开好久啦，确认还在出图吗？",
+      "积分余额有点紧或者网络抖动了，快看看我！",
+      "记得检查下是不是忘记停卡了呀 (；ω；)"
+    ];
+
+    let currentPage = 0;
+    let latestSnap = null;
+    let shownBalance = null;
+    let animFrame = null;
+    let toastTimer = null;
+    let toastAction = null;
+    let toastHasChoices = false;
+    let toastDuration = 2600;
+    let lastMiniPillText = "";
+    let proudOverrideUntil = 0;
+    let dragOverrideUntil = 0;
+    let dragResetTimer = null;
+    let stopArmedUntil = 0;
+    let stopResetTimer = null;
+    let bootArmedUntil = 0;
+    let bootResetTimer = null;
+    let cancelArmedUntil = 0;
+    let cancelResetTimer = null;
+    let activeConsoleTab = "boot";
+    let consoleTabPinned = false;
+    let wfDrawerOpen = false;
+    let wfActiveCategory = "all";
+    let wfWheelLockUntil = 0;
+    let wfBumpTimer = null;
+    let copyResetTimer = null;
+    let lastAnnouncedStatus = "";
+    let statusNbspToggle = false;
+    const bootState = {
+      profile: "anima",
+      gpu: "L4",
+      high_mem: false,
+      minimax_r2v: true,
+      minimax_pe: true,
+      llm_quant: "UD-Q4_K_XL",
+      llm_ctx: 32768,
+      llm_mmproj: true,
+      gpuManual: false,
+      prefsSynced: false
+    };
+    const WORKFLOW_CATEGORIES = [
+      { id: "all", label: "全部" },
+      { id: "image", label: "🎨生图" },
+      { id: "video", label: "🎬视频" },
+      { id: "audio", label: "🎙️语音" },
+      { id: "llm", label: "🧠对话" },
+      { id: "custom", label: "🔧其他" }
+    ];
+    // 声明式工作流注册表：新增工作流仅需追加一项配置，即可自动联动选择舱、抽屉卡片与开机参数
+    const WORKFLOW_CATALOG = [
+      {
+        id: "anima",
+        name: "Anima",
+        title: "Anima 二次元生图",
+        shortSub: "极速生图",
+        icon: "🎨",
+        category: "image",
+        recGpu: "L4",
+        gpuPriority: ["L4", "A100", "T4", "G4", "H100"],
+        autoHmOnA100: false,
+        desc: "自训 7 组角色/画风 LoRA · 约 2.5m 极速就绪",
+        specTail: () => "约2.5m",
+        modules: []
+      },
+      {
+        id: "minimax",
+        name: "MiniMax",
+        title: "MiniMax 影视视频",
+        shortSub: "多参生视频",
+        icon: "🎬",
+        category: "video",
+        recGpu: "G4",
+        gpuPriority: ["G4", "A100", "H100", "L4", "T4"],
+        autoHmOnA100: true,
+        desc: "H3 视频工作流 · 支持多图参考与提示词扩写",
+        specTail: (st) => {
+          const gb = 60 + (st.minimax_r2v ? 21 : 0) + (st.minimax_pe ? 7 : 0);
+          return `${!st.minimax_r2v && !st.minimax_pe ? "精简" : "约"}${gb}G`;
+        },
+        modules: [
+          { key: "minimax_r2v", prefKey: "boot_minimax_r2v", label: "R2V参考", shortTag: "R2V", sizeHint: "+21G" },
+          { key: "minimax_pe", prefKey: "boot_minimax_pe", label: "Qwen扩写", shortTag: "扩写", sizeHint: "+7G" }
+        ]
+      },
+      {
+        id: "drama3",
+        name: "Drama 3",
+        title: "Drama 3 语音克隆",
+        shortSub: "情感配音",
+        icon: "🎙️",
+        category: "audio",
+        recGpu: "A100",
+        gpuPriority: ["A100", "G4", "L4", "H100", "T4"],
+        autoHmOnA100: false,
+        desc: "35B MoE 声音克隆与多角演戏 · 预装精选参考音频",
+        specTail: () => "约44G",
+        modules: []
+      },
+      {
+        id: "qwen_llm",
+        name: "Qwen3.8",
+        title: "Qwen3.8-Flash 无审查对话",
+        shortSub: "180B无审查",
+        icon: "🧠",
+        category: "llm",
+        recGpu: "G4",
+        gpuPriority: ["G4", "A100", "H100", "L4", "T4"],
+        autoHmOnA100: true,
+        desc: "180B稀疏多模态(激活6B) · WebUI+OpenAI接口",
+        specTail: (st) => {
+          const qMap = { "UD-Q4_K_XL": 104, "UD-IQ4_XS": 87, "IQ3_XXS": 71 };
+          const baseGb = qMap[String(st && st.llm_quant)] || 104;
+          const totalGb = baseGb + (st && st.llm_mmproj ? 1 : 0);
+          const ctxNum = Number(st && st.llm_ctx) || 32768;
+          const ctxTag = ctxNum >= 262144 ? "256K" : (ctxNum >= 131072 ? "128K" : "32K");
+          return `约${totalGb}G·${ctxTag}`;
+        },
+        modules: [
+          {
+            key: "llm_quant",
+            prefKey: "boot_llm_quant",
+            type: "choice",
+            options: [
+              { val: "UD-Q4_K_XL", label: "Q4旗舰", shortTag: "Q4", sizeHint: "104G" },
+              { val: "UD-IQ4_XS", label: "IQ4省盘", shortTag: "IQ4", sizeHint: "87G" },
+              { val: "IQ3_XXS", label: "IQ3应急", shortTag: "IQ3", sizeHint: "71G" }
+            ]
+          },
+          {
+            key: "llm_ctx",
+            prefKey: "boot_llm_ctx",
+            type: "choice",
+            options: [
+              { val: 32768, label: "32K上下文", shortTag: "32K", sizeHint: "" },
+              { val: 131072, label: "128K长文", shortTag: "128K", sizeHint: "" },
+              { val: 262144, label: "256K满血", shortTag: "256K", sizeHint: "" }
+            ]
+          },
+          {
+            key: "llm_mmproj",
+            prefKey: "boot_llm_mmproj",
+            type: "toggle",
+            label: "视觉识图",
+            shortTag: "识图",
+            defaultVal: true,
+            sizeHint: "+0.9G"
+          }
+        ]
+      }
+    ];
+
+    function getWorkflowMeta(profileId) {
+      const target = String(profileId || "anima").toLowerCase();
+      return WORKFLOW_CATALOG.find((item) => item.id === target) || WORKFLOW_CATALOG[0];
+    }
+
+    // 拼接工作流选择舱角标：支持枚举短标（如 Q4·32K·识图）与布尔开关角标，严守 30px 单行不换行
+    function formatTriggerModBadge(wf, st) {
+      const mods = Array.isArray(wf && wf.modules) ? wf.modules : [];
+      if (mods.length === 0) return { hidden: true, text: "", muted: false };
+      if (mods.some((m) => m.type === "choice")) {
+        const parts = [];
+        mods.forEach((m) => {
+          if (m.type === "choice" && Array.isArray(m.options) && m.options.length > 0) {
+            const cur = m.options.find((o) => String(o.val) === String(st && st[m.key])) || m.options[0];
+            parts.push(cur.shortTag || cur.label);
+          } else if (Boolean(st && st[m.key])) {
+            parts.push(m.shortTag || m.label);
+          }
+        });
+        return { hidden: parts.length === 0, text: parts.join("·"), muted: false };
+      }
+      const activeMods = mods.filter((m) => Boolean(st && st[m.key]));
+      if (activeMods.length === 0) {
+        return { hidden: false, text: "精简版", muted: true };
+      }
+      if (activeMods.length > 2) {
+        return { hidden: false, text: `+${activeMods.length}模块`, muted: false };
+      }
+      if (activeMods.length === 1) {
+        return { hidden: false, text: `+${activeMods[0].shortTag || activeMods[0].label}`, muted: false };
+      }
+      return {
+        hidden: false,
+        text: activeMods.map((m) => m.shortTag || m.label).join("+"),
+        muted: false
+      };
+    }
+
+    const GPU_ORDER = ["T4", "L4", "A100", "G4", "H100"];
+    const GPU_SPECS = {
+      T4: {
+        vram: "16G", vramHm: "16G高", ram: "13G内存", ramHm: "51G高存",
+        cu: 1.15, cuHm: 1.31, note: "省钱入门", hmLock: false
+      },
+      L4: {
+        vram: "24G高", vramHm: "24G高", ram: "53G高存", ramHm: "53G高存",
+        cu: 1.94, cuHm: 1.94, note: "Anima甜点", hmLock: true
+      },
+      A100: {
+        vram: "40G", vramHm: "80G高", ram: "83G内存", ramHm: "167G高存",
+        cu: 5.5, cuHm: 11.5, note: "极速生图", hmLock: false
+      },
+      G4: {
+        vram: "96G", vramHm: "96G", ram: "176G高存", ramHm: "176G高存",
+        cu: 10.05, cuHm: 10.05, note: "大显存甜点", hmLock: true
+      },
+      H100: {
+        vram: "80G", vramHm: "80G高", ram: "167G内存", ramHm: "230G高存",
+        cu: 12.6, cuHm: 14.2, note: "旗舰算力", hmLock: false
+      }
+    };
+
+    function resolveGpuRate(gpu, highMem, snap) {
+      const g = String(gpu || "L4").toUpperCase();
+      const spec = GPU_SPECS[g] || GPU_SPECS.L4;
+      const hm = !spec.hmLock && Boolean(highMem);
+      const rkey = spec.hmLock ? `${g}:STD` : `${g}:${hm ? "HM" : "STD"}`;
+      const measuredMap = (snap && snap.measured_gpu_rates) || {};
+      const measuredVal = Number(measuredMap[rkey]);
+      if (Number.isFinite(measuredVal) && measuredVal > 0.02) {
+        return {
+          rate: measuredVal,
+          measured: true,
+          shortLabel: `${measuredVal.toFixed(2)}/h`,
+          badgeLabel: `实测 ${measuredVal.toFixed(2)} CU/h`,
+          hmBoost: hm && spec.cuHm > spec.cu + 0.5
+        };
+      }
+      const est = hm ? spec.cuHm : spec.cu;
+      const estShort = est >= 10 ? est.toFixed(1) : est.toFixed(2).replace(/0$/, "");
+      return {
+        rate: est,
+        measured: false,
+        shortLabel: `~${estShort}/h`,
+        badgeLabel: `预估 ~${estShort} CU/h`,
+        hmBoost: hm && spec.cuHm > spec.cu + 0.5
+      };
+    }
+    let lastManualRefreshTs = 0;
+    let blinkTimer = null;
+    let regionRaf = null;
+    let regionInFlight = false;
+    let regionPending = false;
+    let petAnimFrame = null;
+    let bubbleAnimFrame = null;
+    let bubbleAnimScale = 1.0;
+    let bubbleAnimOpacity = 1.0;
+    let edgePeekHidden = false;
+    let wheelLockUntil = 0;
+    let statEnterTimer = null;
+    const petPose = { sx: 1, sy: 1, dy: 0 };
+
+    // 兼容旧版 wf-cat-tabs 别名，确保 #wf-cat-bar 与既有自动化脚本查询双通
+    const el = (id) => document.getElementById(id) || (id === "wf-cat-tabs" ? document.getElementById("wf-cat-bar") : null);
+
+    function toRectObj(node) {
+      if (!node) return null;
+      const r = node.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return null;
+      return { x: r.left, y: r.top, w: r.width, h: r.height };
+    }
+
+    function buildRegionLayout() {
+      const bubbleArea = el("bubble-area");
+      const bubbleOpen = !bubbleArea.classList.contains("collapsed");
+      const petImg = el("pet-img");
+      // 必须追踪真实缩放/轻跃中的 #pet-img，而非静止外框 #pet-hit
+      const petBox = toRectObj(petImg);
+      if (petBox) {
+        petBox.blink = petImg.src.includes("blink.png");
+      }
+      const uiScale = Number(getComputedStyle(document.documentElement).getPropertyValue("--pet-scale") || 1) || 1;
+      const bubbleBox = bubbleOpen ? toRectObj(el("bubble-box")) : null;
+      if (bubbleBox) {
+        bubbleBox.scale = bubbleAnimScale;
+        bubbleBox.r = 16 * uiScale * bubbleAnimScale;
+      }
+      const toastOpen = el("speech-toast").classList.contains("show");
+      return {
+        left_flipped: petImg.classList.contains("flipped"),
+        bubble: bubbleBox,
+        dots: (!edgePeekHidden && bubbleOpen) ? [toRectObj(el("dot-1")), toRectObj(el("dot-2"))].filter(Boolean) : [],
+        miniPill: (!edgePeekHidden && !bubbleOpen) ? toRectObj(el("mini-pill")) : null,
+        tools: !edgePeekHidden ? toRectObj(el("side-tools")) : null,
+        toast: toastOpen ? toRectObj(el("speech-toast")) : null,
+        pet: petBox
+      };
+    }
+
+    async function flushSyncRegion() {
+      if (!window.pywebview || !window.pywebview.api) return;
+      if (regionInFlight) {
+        regionPending = true;
+        return;
+      }
+      regionInFlight = true;
+      try {
+        do {
+          regionPending = false;
+          await window.pywebview.api.sync_region(buildRegionLayout());
+        } while (regionPending);
+      } finally {
+        regionInFlight = false;
+      }
+    }
+
+    function scheduleSyncRegion() {
+      cancelAnimationFrame(regionRaf);
+      regionRaf = requestAnimationFrame(() => {
+        flushSyncRegion();
+      });
+    }
+
+    function applyPetPose(sx, sy, dy) {
+      petPose.sx = sx;
+      petPose.sy = sy;
+      petPose.dy = dy;
+      const sq = el("pet-squash");
+      if (Math.abs(sx - 1) < 1e-4 && Math.abs(sy - 1) < 1e-4 && Math.abs(dy) < 1e-3) {
+        sq.style.transform = "";
+      } else {
+        sq.style.transform = `translateY(${dy.toFixed(2)}px) scale(${sx.toFixed(4)}, ${sy.toFixed(4)})`;
+      }
+      flushSyncRegion();
+    }
+
+    function easeOutCubic(t) {
+      return 1 - Math.pow(1 - t, 3);
+    }
+
+    function easeInOutQuad(t) {
+      return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    }
+
+    function runPoseTween(segments, onDone) {
+      cancelAnimationFrame(petAnimFrame);
+      let segIdx = 0;
+      let segStart = performance.now();
+      let from = { sx: petPose.sx, sy: petPose.sy, dy: petPose.dy };
+
+      function step(now) {
+        while (segIdx < segments.length) {
+          const seg = segments[segIdx];
+          const elapsed = now - segStart;
+          const rawT = seg.dur > 0 ? Math.min(1, elapsed / seg.dur) : 1;
+          const easeFn = seg.ease || easeOutCubic;
+          const k = easeFn(rawT);
+          const sx = from.sx + (seg.sx - from.sx) * k;
+          const sy = from.sy + (seg.sy - from.sy) * k;
+          const dy = from.dy + (seg.dy - from.dy) * k;
+          applyPetPose(sx, sy, dy);
+          if (rawT < 1) {
+            petAnimFrame = requestAnimationFrame(step);
+            return;
+          }
+          from = { sx: seg.sx, sy: seg.sy, dy: seg.dy };
+          segStart += seg.dur;
+          segIdx += 1;
+        }
+        petAnimFrame = null;
+        applyPetPose(from.sx, from.sy, from.dy);
+        if (onDone) onDone();
+      }
+
+      petAnimFrame = requestAnimationFrame(step);
+    }
+
+    function startPressAnim() {
+      // 按住角色时平滑微蹲蓄力，裁剪轮廓同步收缩不露外框
+      runPoseTween([{ dur: 65, sx: 1.028, sy: 0.945, dy: 0, ease: easeOutCubic }]);
+    }
+
+    function cancelPressToIdle() {
+      // 进入拖动时迅速平滑复位
+      runPoseTween([{ dur: 90, sx: 1, sy: 1, dy: 0, ease: easeOutCubic }]);
+    }
+
+    function playTapBounce() {
+      const bounceOnly = [
+        { dur: 135, sx: 0.986, sy: 1.018, dy: -5, ease: easeOutCubic },
+        { dur: 120, sx: 1.012, sy: 0.986, dy: 0, ease: easeInOutQuad },
+        { dur: 105, sx: 1, sy: 1, dy: 0, ease: easeOutCubic }
+      ];
+      const segs = Math.abs(petPose.sy - 0.945) < 0.015
+        ? bounceOnly
+        : [{ dur: 70, sx: 1.028, sy: 0.945, dy: 0, ease: easeOutCubic }, ...bounceOnly];
+      runPoseTween(segs);
+    }
+
+    function spawnPetSparkles() {
+      const host = el("pet-hit");
+      if (!host) return;
+      const glyphs = ["✦", "♡"];
+      for (let i = 0; i < 2; i++) {
+        const sp = document.createElement("span");
+        sp.className = "pet-sparkle";
+        sp.textContent = glyphs[i % glyphs.length];
+        sp.style.left = `${Math.round(84 + Math.random() * 80)}px`;
+        sp.style.top = `${Math.round(76 + Math.random() * 24)}px`;
+        host.appendChild(sp);
+        setTimeout(() => sp.remove(), 600);
+      }
+    }
+
+    window.startPressAnim = startPressAnim;
+    window.cancelPressToIdle = cancelPressToIdle;
+    window.playTapBounce = playTapBounce;
+    window.spawnPetSparkles = spawnPetSparkles;
+
+    function hideToast() {
+      const toast = el("speech-toast");
+      toastAction = null;
+      toastHasChoices = false;
+      toast.classList.remove("show", "clickable", "error");
+      toast.innerHTML = "";
+      scheduleSyncRegion();
+    }
+
+    function _armToastTimer(ms) {
+      clearTimeout(toastTimer);
+      if (!ms || ms <= 0) return;
+      toastTimer = setTimeout(() => {
+        hideToast();
+      }, ms);
+    }
+
+    function showToast(text, opts = 2600) {
+      const cfg = typeof opts === "number" ? { duration: opts } : (opts || {});
+      const toast = el("speech-toast");
+      toastDuration = Number(cfg.duration || 2600);
+      toastAction = cfg.action || null;
+      toastHasChoices = Array.isArray(cfg.choices) && cfg.choices.length > 0;
+
+      toast.innerHTML = "";
+      const span = document.createElement("span");
+      span.className = "toast-text";
+      span.textContent = text;
+      toast.appendChild(span);
+
+      if (toastHasChoices) {
+        cfg.choices.forEach((ch) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = `toast-choice-btn${ch.primary ? " primary" : ""}`;
+          btn.textContent = ch.label;
+          btn.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            if (typeof ch.onClick === "function") {
+              ch.onClick();
+            }
+          });
+          toast.appendChild(btn);
+        });
+      }
+
+      toast.classList.toggle("clickable", Boolean(toastAction || toastHasChoices));
+      toast.classList.toggle("error", Boolean(cfg.isError));
+      toast.classList.add("show");
+      scheduleSyncRegion();
+      _armToastTimer(toastDuration);
+    }
+
+    el("speech-toast").addEventListener("mouseenter", () => {
+      clearTimeout(toastTimer);
+    });
+    el("speech-toast").addEventListener("mouseleave", () => {
+      if (el("speech-toast").classList.contains("show")) {
+        _armToastTimer(toastHasChoices ? Math.max(4000, toastDuration) : 1800);
+      }
+    });
+    el("speech-toast").addEventListener("click", async (e) => {
+      if (e.target.closest(".toast-choice-btn") || !toastAction) return;
+      const act = toastAction;
+      hideToast();
+      if (window.pywebview && window.pywebview.api) {
+        el("action-status").textContent = "正在执行快捷操作...";
+        const res = await window.pywebview.api.handle_toast_action(act);
+        if (res && res.message) {
+          el("action-status").textContent = res.message;
+          showToast(res.message, { duration: 2800, isError: !res.ok });
+        }
+      }
+    });
+
+    function pickRandomLine(snap) {
+      let pool = LINES_IDLE;
+      if (snap && (snap.low_balance || snap.long_running_alert || !snap.ok)) {
+        pool = LINES_WARN;
+      } else if (snap && snap.is_running) {
+        pool = LINES_RUNNING;
+      }
+      return pool[Math.floor(Math.random() * pool.length)];
+    }
+
+    function setPage(index, opts = {}) {
+      const total = PAGE_TITLES.length;
+      const prev = currentPage;
+      const next = ((index % total) + total) % total;
+      let delta = next - prev;
+      if (delta > total / 2) delta -= total;
+      else if (delta < -total / 2) delta += total;
+      const dir = delta >= 0 ? 1 : -1;
+
+      currentPage = next;
+      if (next !== prev) closeWorkflowDrawer();
+      const titleEl = el("page-title");
+      titleEl.textContent = PAGE_TITLES[currentPage];
+      titleEl.classList.remove("slide-next", "slide-prev");
+      if (!opts.immediate && next !== prev) {
+        void titleEl.offsetWidth;
+        titleEl.classList.add(dir > 0 ? "slide-next" : "slide-prev");
+      }
+
+      el("page-ind").textContent = `${currentPage + 1}/${total}`;
+      const dotsEl = el("pager-dots");
+      if (dotsEl) {
+        dotsEl.querySelectorAll(".page-dot").forEach((dot) => {
+          dot.classList.toggle("active", Number(dot.dataset.page) === currentPage);
+        });
+      }
+
+      const track = el("pages-track");
+      if (track) {
+        if (opts.immediate) {
+          track.classList.add("no-anim");
+          track.style.transform = `translate3d(${-currentPage * 100}%, 0, 0)`;
+          void track.offsetWidth;
+          requestAnimationFrame(() => track.classList.remove("no-anim"));
+        } else {
+          track.style.transform = `translate3d(${-currentPage * 100}%, 0, 0)`;
+        }
+      }
+
+      document.querySelectorAll(".page-body").forEach((node) => {
+        const isTarget = Number(node.dataset.page) === currentPage;
+        node.classList.toggle("active", isTarget);
+        if (Number(node.dataset.page) === 1) {
+          node.classList.remove("entering");
+          if (isTarget && !opts.immediate && next !== prev) {
+            void node.offsetWidth;
+            node.classList.add("entering");
+            clearTimeout(statEnterTimer);
+            statEnterTimer = setTimeout(() => node.classList.remove("entering"), 360);
+          }
+        }
+      });
+
+      requestAnimationFrame(() => syncAllSegGliders(Boolean(opts.immediate)));
+      if (latestSnap) {
+        syncLiveUptimeUI(latestSnap);
+      }
+      scheduleSyncRegion();
+    }
+
+    function writeBalanceDigits(val) {
+      const text = val.toFixed(2);
+      el("cu-balance").textContent = text;
+      const ledgerEl = el("ledger-start");
+      if (ledgerEl) ledgerEl.textContent = `${text} CU`;
+    }
+
+    function animateBalance(targetVal) {
+      if (targetVal === null || targetVal === undefined || Number.isNaN(targetVal)) {
+        el("cu-balance").textContent = "--.--";
+        if (el("ledger-start")) el("ledger-start").textContent = "--.-- CU";
+        return;
+      }
+      if (shownBalance === null) {
+        shownBalance = targetVal;
+        writeBalanceDigits(targetVal);
+        return;
+      }
+      const startVal = shownBalance;
+      if (Math.abs(targetVal - startVal) < 0.005) {
+        writeBalanceDigits(targetVal);
+        return;
+      }
+      const startTime = performance.now();
+      const duration = 450;
+      cancelAnimationFrame(animFrame);
+      function tick(now) {
+        const t = Math.min(1, (now - startTime) / duration);
+        const eased = 1 - Math.pow(1 - t, 3);
+        const cur = startVal + (targetVal - startVal) * eased;
+        shownBalance = cur;
+        writeBalanceDigits(cur);
+        if (t < 1) {
+          animFrame = requestAnimationFrame(tick);
+        } else {
+          shownBalance = targetVal;
+          writeBalanceDigits(targetVal);
+        }
+      }
+      animFrame = requestAnimationFrame(tick);
+    }
+
+    function updateSpriteFrame() {
+      const img = el("pet-img");
+      const now = Date.now();
+      if (now < proudOverrideUntil || now < dragOverrideUntil) {
+        img.src = "/assets/proud.png";
+        return;
+      }
+      const hasComfyErr = Boolean(latestSnap && latestSnap.comfy && latestSnap.comfy.has_error);
+      const mood = hasComfyErr ? "sad" : (latestSnap ? latestSnap.mood : "idle");
+      if (mood === "sad") {
+        img.src = "/assets/sad.png";
+      } else if (mood === "proud") {
+        img.src = "/assets/proud.png";
+      } else {
+        img.src = "/assets/idle.png";
+      }
+    }
+
+    function scheduleBlink() {
+      clearTimeout(blinkTimer);
+      const wait = 3200 + Math.random() * 3600;
+      blinkTimer = setTimeout(() => {
+        const now = Date.now();
+        const hasComfyErr = Boolean(latestSnap && latestSnap.comfy && latestSnap.comfy.has_error);
+        const mood = hasComfyErr ? "sad" : (latestSnap ? latestSnap.mood : "idle");
+        if (now >= proudOverrideUntil && now >= dragOverrideUntil && mood === "idle") {
+          el("pet-img").src = "/assets/blink.png";
+          flushSyncRegion();
+          setTimeout(() => {
+            updateSpriteFrame();
+            flushSyncRegion();
+          }, 140);
+        }
+        scheduleBlink();
+      }, wait);
+    }
+
+    function formatMinutes(mins) {
+      if (!mins || mins <= 0) return "刚刚开始";
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return h > 0 ? `${h}h ${m}m` : `${m} 分钟`;
+    }
+
+    function formatElapsedMmSs(sec) {
+      const s = Math.max(0, Math.floor(Number(sec || 0)));
+      const mm = String(Math.floor(s / 60)).padStart(2, "0");
+      const ss = String(s % 60).padStart(2, "0");
+      return `${mm}:${ss}`;
+    }
+
+    // 状态栏无障碍播报助手：连续相同文案交替追加不间断空格，防止读屏器吞掉重复播报
+    function announceActionStatus(msg) {
+      const statusNode = el("action-status");
+      if (!statusNode) return;
+      const clean = String(msg || "").replace(/\u00A0+$/g, "");
+      if (clean && clean === lastAnnouncedStatus) {
+        statusNbspToggle = !statusNbspToggle;
+      } else {
+        lastAnnouncedStatus = clean;
+        statusNbspToggle = false;
+      }
+      statusNode.textContent = statusNbspToggle ? `${clean}\u00A0` : clean;
+    }
+
+    function pickBestGpuForProfile(profile, snap) {
+      const eligible = snap && Array.isArray(snap.eligible_gpus) ? snap.eligible_gpus : null;
+      const scarce = (snap && snap.scarce_gpus) || {};
+      const wf = getWorkflowMeta(profile);
+      const rawOrder = Array.isArray(wf.gpuPriority) && wf.gpuPriority.length > 0
+        ? wf.gpuPriority
+        : ["L4", "A100", "T4", "G4", "H100"];
+      // 180B 大语言模型严禁自动降级推荐至显存不足的 T4/L4
+      const order = wf.id === "qwen_llm"
+        ? rawOrder.filter((g) => g !== "T4" && g !== "L4")
+        : rawOrder;
+      for (const g of order) {
+        if (scarce[g]) continue;
+        if (eligible && eligible.length > 0 && !eligible.includes(g)) continue;
+        return g;
+      }
+      return wf.recGpu || "L4";
+    }
+
+    function ensureSegGlider(container) {
+      if (!container) return null;
+      let g = container.querySelector(":scope > .seg-glider");
+      if (!g) {
+        g = document.createElement("span");
+        g.className = "seg-glider";
+        g.setAttribute("aria-hidden", "true");
+        container.insertBefore(g, container.firstChild);
+      }
+      return g;
+    }
+
+    function syncSegGlider(containerId, btnSelector, immediate = false) {
+      const container = el(containerId);
+      if (!container) return;
+      const glider = ensureSegGlider(container);
+      const active = container.querySelector(`${btnSelector}.active`);
+      if (!glider || !active || active.offsetWidth <= 0) {
+        if (glider) glider.style.opacity = "0";
+        return;
+      }
+      container.setAttribute("data-glider-ready", "1");
+      if (immediate) glider.classList.add("no-anim");
+      glider.style.width = `${active.offsetWidth}px`;
+      glider.style.height = `${active.offsetHeight}px`;
+      glider.style.transform = `translate3d(${active.offsetLeft}px, ${active.offsetTop}px, 0)`;
+      glider.style.opacity = "1";
+      if (immediate) {
+        void glider.offsetWidth;
+        requestAnimationFrame(() => glider.classList.remove("no-anim"));
+      }
+    }
+
+    function syncAllSegGliders(immediate = false) {
+      syncSegGlider("console-tabs", ".console-tab-btn", immediate);
+      ["seg-top", "seg-poll", "seg-scale", "seg-long", "seg-autopull", "seg-keepalive", "seg-edge"].forEach((id) => {
+        syncSegGlider(id, ".seg-btn", immediate);
+      });
+    }
+
+    function setConsoleTab(tab, manual = false) {
+      activeConsoleTab = tab === "ops" ? "ops" : "boot";
+      if (manual) consoleTabPinned = true;
+      if (activeConsoleTab !== "boot") closeWorkflowDrawer();
+      const tabsEl = el("console-tabs");
+      if (tabsEl) {
+        tabsEl.querySelectorAll(".console-tab-btn").forEach((b) => {
+          b.classList.toggle("active", b.dataset.tab === activeConsoleTab);
+        });
+      }
+      el("boot-pane").classList.toggle("active", activeConsoleTab === "boot");
+      el("ops-pane").classList.toggle("active", activeConsoleTab === "ops");
+      syncSegGlider("console-tabs", ".console-tab-btn", false);
+    }
+
+    function clearBootArm() {
+      clearTimeout(bootResetTimer);
+      bootArmedUntil = 0;
+      const btn = el("btn-boot-start");
+      if (btn) btn.classList.remove("armed");
+    }
+
+    function renderBootPanel(snap) {
+      const s = snap || latestSnap || {};
+      const deploy = s.deploy || {};
+      const isDeploying = Boolean(deploy.active);
+      el("boot-config-pane").classList.toggle("active", !isDeploying);
+      el("boot-live-pane").classList.toggle("active", isDeploying);
+
+      // 顶部算力池实时探针胶囊
+      const stockPill = el("gpu-stock-pill");
+      const eligible = Array.isArray(s.eligible_gpus) ? s.eligible_gpus.map((x) => String(x).toUpperCase()) : null;
+      const scarce = s.scarce_gpus || {};
+      const scarceKeys = Object.keys(scarce);
+      stockPill.className = "stock-pill";
+      if (scarceKeys.length > 0) {
+        stockPill.classList.add("danger");
+        stockPill.textContent = `⚠️ ${scarceKeys[0]}紧缺 ↻`;
+      } else if (eligible !== null) {
+        const missingMain = ["L4", "G4", "A100"].filter((g) => !eligible.includes(g));
+        if (missingMain.length > 0) {
+          stockPill.classList.add("warn");
+          stockPill.textContent = `🟡 缺${missingMain[0]} ↻`;
+        } else {
+          stockPill.textContent = `🟢 ${eligible.length}卡充沛 ↻`;
+        }
+      } else {
+        stockPill.textContent = "⚪ 待测算力 ↻";
+      }
+
+      if (isDeploying) {
+        closeWorkflowDrawer();
+        renderDeployProgress(deploy);
+        return;
+      }
+
+      // 同步外层工作流选择舱图标、名称、精简子模块角标与推荐卡徽章
+      const wf = getWorkflowMeta(bootState.profile);
+      bootState.profile = wf.id;
+      el("wf-trig-icon").textContent = wf.icon;
+      el("wf-trig-name").textContent = wf.name;
+      el("wf-trig-sub").textContent = wf.shortSub;
+      el("wf-trig-rec").textContent = `${wf.recGpu}★`;
+      const modBadge = formatTriggerModBadge(wf, bootState);
+      const badgeEl = el("wf-trig-mod-badge");
+      badgeEl.classList.toggle("hidden", modBadge.hidden);
+      badgeEl.classList.toggle("muted", Boolean(modBadge.muted));
+      badgeEl.textContent = modBadge.text;
+
+      const spec = GPU_SPECS[bootState.gpu] || GPU_SPECS.L4;
+      const hmChip = el("chip-hm");
+      hmChip.classList.remove("active", "locked");
+      hmChip.setAttribute("aria-disabled", spec.hmLock ? "true" : "false");
+      if (spec.hmLock) {
+        hmChip.textContent = "自带高存";
+        hmChip.classList.add("locked");
+      } else {
+        hmChip.textContent = "高内存";
+        hmChip.classList.toggle("active", Boolean(bootState.high_mem));
+      }
+
+      // 5 卡实时状态矩阵（高内存开关与实测/预估单价实时联动）
+      const hmOn = Boolean(bootState.high_mem);
+      const recGpu = wf.recGpu || "L4";
+      el("gpu-grid").querySelectorAll(".gpu-card").forEach((card) => {
+        const g = card.dataset.gpu;
+        const gs = GPU_SPECS[g] || {};
+        const isScarce = Boolean(scarce[g]);
+        const isRestricted = eligible !== null && !eligible.includes(g);
+        const cardHm = !gs.hmLock && hmOn;
+        const rateInfo = resolveGpuRate(g, cardHm, s);
+        card.className = "gpu-card";
+        if (g === bootState.gpu) card.classList.add("active");
+        if (isScarce) card.classList.add("scarce");
+        else if (isRestricted) card.classList.add("restricted");
+
+        const nameEl = card.querySelector(".gpu-name");
+        const metaEl = card.querySelector(".gpu-meta");
+        const cuEl = card.querySelector(".gpu-cu");
+        nameEl.textContent = g === recGpu ? `${g}★` : g;
+        if (isScarce) {
+          metaEl.textContent = "⚠️紧缺";
+          if (cuEl) cuEl.textContent = rateInfo.shortLabel;
+        } else if (isRestricted) {
+          metaEl.textContent = "⛔受限";
+          if (cuEl) cuEl.textContent = "未开放";
+        } else {
+          metaEl.textContent = cardHm ? (gs.vramHm || gs.vram) : (gs.vram || "");
+          if (cuEl) cuEl.textContent = rateInfo.shortLabel;
+        }
+      });
+
+      // 结构化规格摘要与显存门槛/高内存/实测费率提示
+      const hintEl = el("boot-spec-hint");
+      hintEl.className = "boot-spec-hint";
+      hintEl.innerHTML = "";
+      const curScarce = scarce[bootState.gpu];
+      const curRestricted = eligible !== null && !eligible.includes(bootState.gpu);
+      const fallback = pickBestGpuForProfile(bootState.profile, s);
+      const selHm = !spec.hmLock && hmOn;
+      const selRate = resolveGpuRate(bootState.gpu, selHm, s);
+
+      if (bootState.profile === "qwen_llm" && (bootState.gpu === "T4" || bootState.gpu === "L4")) {
+        hintEl.classList.add("danger");
+        hintEl.textContent = "显存不足：180B 模型无法在 T4/L4 运行，请选 G4★";
+      } else if (curRestricted) {
+        hintEl.classList.add("danger");
+        const altTip = fallback !== bootState.gpu ? `，建议改选 ${fallback}` : "";
+        hintEl.textContent = `⛔ 当前账号配额未开放 ${bootState.gpu}${altTip}`;
+      } else if (curScarce) {
+        hintEl.classList.add("warn");
+        const altTip = fallback !== bootState.gpu ? `，建议改选 ${fallback}` : "";
+        hintEl.textContent = `⚠️ ${bootState.gpu} ${curScarce.reason || "高峰期紧缺"}${altTip}`;
+      } else if (
+        bootState.profile === "qwen_llm"
+        && bootState.gpu === "A100"
+        && !selHm
+        && bootState.llm_quant !== "IQ3_XXS"
+      ) {
+        hintEl.classList.add("warn");
+        hintEl.textContent = "⚠️ 标准40G A100跑Q4/IQ4易超限，建议开高内存或切IQ3";
+      } else if (
+        bootState.profile === "qwen_llm"
+        && (bootState.gpu === "H100" || (bootState.gpu === "A100" && selHm))
+        && bootState.llm_quant === "UD-Q4_K_XL"
+        && Number(bootState.llm_ctx || 32768) >= 262144
+      ) {
+        // 80G 显存卡跑 Q4 旗舰 + 256K 满血上下文余量偏紧，温和提示改选 G4★ 或 IQ4
+        hintEl.classList.add("warn");
+        hintEl.textContent = "⚠️ 80G显存跑Q4+256K较紧，建议选G4★或切IQ4省盘";
+      } else {
+        const vramTxt = (selHm ? spec.vramHm : spec.vram).replace(/高$/, "");
+        const ramTxt = selHm ? spec.ramHm : spec.ram;
+        const tailTxt = typeof wf.specTail === "function" ? wf.specTail(bootState) : "约2.5m";
+        const mainSpan = document.createElement("span");
+        mainSpan.className = "spec-main";
+        mainSpan.textContent = `${bootState.gpu} · ${vramTxt}显存 · ${ramTxt} · ${tailTxt}`;
+        const rateSpan = document.createElement("span");
+        rateSpan.className = "spec-rate-badge";
+        if (selRate.hmBoost) rateSpan.classList.add("hm-hot");
+        else if (selRate.measured) rateSpan.classList.add("measured");
+        rateSpan.textContent = selRate.badgeLabel;
+        hintEl.appendChild(mainSpan);
+        hintEl.appendChild(rateSpan);
+      }
+
+      // 主操作按钮文案与同卡/换卡安全判断
+      const startBtn = el("btn-boot-start");
+      const sessions = Array.isArray(s.sessions) ? s.sessions : [];
+      const running = Boolean(s.is_running && sessions.length > 0);
+      const targetSess = sessions.find((it) => it.name === "comfy") || sessions[0] || null;
+      const runGpu = targetSess ? String(targetSess.accelerator || "").toUpperCase() : "";
+      const runShape = targetSess ? String(targetSess.machine_shape || "STANDARD").toUpperCase() : "";
+      const sameGpu = running && runGpu === bootState.gpu;
+      const needUpgradeHm = sameGpu && !spec.hmLock && bootState.high_mem && runShape !== "HIGH_RAM";
+      const profLabel = wf.name || "Anima";
+      const hmBtnTag = selHm ? (bootState.gpu === "A100" ? "(80G高存)" : "(高存)") : "";
+
+      if (Date.now() <= bootArmedUntil) {
+        startBtn.classList.add("armed");
+        startBtn.textContent = `⚠️ 再点确认停旧卡(${runGpu})并换 ${bootState.gpu}${hmBtnTag}`;
+      } else {
+        startBtn.classList.remove("armed");
+        if (!running) {
+          startBtn.textContent = `⚡ 一键开机部署 ${profLabel} · ${bootState.gpu}${hmBtnTag}`;
+        } else if (sameGpu && !needUpgradeHm) {
+          startBtn.textContent = `🔄 在当前 ${runGpu} 实例增量部署 ${profLabel}`;
+        } else {
+          startBtn.textContent = `⚡ 停旧卡(${runGpu})并换 ${bootState.gpu}${hmBtnTag}`;
+        }
+      }
+      // 后台轮询不主动重绘静态工作流抽屉 DOM，避免冲刷正在滚动或交互中的列表位置
+    }
+
+    function renderDeployProgress(deploy) {
+      const d = deploy || {};
+      const pct = Math.max(2, Math.min(100, Number(d.pct || 0)));
+      const stepIdx = Number(d.step_idx || 0);
+      el("deploy-stage-title").textContent = d.stage_title || `[${stepIdx}/7] 正在开机部署`;
+      el("deploy-pct-text").textContent = `${Math.round(pct)}%`;
+      el("deploy-elapsed").textContent = formatElapsedMmSs(d.elapsed_sec || 0);
+      el("deploy-sub-detail").textContent = d.sub_detail || "正在连接 Colab 分配显卡...";
+      el("deploy-bar").style.width = `${pct}%`;
+
+      el("deploy-step-dots").querySelectorAll(".step-dot").forEach((dot) => {
+        const idx = Number(dot.dataset.step);
+        dot.className = "step-dot";
+        if (stepIdx > idx || pct >= 100) dot.classList.add("done");
+        else if (stepIdx === idx) dot.classList.add("current");
+      });
+
+      const profTxt = getWorkflowMeta(d.profile).name;
+      el("deploy-foot-hint").textContent = `${profTxt} · ${d.gpu || "L4"} 部署直播中`;
+    }
+
+    // 判定运维面板当前是否处于大语言模型双模视图
+    function isLlmOpsMode(snap) {
+      const s = snap || latestSnap;
+      return Boolean(
+        s && s.is_running
+          ? (s.comfy && s.comfy.service_kind === "llm")
+          : (bootState.profile === "qwen_llm")
+      );
+    }
+
+    // 第 3 页运维控制面板动态双模渲染（严格保持复制反馈态与按钮尺寸零抖动）
+    function renderOpsPanel(snap) {
+      const isLlmOps = isLlmOpsMode(snap);
+      const btnComfy = el("act-comfy");
+      const btnSync = el("act-sync");
+      const btnUpload = el("act-upload");
+      const statusEl = el("action-status");
+
+      if (btnComfy) {
+        btnComfy.textContent = isLlmOps ? "💬 打开对话页" : "🚀 打开 ComfyUI";
+      }
+      if (btnSync) {
+        if (!isLlmOps) {
+          if (copyResetTimer) {
+            clearTimeout(copyResetTimer);
+            copyResetTimer = null;
+          }
+          btnSync.removeAttribute("data-copied");
+          btnSync.textContent = "📥 拉回成图";
+        } else if (btnSync.hasAttribute("data-copied")) {
+          btnSync.textContent = "✓ 已复制 API 配置";
+        } else {
+          btnSync.textContent = "📋 复制 API 配置";
+        }
+      }
+      if (btnUpload) {
+        btnUpload.textContent = isLlmOps ? "📄 提取文本/识图" : "📤 传图到云端";
+      }
+      if (statusEl) {
+        const defaultComfyHint = "支持拖入参考图 · PNG/JSON直铺画布 · LoRA模型";
+        const defaultLlmHint = "支持拖入代码/TXT提取 · 拖入图片发视觉对话 · 一键复制API";
+        const curTxt = statusEl.textContent.replace(/\u00A0+$/g, "");
+        if (curTxt === defaultComfyHint || curTxt === defaultLlmHint) {
+          statusEl.textContent = isLlmOps ? defaultLlmHint : defaultComfyHint;
+        }
+      }
+    }
+
+    function renderComfyState(comfy) {
+      const strip = el("comfy-strip");
+      const leftEl = el("comfy-left");
+      const vramEl = el("comfy-vram");
+      const barEl = el("comfy-bar");
+      const miniStateEl = el("mini-state");
+      const running = Boolean(latestSnap && latestSnap.is_running);
+      const deploy = latestSnap && latestSnap.deploy;
+      const isDeploying = Boolean(deploy && deploy.active);
+      const isLlmOnline = Boolean(comfy && comfy.service_kind === "llm" && comfy.online);
+      const hasDeployErr = Boolean(!isDeploying && running && !(comfy && comfy.online) && deploy && deploy.error_msg);
+      const isLlmOfflineBoot = Boolean(
+        running
+        && !(comfy && comfy.online)
+        && !hasDeployErr
+        && (
+          (comfy && comfy.service_kind === "llm")
+          || (deploy && deploy.profile === "qwen_llm")
+          || (!comfy?.tunnel_url && bootState.profile === "qwen_llm")
+        )
+      );
+
+      strip.classList.remove("error");
+      barEl.className = "comfy-fill";
+
+      let miniText = `· ${latestSnap ? (latestSnap.status_label || "待机") : "待机"}`;
+
+      if (isDeploying) {
+        const dpct = Math.round(Number(deploy.pct || 0));
+        leftEl.textContent = `🚀 ${deploy.stage_title || "正在开机部署"} (${dpct}%)`;
+        vramEl.textContent = `⏱ ${formatElapsedMmSs(deploy.elapsed_sec || 0)}`;
+        barEl.classList.add("sampling");
+        barEl.style.width = `${Math.max(6, dpct)}%`;
+        miniText = `· 🚀 部署 ${dpct}%`;
+      } else if (!running) {
+        leftEl.textContent = "💤 未开机 · 点此选卡开机/拖入预传";
+        vramEl.textContent = "去开机 ›";
+        barEl.classList.add("offline");
+        barEl.style.width = "100%";
+      } else if (comfy && comfy.has_error) {
+        strip.classList.add("error");
+        leftEl.textContent = `⚠️ ${comfy.error_summary || "推理报错中断"}`;
+        vramEl.textContent = comfy.vram_total_gb > 0
+          ? `VRAM ${Number(comfy.vram_used_gb).toFixed(1)}/${Number(comfy.vram_total_gb).toFixed(1)}G`
+          : "异常";
+        barEl.classList.add("danger");
+        barEl.style.width = "100%";
+        miniText = "· ⚠️ 推理报错";
+      } else if (hasDeployErr) {
+        strip.classList.add("error");
+        const rawErr = String(deploy.error_msg || "开机部署中断").trim();
+        leftEl.textContent = (rawErr.startsWith("⚠️") || rawErr.startsWith("⛔")) ? rawErr : `⚠️ ${rawErr}`;
+        vramEl.textContent = "去重试 ›";
+        barEl.classList.add("danger");
+        barEl.style.width = "100%";
+        miniText = "· ⚠️ 部署中断";
+      } else if (isLlmOnline) {
+        const runCnt = Number(comfy.running_cnt ?? comfy.running_count ?? 0);
+        const tps = Number(comfy.tps || 0);
+        const tpsTxt = Number.isFinite(tps) && tps > 0 ? ` · ${tps.toFixed(1)}t/s` : "";
+        if (runCnt > 0) {
+          leftEl.textContent = `⚡ 对话生成中 · 并发 ${runCnt}${tpsTxt}`;
+          vramEl.textContent = comfy.vram_total_gb > 0
+            ? `VRAM ${Number(comfy.vram_used_gb).toFixed(1)}/${Number(comfy.vram_total_gb).toFixed(1)}G`
+            : "GPU 在线";
+          barEl.classList.add("sampling");
+          barEl.style.width = "100%";
+          miniText = `· ⚡ 对话中 · 并发 ${runCnt}${tpsTxt}`;
+        } else {
+          const quantLabel = comfy.quant || "Q4";
+          leftEl.textContent = `🟢 Qwen3.8 在线 (${quantLabel}) · 点此对话`;
+          vramEl.textContent = comfy.vram_total_gb > 0
+            ? `VRAM ${Number(comfy.vram_used_gb).toFixed(1)}/${Number(comfy.vram_total_gb).toFixed(1)}G (${Math.round(comfy.vram_pct)}%)`
+            : "已连通";
+          const vp = Number(comfy.vram_pct || 0);
+          if (vp >= 93) barEl.classList.add("danger");
+          else if (vp >= 85) barEl.classList.add("warn");
+          barEl.style.width = `${Math.max(8, Math.min(100, vp || 100))}%`;
+          miniText = "· 🟢 Qwen3.8 在线";
+        }
+      } else if (comfy && comfy.online && ((comfy.running_count || 0) > 0 || (comfy.pending_count || 0) > 0)) {
+        const runCnt = Number(comfy.running_count || 0);
+        const totalCnt = runCnt + Number(comfy.pending_count || 0);
+        const hasStep = Number(comfy.step_max || 0) > 0;
+        const pct = Math.round(Number(comfy.step_pct || 0));
+        const stepLabel = hasStep ? `⚡ 采样 ${pct}%` : "⚡ 推理准备中";
+        leftEl.textContent = `${stepLabel} · 队列 ${runCnt}/${totalCnt}`;
+        vramEl.textContent = comfy.vram_total_gb > 0
+          ? `VRAM ${Number(comfy.vram_used_gb).toFixed(1)}/${Number(comfy.vram_total_gb).toFixed(1)}G`
+          : "GPU 在线";
+        barEl.classList.add("sampling");
+        barEl.style.width = `${hasStep ? Math.max(8, pct) : 24}%`;
+        miniText = hasStep
+          ? `· ⚡ 采样 ${pct}% · 队列 ${runCnt}/${totalCnt}`
+          : `· ⚡ 推理中 · 队列 ${runCnt}/${totalCnt}`;
+      } else if (comfy && comfy.online) {
+        const pendPull = Number(comfy.pending_pull_count || 0);
+        leftEl.textContent = pendPull > 0
+          ? `📥 待拉回成图 ${pendPull} 份`
+          : "🟢 ComfyUI 就绪 · 队列空闲";
+        vramEl.textContent = comfy.vram_total_gb > 0
+          ? `VRAM ${Number(comfy.vram_used_gb).toFixed(1)}/${Number(comfy.vram_total_gb).toFixed(1)}G (${Math.round(comfy.vram_pct)}%)`
+          : "已连通";
+        const vp = Number(comfy.vram_pct || 0);
+        if (vp >= 93) barEl.classList.add("danger");
+        else if (vp >= 85) barEl.classList.add("warn");
+        barEl.style.width = `${Math.max(4, Math.min(100, vp))}%`;
+      } else if (isLlmOfflineBoot) {
+        leftEl.textContent = "⏳ 正在唤醒 Qwen3.8 引擎…";
+        vramEl.textContent = "--";
+        barEl.classList.add("offline");
+        barEl.style.width = "40%";
+        miniText = "· ⏳ 唤醒 Qwen3.8";
+      } else {
+        leftEl.textContent = "🔎 实例运行中 · 等待隧道连通";
+        vramEl.textContent = "--";
+        barEl.classList.add("offline");
+        barEl.style.width = "35%";
+      }
+
+      miniStateEl.textContent = miniText;
+      const canClickStrip = Boolean(
+        isDeploying
+        || hasDeployErr
+        || !running
+        || (running && comfy && (
+          comfy.has_error
+          || isLlmOnline
+          || (comfy.pending_pull_count || 0) > 0
+        ))
+      );
+      strip.style.cursor = canClickStrip ? "pointer" : "default";
+      const curPillText = `${el("mini-cu").textContent}${miniText}`;
+      if (curPillText !== lastMiniPillText) {
+        lastMiniPillText = curPillText;
+        if (el("mini-pill").classList.contains("show")) {
+          scheduleSyncRegion();
+        }
+      }
+    }
+
+    function applyPrefsToUI(prefs) {
+      if (!prefs) return;
+      const scale = Number(prefs.scale || 1.0);
+      document.documentElement.style.setProperty("--pet-scale", String(scale));
+      el("pet-img").classList.toggle("flipped", Boolean(prefs.left_flipped));
+      const open = !edgePeekHidden && (prefs.bubble_open !== false);
+      if (!bubbleAnimFrame) {
+        el("bubble-area").classList.toggle("collapsed", !open);
+        el("mini-pill").classList.toggle("show", !open && !edgePeekHidden);
+      }
+
+      const firstSync = !bootState.prefsSynced;
+      setSegActive("seg-top", prefs.on_top === false ? "0" : "1", firstSync);
+      setSegActive("seg-poll", String(prefs.poll_interval_sec || 60), firstSync);
+      setSegActive("seg-scale", String(scale), firstSync);
+      setSegActive("seg-long", String(prefs.long_run_warn_minutes || 180), firstSync);
+      setSegActive("seg-autopull", prefs.auto_pull_outputs === false ? "0" : "1", firstSync);
+      const kaMode = prefs.keep_alive === false
+        ? "off"
+        : (Number(prefs.idle_auto_stop_minutes ?? 60) > 0 ? "stop60" : "smart");
+      setSegActive("seg-keepalive", kaMode, firstSync);
+      setSegActive("seg-edge", prefs.edge_auto_hide === false ? "0" : "1", firstSync);
+
+      if (!bootState.prefsSynced) {
+        bootState.prefsSynced = true;
+        if (prefs.boot_profile && WORKFLOW_CATALOG.some((item) => item.id === String(prefs.boot_profile).toLowerCase())) {
+          bootState.profile = String(prefs.boot_profile).toLowerCase();
+        }
+        if (GPU_ORDER.includes(String(prefs.boot_gpu || "").toUpperCase())) {
+          bootState.gpu = String(prefs.boot_gpu).toUpperCase();
+        }
+        const initSpec = GPU_SPECS[bootState.gpu] || {};
+        bootState.high_mem = initSpec.hmLock ? false : Boolean(prefs.boot_high_mem);
+        bootState.minimax_r2v = prefs.boot_minimax_r2v !== false;
+        bootState.minimax_pe = prefs.boot_minimax_pe !== false;
+        if (["UD-Q4_K_XL", "UD-IQ4_XS", "IQ3_XXS"].includes(String(prefs.boot_llm_quant || ""))) {
+          bootState.llm_quant = String(prefs.boot_llm_quant);
+        }
+        if ([32768, 131072, 262144].includes(Number(prefs.boot_llm_ctx))) {
+          bootState.llm_ctx = Number(prefs.boot_llm_ctx);
+        }
+        bootState.llm_mmproj = prefs.boot_llm_mmproj !== false;
+        requestAnimationFrame(() => syncAllSegGliders(true));
+      }
+    }
+
+    function setSegActive(groupId, val, immediate = false) {
+      const group = el(groupId);
+      if (!group) return;
+      group.querySelectorAll(".seg-btn").forEach((b) => {
+        b.classList.toggle("active", b.dataset.val === val);
+      });
+      syncSegGlider(groupId, ".seg-btn", Boolean(immediate));
+    }
+
+    function computeLiveActiveMinutes(snap) {
+      if (!snap || !snap.is_running) return 0;
+      if (snap.active_since_ts) {
+        return Math.max(0, Math.floor((Date.now() / 1000 - Number(snap.active_since_ts)) / 60));
+      }
+      return Math.max(0, Number(snap.active_minutes || 0));
+    }
+
+    function syncLiveUptimeUI(snap) {
+      if (!snap) return false;
+      const liveMins = computeLiveActiveMinutes(snap);
+      const upEl = el("ledger-uptime");
+      const prevUpTxt = upEl ? upEl.textContent : "";
+
+      const badges = el("session-badges");
+      if (badges) {
+        badges.innerHTML = "";
+        if (snap.sessions && snap.sessions.length > 0) {
+          snap.sessions.forEach((s) => {
+            const span = document.createElement("span");
+            span.className = `session-tag${s.orphan ? " orphan" : ""}`;
+            const name = s.orphan ? "孤儿实例" : s.name;
+            const accUp = String(s.accelerator || "").toUpperCase();
+            const shapeUp = String(s.machine_shape || "").toUpperCase();
+            const hmTag = shapeUp === "HIGH_RAM" && accUp !== "L4" ? "·高存" : "";
+            const up = snap.is_running ? ` · ${formatMinutes(liveMins)}` : "";
+            span.textContent = `${name}(${s.accelerator}${hmTag})${up}`;
+            badges.appendChild(span);
+          });
+        } else {
+          const span = document.createElement("span");
+          span.className = "session-tag";
+          span.textContent = "无活跃实例 · 省钱中";
+          badges.appendChild(span);
+        }
+      }
+
+      if (upEl) {
+        const nextUpTxt = snap.is_running ? formatMinutes(liveMins) : "未运行";
+        upEl.textContent = nextUpTxt;
+        const warnLimit = Number((snap.prefs && snap.prefs.long_run_warn_minutes) || 180);
+        upEl.classList.toggle(
+          "warn",
+          Boolean(snap.long_running_alert) || (snap.is_running && liveMins >= warnLimit)
+        );
+        return prevUpTxt !== nextUpTxt;
+      }
+      return false;
+    }
+
+    window.renderState = function (snap) {
+      if (!snap) return;
+      latestSnap = snap;
+      applyPrefsToUI(snap.prefs);
+
+      animateBalance(snap.balance);
+      el("mini-cu").textContent = snap.balance !== null ? `${snap.balance.toFixed(2)} CU` : "--.-- CU";
+      el("mini-state").textContent = `· ${snap.status_label || "待机"}`;
+
+      const pill = el("status-pill");
+      pill.className = `status-pill ${snap.status_level || "idle"}`;
+      el("status-label").textContent = snap.status_label || "未知状态";
+
+      const balPct = Number(snap.balance_pct || 0);
+      const balBar = el("balance-bar");
+      balBar.style.width = `${balPct}%`;
+      balBar.className = "bar-fill";
+      if (balPct <= 10 || snap.low_balance) balBar.classList.add("danger");
+      else if (balPct <= 30) balBar.classList.add("warn");
+
+      const baseCap = Math.round(Number(snap.baseline_balance || 1000));
+      const balText = snap.balance !== null && snap.balance !== undefined
+        ? `${balPct.toFixed(1)}% (${snap.balance.toFixed(2)}/${baseCap})`
+        : "--";
+      el("balance-pct-text").textContent = balText;
+
+      const rate = Number(snap.rate_hourly || 0);
+      el("rate-text").textContent = rate > 0.01
+        ? `耗速: ${rate.toFixed(2)} CU/hr`
+        : "耗速: 0.00 CU/hr (零计费)";
+      el("eta-text").textContent = snap.remaining_hours !== null
+        ? `约 ${snap.remaining_hours.toFixed(1)}h`
+        : "续航: 无限";
+
+      const rateBar = el("rate-bar");
+      rateBar.style.width = `${rate > 0.01 ? Math.max(8, snap.rate_pct) : 100}%`;
+      rateBar.className = "bar-fill";
+      if (rate <= 0.01) rateBar.classList.add("idle");
+      else if (rate >= 10) rateBar.classList.add("danger");
+      else if (rate >= 4) rateBar.classList.add("warn");
+
+      const syncTimeTxt = (snap.stale && snap.error_msg)
+        ? "缓存"
+        : (snap.updated_str || "--:--:--");
+      el("updated-time").textContent = (snap.stale && snap.error_msg)
+        ? "网络缓存"
+        : (snap.updated_str || "--:--:--");
+
+      el("ledger-start-sub").textContent = (snap.day_start_balance !== null && snap.day_start_balance !== undefined)
+        ? `起始 ${snap.day_start_balance.toFixed(2)}`
+        : "起始 --";
+      const curBalEl = el("ledger-start");
+      if (snap.balance === null || snap.balance === undefined) {
+        curBalEl.textContent = "--.-- CU";
+      }
+      curBalEl.classList.toggle("warn", Boolean(snap.low_balance));
+
+      if (snap.is_running) {
+        el("ledger-consumed-k").textContent = `今日实耗 (本次 ${Number(snap.session_consumed_cu || 0).toFixed(2)})`;
+      } else if (Number(snap.day_topup_cu || 0) > 0) {
+        el("ledger-consumed-k").textContent = `今日实耗 (+充${Number(snap.day_topup_cu).toFixed(1)})`;
+      } else {
+        el("ledger-consumed-k").textContent = "今日累计实耗";
+      }
+      el("ledger-consumed").textContent = `${Number(snap.day_consumed_cu || 0).toFixed(2)} CU`;
+
+      syncLiveUptimeUI(snap);
+
+      const d = Number(snap.last_delta || 0);
+      el("ledger-delta").textContent = `${d > 0 ? "+" : ""}${d.toFixed(3)} CU`;
+      el("ledger-date").textContent = `账本日: ${snap.date || "--"} · 同步 ${syncTimeTxt} · 约5m结算`;
+
+      if (snap.error_msg && snap.stale) {
+        el("action-status").textContent = snap.error_msg;
+      }
+
+      if (snap.deploy && snap.deploy.active) {
+        setConsoleTab("boot", false);
+      } else if (!consoleTabPinned) {
+        setConsoleTab(snap.is_running ? "ops" : "boot", false);
+      }
+
+      renderBootPanel(snap);
+      renderOpsPanel(snap);
+      renderComfyState(snap.comfy || null);
+      updateSpriteFrame();
+      scheduleSyncRegion();
+    };
+
+    window.onDragFinished = function (leftFlipped, dockEdge) {
+      edgePeekHidden = false;
+      el("stage").classList.remove("edge-peeking");
+      el("pet-img").classList.toggle("flipped", Boolean(leftFlipped));
+      if (latestSnap && latestSnap.prefs) {
+        latestSnap.prefs.left_flipped = Boolean(leftFlipped);
+        if (dockEdge !== undefined) {
+          latestSnap.prefs.dock_edge = dockEdge || null;
+        }
+        if (latestSnap.prefs.bubble_open !== false && el("bubble-area").classList.contains("collapsed")) {
+          toggleBubble(true, { skipSave: true, immediate: true });
+        }
+      }
+      const autoHideEnabled = !latestSnap || !latestSnap.prefs || latestSnap.prefs.edge_auto_hide !== false;
+      if ((dockEdge === "left" || dockEdge === "right") && autoHideEnabled) {
+        showToast("✨ 已贴靠屏幕边缘 · 移开鼠标将自动收起半隐藏", 2200);
+      }
+      scheduleSyncRegion();
+    };
+
+    window.canEdgeAutoHide = function () {
+      if (wfDrawerOpen) return false;
+      if (el("stage").classList.contains("drag-over")) return false;
+      const toastEl = el("speech-toast");
+      if (toastEl && toastEl.classList.contains("show") && toastEl.querySelector(".toast-choice-btn")) {
+        return false;
+      }
+      return true;
+    };
+
+    window.onEdgePeekChanged = function (peeking) {
+      const peek = Boolean(peeking);
+      if (peek === edgePeekHidden) return;
+      edgePeekHidden = peek;
+      el("stage").classList.toggle("edge-peeking", peek);
+      if (peek) {
+        if (!el("bubble-area").classList.contains("collapsed")) {
+          toggleBubble(false, { skipSave: true, duration: 115 });
+        } else {
+          el("mini-pill").classList.remove("show");
+          flushSyncRegion();
+        }
+      } else {
+        const shouldOpen = !(latestSnap && latestSnap.prefs && latestSnap.prefs.bubble_open === false);
+        if (shouldOpen) {
+          toggleBubble(true, { skipSave: true, duration: 115 });
+        } else {
+          el("mini-pill").classList.add("show");
+          flushSyncRegion();
+        }
+      }
+    };
+
+    async function manualRefresh(quiet = false) {
+      const btn = el("btn-refresh");
+      btn.classList.add("spin");
+      try {
+        if (window.pywebview && window.pywebview.api) {
+          const snap = await window.pywebview.api.refresh_now();
+          window.renderState(snap);
+          if (!quiet) {
+            showToast(snap.ok ? pickRandomLine(snap) : "连接小抖动，已保留最近余额~");
+          }
+        }
+      } finally {
+        btn.classList.remove("spin");
+      }
+    }
+
+    el("btn-prev").addEventListener("click", () => setPage(currentPage - 1));
+    el("btn-next").addEventListener("click", () => setPage(currentPage + 1));
+    el("pager-dots").addEventListener("click", (e) => {
+      const dot = e.target.closest(".page-dot");
+      if (!dot) return;
+      const targetIdx = Number(dot.dataset.page);
+      if (!Number.isNaN(targetIdx) && targetIdx !== currentPage) {
+        setPage(targetIdx);
+      }
+    });
+    el("bubble-box").addEventListener("wheel", (e) => {
+      if (el("bubble-area").classList.contains("collapsed") || wfDrawerOpen) return;
+      const dx = Math.abs(e.deltaX || 0);
+      const dy = Math.abs(e.deltaY || 0);
+      if (dx < 4 && dy < 4) return;
+      e.preventDefault();
+      const now = performance.now();
+      if (now < wheelLockUntil) return;
+      wheelLockUntil = now + 210;
+      const primaryDelta = dx > dy ? e.deltaX : e.deltaY;
+      setPage(currentPage + (primaryDelta > 0 ? 1 : -1));
+    }, { passive: false });
+    window.addEventListener("keydown", (e) => {
+      if (el("bubble-area").classList.contains("collapsed")) return;
+      const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : "";
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (wfDrawerOpen) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          closeWorkflowDrawer();
+          return;
+        }
+        if (e.key === "Tab") {
+          const layer = el("wf-drawer-layer");
+          const focusables = layer
+            ? Array.from(layer.querySelectorAll('button:not([disabled]):not([tabindex="-1"]), [tabindex="0"]'))
+            : [];
+          if (focusables.length > 0) {
+            const first = focusables[0];
+            const last = focusables[focusables.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+              e.preventDefault();
+              last.focus({ preventScroll: true });
+            } else if (!e.shiftKey && document.activeElement === last) {
+              e.preventDefault();
+              first.focus({ preventScroll: true });
+            }
+          }
+        }
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setPage(currentPage - 1);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setPage(currentPage + 1);
+      }
+    });
+    el("btn-refresh").addEventListener("click", () => manualRefresh(false));
+    el("tool-refresh").addEventListener("click", () => manualRefresh(false));
+
+    function toggleBubble(forceState, opts = {}) {
+      const area = el("bubble-area");
+      const box = el("bubble-box");
+      const mini = el("mini-pill");
+      const open = forceState !== undefined ? Boolean(forceState) : area.classList.contains("collapsed");
+      const skipSave = Boolean(opts && opts.skipSave);
+      const immediate = Boolean(opts && opts.immediate);
+      if (!open) closeWorkflowDrawer();
+
+      if (!skipSave) {
+        if (latestSnap && latestSnap.prefs) {
+          latestSnap.prefs.bubble_open = open;
+        }
+        if (window.pywebview && window.pywebview.api) {
+          window.pywebview.api.save_prefs({ bubble_open: open });
+        }
+      }
+
+      cancelAnimationFrame(bubbleAnimFrame);
+      bubbleAnimFrame = null;
+
+      if (immediate) {
+        bubbleAnimScale = 1.0;
+        bubbleAnimOpacity = 1.0;
+        box.style.transform = "";
+        box.style.opacity = "";
+        area.classList.toggle("collapsed", !open);
+        mini.classList.toggle("show", !open && !edgePeekHidden);
+        if (open) requestAnimationFrame(() => syncAllSegGliders(true));
+        flushSyncRegion();
+        return;
+      }
+
+      const startTime = performance.now();
+      const duration = Number(opts && opts.duration) > 0 ? Number(opts.duration) : (open ? 175 : 145);
+      const wasCollapsed = area.classList.contains("collapsed");
+      let startScale = bubbleAnimScale;
+      let startOpacity = bubbleAnimOpacity;
+      if (open) {
+        if (wasCollapsed) {
+          area.classList.remove("collapsed");
+          mini.classList.remove("show");
+          startScale = 0.86;
+          startOpacity = 0.2;
+        }
+        bubbleAnimScale = startScale;
+        bubbleAnimOpacity = startOpacity;
+        const startTy = 8 * Math.max(0, (1.0 - startScale) / 0.14);
+        box.style.transform = `translateY(${startTy.toFixed(2)}px) scale(${startScale.toFixed(4)})`;
+        box.style.opacity = startOpacity.toFixed(3);
+        flushSyncRegion();
+      } else {
+        bubbleAnimScale = startScale;
+        bubbleAnimOpacity = startOpacity;
+      }
+
+      function step(now) {
+        const t = Math.min(1, (now - startTime) / duration);
+        if (open) {
+          const eased = 1 - Math.pow(1 - t, 3);
+          const s = startScale + (1.0 - startScale) * eased;
+          const op = startOpacity + (1.0 - startOpacity) * eased;
+          const ty = 8 * Math.max(0, (1.0 - s) / 0.14);
+          bubbleAnimScale = s;
+          bubbleAnimOpacity = op;
+          box.style.transform = `translateY(${ty.toFixed(2)}px) scale(${s.toFixed(4)})`;
+          box.style.opacity = op.toFixed(3);
+          flushSyncRegion();
+        } else {
+          const eased = t * t * t;
+          const s = startScale + (0.86 - startScale) * eased;
+          const op = startOpacity + (0.15 - startOpacity) * eased;
+          const ty = 8 * Math.max(0, (1.0 - s) / 0.14);
+          bubbleAnimScale = s;
+          bubbleAnimOpacity = op;
+          box.style.transform = `translateY(${ty.toFixed(2)}px) scale(${s.toFixed(4)})`;
+          box.style.opacity = op.toFixed(3);
+          flushSyncRegion();
+        }
+        if (t < 1) {
+          bubbleAnimFrame = requestAnimationFrame(step);
+        } else {
+          bubbleAnimFrame = null;
+          bubbleAnimScale = 1.0;
+          bubbleAnimOpacity = 1.0;
+          box.style.transform = "";
+          box.style.opacity = "";
+          area.classList.toggle("collapsed", !open);
+          mini.classList.toggle("show", !open && !edgePeekHidden);
+          if (open) syncAllSegGliders(false);
+          flushSyncRegion();
+        }
+      }
+      bubbleAnimFrame = requestAnimationFrame(step);
+    }
+
+    el("btn-collapse").addEventListener("click", () => toggleBubble(false));
+    el("mini-pill").addEventListener("click", () => toggleBubble(true));
+    el("tool-bubble").addEventListener("click", () => toggleBubble());
+    el("tool-quit").addEventListener("click", () => {
+      if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.quit_app();
+      }
+    });
+
+    el("act-comfy").addEventListener("click", async () => {
+      if (!window.pywebview || !window.pywebview.api) return;
+      const llmMode = isLlmOpsMode(latestSnap);
+      announceActionStatus(llmMode ? "正在探测/开启云端 Qwen3.8 对话页..." : "正在探测/开启云端 ComfyUI 隧道...");
+      showToast(llmMode ? "正在打开 Qwen3.8 对话页..." : "正在连接 ComfyUI 隧道...");
+      const res = await window.pywebview.api.open_comfy_tunnel();
+      const msg = (res && res.message) || "操作完成";
+      announceActionStatus(msg);
+      showToast(msg, { duration: 2800, isError: Boolean(res && res.ok === false) });
+    });
+
+    // 同步/复制按钮：LLM 模式下严格执行幂等复制（严禁设置 disabled，clearTimeout 防抖，2000ms 复原）
+    el("act-sync").addEventListener("click", async () => {
+      if (!window.pywebview || !window.pywebview.api) return;
+      const btn = el("act-sync");
+      if (isLlmOpsMode(latestSnap)) {
+        const res = typeof window.pywebview.api.copy_llm_api_config === "function"
+          ? await window.pywebview.api.copy_llm_api_config()
+          : await window.pywebview.api.sync_outputs();
+        if (res && res.ok) {
+          if (res.clipboard_text && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+            navigator.clipboard.writeText(res.clipboard_text).catch(() => {});
+          }
+          clearTimeout(copyResetTimer);
+          btn.setAttribute("data-copied", "true");
+          btn.textContent = "✓ 已复制 API 配置";
+          announceActionStatus(res.message || "✓ 已复制 API 配置");
+          showToast(res.message || "📋 已复制 API 配置", 2400);
+          copyResetTimer = setTimeout(() => {
+            copyResetTimer = null;
+            btn.removeAttribute("data-copied");
+            renderOpsPanel(latestSnap);
+          }, 2000);
+        } else {
+          const errMsg = (res && res.message) || "暂未获取到在线 API 配置";
+          announceActionStatus(errMsg);
+          showToast(errMsg, { duration: 2800, isError: true });
+        }
+        return;
+      }
+
+      announceActionStatus("正在拉回云端最新成图到本地...");
+      showToast("正在拉回成图...");
+      const res = await window.pywebview.api.sync_outputs();
+      const msg = (res && res.message) || "同步结束";
+      announceActionStatus(msg);
+      showToast(msg);
+    });
+
+    el("act-colab").addEventListener("click", async () => {
+      const res = await window.pywebview.api.open_colab_url();
+      announceActionStatus((res && res.message) || "已打开浏览器");
+      showToast((res && res.message) || "已打开 Colab");
+    });
+
+    el("act-stop").addEventListener("click", async () => {
+      const btn = el("act-stop");
+      const now = Date.now();
+      if (now > stopArmedUntil) {
+        stopArmedUntil = now + 4000;
+        btn.classList.add("armed");
+        btn.textContent = "⚠️ 再点确认停卡";
+        announceActionStatus("请 4 秒内再次点击以关停全部实例");
+        clearTimeout(stopResetTimer);
+        stopResetTimer = setTimeout(() => {
+          btn.classList.remove("armed");
+          btn.textContent = "🛑 一键停卡";
+        }, 4000);
+        return;
+      }
+
+      clearTimeout(stopResetTimer);
+      stopArmedUntil = 0;
+      btn.classList.remove("armed");
+      btn.textContent = "⏳ 正在停机...";
+      announceActionStatus("正在下发 down --all 停机省积分...");
+      const res = await window.pywebview.api.stop_all_instances();
+      btn.textContent = "🛑 一键停卡";
+      if (res.snapshot) window.renderState(res.snapshot);
+      announceActionStatus(res.message || "已完成");
+      if (res.ok) {
+        proudOverrideUntil = Date.now() + 2600;
+        updateSpriteFrame();
+      }
+      showToast(res.message || "停机执行完毕");
+    });
+
+    el("act-upload").addEventListener("click", async () => {
+      if (!window.pywebview || !window.pywebview.api) return;
+      const res = await window.pywebview.api.pick_and_upload_files();
+      if (!res || res.cancelled) return;
+      if (res.message) {
+        announceActionStatus(res.message);
+        if (!res.choice_required) {
+          showToast(res.message, { duration: 2800, isError: !res.ok });
+        }
+      }
+    });
+
+    function applyBootSuggestion(gpuName) {
+      const g = String(gpuName || "").toUpperCase();
+      if (!GPU_ORDER.includes(g)) return;
+      const wf = getWorkflowMeta(bootState.profile);
+      bootState.gpu = g;
+      bootState.gpuManual = true;
+      if (GPU_SPECS[g] && GPU_SPECS[g].hmLock) bootState.high_mem = false;
+      else if (wf.autoHmOnA100 && g === "A100") bootState.high_mem = true;
+      clearBootArm();
+      closeWorkflowDrawer();
+      setConsoleTab("boot", true);
+      setPage(2);
+      renderBootPanel(latestSnap);
+      if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.save_prefs({ boot_gpu: g, boot_high_mem: bootState.high_mem });
+      }
+      showToast(`已切换备选显卡为 ${g}，可点一键开机`, 2600);
+    }
+
+    el("console-tabs").addEventListener("click", (e) => {
+      const btn = e.target.closest(".console-tab-btn");
+      if (!btn) return;
+      clearBootArm();
+      setConsoleTab(btn.dataset.tab, true);
+      scheduleSyncRegion();
+    });
+
+    el("gpu-stock-pill").addEventListener("click", async () => {
+      const btn = el("btn-refresh");
+      btn.classList.add("spin");
+      try {
+        if (window.pywebview && window.pywebview.api) {
+          const snap = await window.pywebview.api.refresh_now();
+          window.renderState(snap);
+          const eligible = snap && Array.isArray(snap.eligible_gpus) ? snap.eligible_gpus : null;
+          if (eligible) {
+            showToast(`🟢 算力池已刷新: ${eligible.join("/")}`, 2800);
+          } else {
+            showToast(snap && snap.ok ? "算力池状态已更新" : "连接小抖动，请稍后重试", 2500);
+          }
+        }
+      } finally {
+        btn.classList.remove("spin");
+      }
+    });
+
+    function selectWorkflowProfile(profId, opts = {}) {
+      const targetWf = WORKFLOW_CATALOG.find((item) => item.id === String(profId || "").toLowerCase());
+      if (!targetWf) return false;
+      const changed = bootState.profile !== targetWf.id;
+      if (changed || opts.forceGpuReset) {
+        bootState.profile = targetWf.id;
+        bootState.gpuManual = false;
+        const rec = pickBestGpuForProfile(targetWf.id, latestSnap);
+        bootState.gpu = rec;
+        if (GPU_SPECS[rec] && GPU_SPECS[rec].hmLock) bootState.high_mem = false;
+        else if (targetWf.autoHmOnA100 && rec === "A100") bootState.high_mem = true;
+        else if (targetWf.recGpu === "G4") bootState.high_mem = false;
+        clearBootArm();
+        if (window.pywebview && window.pywebview.api) {
+          window.pywebview.api.save_prefs({
+            boot_profile: bootState.profile,
+            boot_gpu: bootState.gpu,
+            boot_high_mem: bootState.high_mem
+          });
+        }
+      }
+      renderBootPanel(latestSnap);
+      renderOpsPanel(latestSnap);
+      if (wfDrawerOpen) renderWorkflowDrawer();
+      return true;
+    }
+
+    function cycleWorkflowProfile(step = 1) {
+      if (WORKFLOW_CATALOG.length <= 1) return false;
+      const curIdx = Math.max(0, WORKFLOW_CATALOG.findIndex((item) => item.id === bootState.profile));
+      const dir = step >= 0 ? 1 : -1;
+      const nextIdx = (curIdx + dir + WORKFLOW_CATALOG.length) % WORKFLOW_CATALOG.length;
+      const nextWf = WORKFLOW_CATALOG[nextIdx];
+      selectWorkflowProfile(nextWf.id);
+      const mainEl = el("wf-trig-main");
+      if (mainEl) {
+        mainEl.classList.remove("bump-next", "bump-prev");
+        void mainEl.offsetWidth;
+        mainEl.classList.add(dir > 0 ? "bump-next" : "bump-prev");
+        clearTimeout(wfBumpTimer);
+        wfBumpTimer = setTimeout(() => mainEl.classList.remove("bump-next", "bump-prev"), 200);
+      }
+      return true;
+    }
+
+    // 渲染工作流选择抽屉列表：默认保留当前纵向滚动位置，仅在切换分类 Tab 时传 resetScroll 归零
+    function renderWorkflowDrawer(opts = {}) {
+      const tabsEl = el("wf-cat-bar") || el("wf-cat-tabs");
+      if (tabsEl) {
+        tabsEl.querySelectorAll(".wf-cat-btn").forEach((btn) => {
+          const sel = btn.dataset.cat === wfActiveCategory;
+          btn.classList.toggle("active", sel);
+          btn.setAttribute("aria-selected", sel ? "true" : "false");
+          btn.tabIndex = sel ? 0 : -1;
+        });
+      }
+      const listEl = el("wf-drawer-list");
+      if (!listEl) return;
+      const prevScroll = listEl.scrollTop;
+      listEl.innerHTML = "";
+      const items = WORKFLOW_CATALOG.filter((item) => (
+        wfActiveCategory === "all" || item.category === wfActiveCategory
+      ));
+
+      if (items.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "wf-empty-card";
+        empty.textContent = "🧩 扩展工作流预设位：可在 WORKFLOW_CATALOG 追加新工作流，或直接将 .json 工作流拖入桌宠铺到云端画布。";
+        listEl.appendChild(empty);
+        listEl.scrollTop = (opts && opts.resetScroll) ? 0 : prevScroll;
+        return;
+      }
+
+      items.forEach((wf) => {
+        const isActive = wf.id === bootState.profile;
+        const card = document.createElement("div");
+        card.className = `wf-card${isActive ? " active" : ""}`;
+        card.dataset.wf = wf.id;
+        card.setAttribute("role", "button");
+        card.tabIndex = 0;
+
+        const top = document.createElement("div");
+        top.className = "wf-card-top";
+        const titleWrap = document.createElement("span");
+        titleWrap.className = "wf-card-title-wrap";
+        const iconSpan = document.createElement("span");
+        iconSpan.className = "wf-card-icon";
+        iconSpan.textContent = wf.icon;
+        const titleSpan = document.createElement("span");
+        titleSpan.className = "wf-card-title";
+        titleSpan.textContent = wf.title || wf.name;
+        titleWrap.appendChild(iconSpan);
+        titleWrap.appendChild(titleSpan);
+
+        const metaWrap = document.createElement("span");
+        metaWrap.className = "wf-card-meta";
+        const recSpan = document.createElement("span");
+        recSpan.className = "wf-card-rec";
+        recSpan.textContent = `${wf.recGpu}★ 推荐`;
+        const checkSpan = document.createElement("span");
+        checkSpan.className = "wf-card-check";
+        checkSpan.textContent = "✓";
+        metaWrap.appendChild(recSpan);
+        metaWrap.appendChild(checkSpan);
+
+        top.appendChild(titleWrap);
+        top.appendChild(metaWrap);
+        card.appendChild(top);
+
+        if (wf.desc) {
+          const descEl = document.createElement("div");
+          descEl.className = "wf-card-desc";
+          descEl.textContent = wf.desc;
+          card.appendChild(descEl);
+        }
+
+        if (Array.isArray(wf.modules) && wf.modules.length > 0) {
+          const modsRow = document.createElement("div");
+          modsRow.className = "wf-card-mods";
+          const modsLabel = document.createElement("span");
+          modsLabel.className = "wf-mods-label";
+          modsLabel.textContent = "模块:";
+          modsRow.appendChild(modsLabel);
+
+          wf.modules.forEach((mod) => {
+            const modBtn = document.createElement("button");
+            modBtn.type = "button";
+            modBtn.dataset.wf = wf.id;
+            modBtn.dataset.mod = mod.key;
+            if (mod.type === "choice" && Array.isArray(mod.options) && mod.options.length > 0) {
+              // 枚举子模块不设 aria-pressed，点击循环切换档位
+              const curOpt = mod.options.find((o) => String(o.val) === String(bootState[mod.key])) || mod.options[0];
+              modBtn.className = "wf-mod-chip choice";
+              modBtn.title = "点击循环切换档位";
+              modBtn.textContent = `⚙ ${curOpt.label}${curOpt.sizeHint ? ` ${curOpt.sizeHint}` : ""} ↻`;
+            } else {
+              const on = Boolean(bootState[mod.key]);
+              modBtn.className = `wf-mod-chip${on ? " active" : ""}`;
+              modBtn.setAttribute("aria-pressed", String(on));
+              modBtn.textContent = `${on ? "✓ " : "+ "}${mod.label}${mod.sizeHint ? ` (${mod.sizeHint})` : ""}`;
+            }
+            modsRow.appendChild(modBtn);
+          });
+          card.appendChild(modsRow);
+        }
+
+        listEl.appendChild(card);
+      });
+
+      const extNote = document.createElement("div");
+      extNote.className = "wf-ext-note";
+      extNote.textContent = "✨ 已预留多工作流滚动槽位 · 支持自由扩充预设或拖入自定义 JSON";
+      listEl.appendChild(extNote);
+      listEl.scrollTop = (opts && opts.resetScroll) ? 0 : prevScroll;
+    }
+
+    // 打开工作流抽屉：解除抽屉 inert、移入键盘焦点并对背景 #boot-pane 挂载 inert 隔离
+    function openWorkflowDrawer() {
+      const layer = el("wf-drawer-layer");
+      const trig = el("wf-trigger-btn");
+      const bootPane = el("boot-pane");
+      const topBar = document.querySelector('.page-body[data-page="2"] .console-top-bar');
+      if (!layer || !trig) return;
+      renderWorkflowDrawer();
+      wfDrawerOpen = true;
+      layer.removeAttribute("inert");
+      layer.inert = false;
+      layer.classList.add("open");
+      layer.setAttribute("aria-hidden", "false");
+      trig.setAttribute("aria-expanded", "true");
+      const focusTarget = layer.querySelector('.wf-cat-btn[aria-selected="true"]')
+        || layer.querySelector('button:not([disabled]), [tabindex="0"]');
+      if (focusTarget && typeof focusTarget.focus === "function") {
+        void focusTarget.offsetWidth;
+        focusTarget.focus({ preventScroll: true });
+      }
+      if (bootPane) {
+        bootPane.setAttribute("inert", "");
+        bootPane.inert = true;
+      }
+      if (topBar) {
+        topBar.setAttribute("inert", "");
+        topBar.inert = true;
+      }
+      requestAnimationFrame(() => {
+        if (!wfDrawerOpen || !layer.classList.contains("open")) return;
+        if (!layer.contains(document.activeElement)) {
+          const target = layer.querySelector('.wf-cat-btn[aria-selected="true"]')
+            || layer.querySelector('button:not([disabled]), [tabindex="0"]');
+          if (target && typeof target.focus === "function") {
+            target.focus({ preventScroll: true });
+          }
+        }
+      });
+    }
+
+    // 关闭工作流抽屉：先解除背景 inert 并将焦点归还 #wf-trigger-btn，再恢复抽屉 inert 与 aria-hidden
+    function closeWorkflowDrawer() {
+      const layer = el("wf-drawer-layer");
+      const trig = el("wf-trigger-btn");
+      const bootPane = el("boot-pane");
+      const topBar = document.querySelector('.page-body[data-page="2"] .console-top-bar');
+      const wasOpen = Boolean(wfDrawerOpen || (layer && layer.classList.contains("open")));
+      if (bootPane) {
+        bootPane.removeAttribute("inert");
+        bootPane.inert = false;
+      }
+      if (topBar) {
+        topBar.removeAttribute("inert");
+        topBar.inert = false;
+      }
+      if (!wasOpen) return;
+      wfDrawerOpen = false;
+      if (trig) {
+        trig.setAttribute("aria-expanded", "false");
+        if (trig.offsetParent !== null && typeof trig.focus === "function") {
+          trig.focus({ preventScroll: true });
+        } else if (layer && layer.contains(document.activeElement) && document.activeElement.blur) {
+          document.activeElement.blur();
+        }
+      }
+      if (layer) {
+        layer.classList.remove("open");
+        layer.setAttribute("aria-hidden", "true");
+        layer.setAttribute("inert", "");
+        layer.inert = true;
+      }
+    }
+
+    function toggleWorkflowDrawer() {
+      if (wfDrawerOpen) closeWorkflowDrawer();
+      else openWorkflowDrawer();
+    }
+
+    window.openWorkflowDrawer = openWorkflowDrawer;
+    window.closeWorkflowDrawer = closeWorkflowDrawer;
+    window.selectWorkflowProfile = selectWorkflowProfile;
+    window.cycleWorkflowProfile = cycleWorkflowProfile;
+
+    el("wf-trigger-btn").addEventListener("click", () => {
+      toggleWorkflowDrawer();
+    });
+
+    el("wf-trigger-btn").addEventListener("wheel", (e) => {
+      if (wfDrawerOpen) return;
+      const dy = Math.abs(e.deltaY || 0);
+      const dx = Math.abs(e.deltaX || 0);
+      if (dx < 4 && dy < 4) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const now = performance.now();
+      if (now < wfWheelLockUntil) return;
+      wfWheelLockUntil = now + 180;
+      const primary = dy >= dx ? e.deltaY : e.deltaX;
+      cycleWorkflowProfile(primary > 0 ? 1 : -1);
+    }, { passive: false });
+
+    // 全抽屉滚轮转发：阻断外层气泡翻页，当光标在标题栏/遮罩等非列表区时将滚轮量转发至 #wf-drawer-list
+    el("wf-drawer-layer").addEventListener("wheel", (e) => {
+      e.stopPropagation();
+      if (!e.target || !e.target.closest("#wf-drawer-list")) {
+        e.preventDefault();
+        const listEl = el("wf-drawer-list");
+        if (listEl) {
+          listEl.scrollTop += (Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX);
+        }
+      }
+    }, { passive: false });
+
+    el("wf-drawer-scrim").addEventListener("click", () => closeWorkflowDrawer());
+    el("wf-drawer-close").addEventListener("click", () => closeWorkflowDrawer());
+
+    const wfCatBarEl = el("wf-cat-bar") || el("wf-cat-tabs");
+    if (wfCatBarEl) {
+      wfCatBarEl.addEventListener("click", (e) => {
+        const btn = e.target.closest(".wf-cat-btn");
+        if (!btn || !btn.dataset.cat) return;
+        wfActiveCategory = btn.dataset.cat;
+        renderWorkflowDrawer({ resetScroll: true });
+        btn.scrollIntoView({ block: "nearest", inline: "nearest" });
+      });
+
+      // WAI-ARIA Tabs 键盘方向键焦点与选中跟随交互（ArrowLeft / ArrowRight / Home / End）
+      wfCatBarEl.addEventListener("keydown", (e) => {
+        if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) return;
+        const tabs = Array.from(wfCatBarEl.querySelectorAll('.wf-cat-btn[role="tab"]'));
+        if (tabs.length === 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const curBtn = e.target.closest(".wf-cat-btn");
+        let curIdx = tabs.indexOf(curBtn);
+        if (curIdx < 0) {
+          curIdx = Math.max(0, tabs.findIndex((t) => t.dataset.cat === wfActiveCategory));
+        }
+        let nextIdx = curIdx;
+        if (e.key === "ArrowRight") nextIdx = (curIdx + 1) % tabs.length;
+        else if (e.key === "ArrowLeft") nextIdx = (curIdx - 1 + tabs.length) % tabs.length;
+        else if (e.key === "Home") nextIdx = 0;
+        else if (e.key === "End") nextIdx = tabs.length - 1;
+
+        const nextTab = tabs[nextIdx];
+        if (!nextTab || !nextTab.dataset.cat) return;
+        wfActiveCategory = nextTab.dataset.cat;
+        renderWorkflowDrawer({ resetScroll: true });
+        nextTab.focus({ preventScroll: true });
+        nextTab.scrollIntoView({ block: "nearest", inline: "nearest" });
+      });
+
+      wfCatBarEl.addEventListener("wheel", (e) => {
+        if (wfCatBarEl.scrollWidth <= wfCatBarEl.clientWidth) return;
+        const delta = Math.abs(e.deltaX) >= Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        if (!delta) return;
+        e.preventDefault();
+        e.stopPropagation();
+        wfCatBarEl.scrollLeft += delta;
+      }, { passive: false });
+    }
+
+    // 列表内容区左键按住拖拽纵向滚动（避开右侧原生滚动条区域，位移 <= 7px 不影响正常点击）
+    (function setupWfListDragScroll() {
+      const listEl = el("wf-drawer-list");
+      const layerEl = el("wf-drawer-layer");
+      if (!listEl) return;
+      let dragging = false;
+      let dragMoved = false;
+      let startY = 0;
+      let startScroll = 0;
+      let dragScale = 1;
+      let suppressClickUntil = 0;
+
+      listEl.addEventListener("mousedown", (e) => {
+        suppressClickUntil = 0;
+        if (e.button !== 0) return;
+        const r = listEl.getBoundingClientRect();
+        dragScale = listEl.offsetWidth > 0 ? (r.width / listEl.offsetWidth) : 1;
+        // 仅在内容区内部响应按住拖滚，右侧滚动条槽位 100% 留给浏览器原生滚动条拖动
+        if (e.clientX >= r.left + listEl.clientWidth * dragScale) return;
+        dragging = true;
+        dragMoved = false;
+        startY = e.clientY;
+        startScroll = listEl.scrollTop;
+      });
+
+      window.addEventListener("mousemove", (e) => {
+        if (!dragging) return;
+        const dy = e.clientY - startY;
+        if (!dragMoved && Math.abs(dy) > 7) {
+          dragMoved = true;
+          listEl.classList.add("dragging");
+        }
+        if (dragMoved) {
+          e.preventDefault();
+          listEl.scrollTop = startScroll - (dy / (dragScale || 1));
+        }
+      }, { passive: false });
+
+      function endDrag() {
+        if (!dragging) return;
+        dragging = false;
+        listEl.classList.remove("dragging");
+        if (dragMoved) {
+          dragMoved = false;
+          suppressClickUntil = performance.now() + 140;
+        }
+      }
+
+      window.addEventListener("mouseup", endDrag, true);
+      window.addEventListener("blur", endDrag);
+
+      (layerEl || listEl).addEventListener("click", (e) => {
+        if (suppressClickUntil > performance.now()) {
+          suppressClickUntil = 0;
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }, true);
+    })();
+
+    el("wf-drawer-list").addEventListener("click", (e) => {
+      const modBtn = e.target.closest(".wf-mod-chip");
+      if (modBtn) {
+        e.stopPropagation();
+        const wfId = modBtn.dataset.wf;
+        const modKey = modBtn.dataset.mod;
+        if (wfId && bootState.profile !== wfId) {
+          selectWorkflowProfile(wfId);
+        }
+        const wf = getWorkflowMeta(wfId || bootState.profile);
+        const modMeta = (wf.modules || []).find((m) => m.key === modKey);
+        if (!modMeta) return;
+        let nextVal;
+        if (modMeta.type === "choice" && Array.isArray(modMeta.options) && modMeta.options.length > 0) {
+          let curIdx = modMeta.options.findIndex((o) => String(o.val) === String(bootState[modMeta.key]));
+          if (curIdx < 0) curIdx = 0;
+          nextVal = modMeta.options[(curIdx + 1) % modMeta.options.length].val;
+        } else {
+          nextVal = !Boolean(bootState[modMeta.key]);
+        }
+        bootState[modMeta.key] = nextVal;
+        if (latestSnap && latestSnap.prefs && modMeta.prefKey) {
+          latestSnap.prefs[modMeta.prefKey] = nextVal;
+        }
+        clearBootArm();
+        renderBootPanel(latestSnap);
+        renderWorkflowDrawer();
+        const nextChip = el("wf-drawer-list").querySelector(`.wf-mod-chip[data-wf="${wf.id}"][data-mod="${modKey}"]`);
+        if (nextChip && typeof nextChip.focus === "function") {
+          nextChip.focus({ preventScroll: true });
+        }
+        if (window.pywebview && window.pywebview.api && modMeta.prefKey) {
+          window.pywebview.api.save_prefs({ [modMeta.prefKey]: nextVal });
+        }
+        return;
+      }
+
+      const card = e.target.closest(".wf-card");
+      if (!card || !card.dataset.wf) return;
+      selectWorkflowProfile(card.dataset.wf);
+      closeWorkflowDrawer();
+    });
+
+    el("wf-drawer-list").addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const card = e.target.closest(".wf-card");
+      if (!card || e.target.closest(".wf-mod-chip")) return;
+      e.preventDefault();
+      card.click();
+    });
+
+    el("gpu-grid").addEventListener("click", (e) => {
+      const card = e.target.closest(".gpu-card");
+      if (!card) return;
+      const g = card.dataset.gpu;
+      if (!GPU_ORDER.includes(g)) return;
+      const wf = getWorkflowMeta(bootState.profile);
+      bootState.gpu = g;
+      bootState.gpuManual = true;
+      if (GPU_SPECS[g] && GPU_SPECS[g].hmLock) bootState.high_mem = false;
+      else if (wf.autoHmOnA100 && g === "A100") bootState.high_mem = true;
+      clearBootArm();
+      renderBootPanel(latestSnap);
+      if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.save_prefs({
+          boot_gpu: bootState.gpu,
+          boot_high_mem: bootState.high_mem
+        });
+      }
+    });
+
+    el("chip-hm").addEventListener("click", () => {
+      const spec = GPU_SPECS[bootState.gpu] || {};
+      if (spec.hmLock) {
+        const lockTip = bootState.gpu === "G4"
+          ? "G4 标准版已自带 96G显存 + 176G高存，无需开启高内存"
+          : `${bootState.gpu} 默认自带高内存形态，无需额外勾选`;
+        showToast(lockTip, 2200);
+        return;
+      }
+      bootState.high_mem = !bootState.high_mem;
+      clearBootArm();
+      renderBootPanel(latestSnap);
+      if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.save_prefs({ boot_high_mem: bootState.high_mem });
+      }
+    });
+
+    el("btn-boot-start").addEventListener("click", async () => {
+      if (!window.pywebview || !window.pywebview.api) return;
+      const s = latestSnap || {};
+      const sessions = Array.isArray(s.sessions) ? s.sessions : [];
+      const running = Boolean(s.is_running && sessions.length > 0);
+      const targetSess = sessions.find((it) => it.name === "comfy") || sessions[0] || null;
+      const runGpu = targetSess ? String(targetSess.accelerator || "").toUpperCase() : "";
+      const runShape = targetSess ? String(targetSess.machine_shape || "STANDARD").toUpperCase() : "";
+      const sameGpu = running && runGpu === bootState.gpu;
+      const curSpec = GPU_SPECS[bootState.gpu] || {};
+      const needUpgradeHm = sameGpu && !curSpec.hmLock && bootState.high_mem && runShape !== "HIGH_RAM";
+      const recreate = running && (!sameGpu || needUpgradeHm);
+
+      if (recreate) {
+        const now = Date.now();
+        if (now > bootArmedUntil) {
+          bootArmedUntil = now + 4000;
+          const selHm = !curSpec.hmLock && Boolean(bootState.high_mem);
+          const hmBtnTag = selHm ? (bootState.gpu === "A100" ? "(80G高存)" : "(高存)") : "";
+          el("btn-boot-start").classList.add("armed");
+          el("btn-boot-start").textContent = `⚠️ 再点确认停旧卡(${runGpu})并换 ${bootState.gpu}${hmBtnTag}`;
+          clearTimeout(bootResetTimer);
+          bootResetTimer = setTimeout(() => {
+            bootArmedUntil = 0;
+            renderBootPanel(latestSnap);
+          }, 4000);
+          return;
+        }
+      }
+      clearBootArm();
+
+      const payload = {
+        profile: bootState.profile,
+        gpu: bootState.gpu,
+        high_mem: curSpec.hmLock ? false : Boolean(bootState.high_mem),
+        minimax_r2v: Boolean(bootState.minimax_r2v),
+        minimax_pe: Boolean(bootState.minimax_pe),
+        llm_quant: String(bootState.llm_quant || "UD-Q4_K_XL"),
+        llm_ctx: Number(bootState.llm_ctx || 32768),
+        llm_mmproj: Boolean(bootState.llm_mmproj),
+        recreate: recreate
+      };
+      const res = await window.pywebview.api.start_instance(payload);
+      if (res && res.deploy) {
+        if (latestSnap) latestSnap.deploy = res.deploy;
+        setConsoleTab("boot", true);
+        renderBootPanel(latestSnap);
+        renderOpsPanel(latestSnap);
+        renderComfyState(latestSnap ? latestSnap.comfy : null);
+      }
+      if (res && res.message) {
+        showToast(res.message, { duration: 2800, isError: !res.ok });
+      }
+    });
+
+    el("btn-boot-cancel").addEventListener("click", async () => {
+      const btn = el("btn-boot-cancel");
+      const now = Date.now();
+      if (now > cancelArmedUntil) {
+        cancelArmedUntil = now + 4000;
+        btn.classList.add("armed");
+        btn.textContent = "再点中止";
+        clearTimeout(cancelResetTimer);
+        cancelResetTimer = setTimeout(() => {
+          cancelArmedUntil = 0;
+          btn.classList.remove("armed");
+          btn.textContent = "✕ 中止";
+        }, 4000);
+        return;
+      }
+      clearTimeout(cancelResetTimer);
+      cancelArmedUntil = 0;
+      btn.classList.remove("armed");
+      btn.textContent = "中止中...";
+      if (window.pywebview && window.pywebview.api) {
+        const res = await window.pywebview.api.cancel_deploy();
+        if (res && res.message) showToast(res.message, 2500);
+      }
+      btn.textContent = "✕ 中止";
+    });
+
+    el("comfy-strip").addEventListener("click", async () => {
+      const deploy = latestSnap && latestSnap.deploy;
+      if (deploy && deploy.active) {
+        setConsoleTab("boot", true);
+        setPage(2);
+        return;
+      }
+      if (!latestSnap || !latestSnap.is_running) {
+        setConsoleTab("boot", true);
+        setPage(2);
+        return;
+      }
+      if (deploy && !deploy.active && deploy.error_msg && !(latestSnap.comfy && latestSnap.comfy.online)) {
+        setConsoleTab("boot", true);
+        setPage(2);
+        return;
+      }
+      const comfy = latestSnap.comfy;
+      if (!comfy || !window.pywebview || !window.pywebview.api) return;
+      if (!comfy.has_error && comfy.service_kind === "llm" && comfy.online) {
+        showToast("正在打开 Qwen3.8 对话页...");
+        const res = await window.pywebview.api.open_comfy_tunnel();
+        if (res && res.message) {
+          announceActionStatus(res.message);
+          showToast(res.message, { duration: 2800, isError: !res.ok });
+        }
+        return;
+      }
+      let action = null;
+      if (comfy.has_error) action = "error";
+      else if ((comfy.pending_pull_count || 0) > 0) action = "outputs";
+      if (!action) return;
+      const res = await window.pywebview.api.handle_toast_action(action);
+      if (res && res.message) {
+        announceActionStatus(res.message);
+        showToast(res.message, { duration: 2800, isError: !res.ok });
+      }
+    });
+
+    el("seg-top").addEventListener("click", (e) => {
+      const btn = e.target.closest(".seg-btn");
+      if (!btn) return;
+      const flag = btn.dataset.val === "1";
+      setSegActive("seg-top", btn.dataset.val);
+      window.pywebview.api.set_topmost(flag);
+      showToast(flag ? "已开启总是置顶" : "已取消窗口置顶");
+    });
+
+    el("seg-poll").addEventListener("click", (e) => {
+      const btn = e.target.closest(".seg-btn");
+      if (!btn) return;
+      const sec = Number(btn.dataset.val);
+      setSegActive("seg-poll", btn.dataset.val);
+      window.pywebview.api.save_prefs({ poll_interval_sec: sec });
+      showToast(`已切换为每 ${sec} 秒自动刷新`);
+    });
+
+    el("seg-scale").addEventListener("click", (e) => {
+      const btn = e.target.closest(".seg-btn");
+      if (!btn) return;
+      const sc = Number(btn.dataset.val);
+      setSegActive("seg-scale", btn.dataset.val);
+      document.documentElement.style.setProperty("--pet-scale", String(sc));
+      window.pywebview.api.set_scale(sc).then(() => {
+        setTimeout(scheduleSyncRegion, 80);
+      });
+    });
+
+    el("seg-long").addEventListener("click", (e) => {
+      const btn = e.target.closest(".seg-btn");
+      if (!btn) return;
+      const mins = Number(btn.dataset.val);
+      setSegActive("seg-long", btn.dataset.val);
+      window.pywebview.api.save_prefs({ long_run_warn_minutes: mins });
+      if (latestSnap) manualRefresh(true);
+      showToast(`已设置忘关卡提醒为 ${btn.textContent}`);
+    });
+
+    el("seg-autopull").addEventListener("click", (e) => {
+      const btn = e.target.closest(".seg-btn");
+      if (!btn) return;
+      const flag = btn.dataset.val === "1";
+      setSegActive("seg-autopull", btn.dataset.val);
+      if (latestSnap && latestSnap.prefs) {
+        latestSnap.prefs.auto_pull_outputs = flag;
+      }
+      if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.save_prefs({ auto_pull_outputs: flag });
+      }
+      showToast(flag ? "已开启出图自动拉回本机" : "已切换为点击提醒后手动拉回");
+    });
+
+    el("seg-keepalive").addEventListener("click", (e) => {
+      const btn = e.target.closest(".seg-btn");
+      if (!btn) return;
+      const mode = String(btn.dataset.val || "stop60");
+      const flag = mode !== "off";
+      const idleMins = mode === "stop60" ? 60 : 0;
+      setSegActive("seg-keepalive", mode);
+      if (latestSnap && latestSnap.prefs) {
+        latestSnap.prefs.keep_alive = flag;
+        latestSnap.prefs.idle_auto_stop_minutes = idleMins;
+      }
+      if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.save_prefs({ keep_alive: flag, idle_auto_stop_minutes: idleMins });
+      }
+      if (mode === "stop60") {
+        showToast("已开启智能保活 + 闲置1h自动归档停卡");
+      } else if (mode === "smart") {
+        showToast("已切换为智能保活（闲置45m自动停止续命）");
+      } else {
+        showToast("已关闭保活（闲置约30m由官方自动回收）");
+      }
+    });
+
+    el("seg-edge").addEventListener("click", (e) => {
+      const btn = e.target.closest(".seg-btn");
+      if (!btn) return;
+      const flag = btn.dataset.val === "1";
+      setSegActive("seg-edge", btn.dataset.val);
+      if (latestSnap && latestSnap.prefs) {
+        latestSnap.prefs.edge_auto_hide = flag;
+      }
+      if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.set_edge_auto_hide(flag);
+      }
+      showToast(flag ? "已开启靠边停靠自动半隐藏" : "已切换为常驻不自动贴边隐藏");
+    });
+
+    /* 全局文件拖拽悬停动效与引导（严禁 stopPropagation，保障 pywebview 原生提取全路径） */
+    function clearDragHover() {
+      clearTimeout(dragResetTimer);
+      dragOverrideUntil = 0;
+      el("stage").classList.remove("drag-over");
+      updateSpriteFrame();
+    }
+
+    function activateDragHover(e) {
+      e.preventDefault();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = "copy";
+      }
+      el("stage").classList.add("drag-over");
+      dragOverrideUntil = Date.now() + 260;
+      updateSpriteFrame();
+      const toastTextNode = el("speech-toast").querySelector(".toast-text");
+      if (!el("speech-toast").classList.contains("show") || (toastTextNode && toastTextNode.textContent !== "📥 松手投递到云端传送门")) {
+        showToast("📥 松手投递到云端传送门", 1500);
+      }
+      clearTimeout(dragResetTimer);
+      dragResetTimer = setTimeout(clearDragHover, 160);
+    }
+
+    window.addEventListener("dragenter", activateDragHover);
+    window.addEventListener("dragover", activateDragHover);
+    window.addEventListener("dragleave", () => {
+      clearTimeout(dragResetTimer);
+      dragResetTimer = setTimeout(clearDragHover, 140);
+    });
+    window.addEventListener("drop", (e) => {
+      e.preventDefault();
+      clearDragHover();
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        showToast("⏳ 正在解析投递文件...", 4000);
+      }
+    });
+
+    window.onBackendEvent = function (evt) {
+      if (!evt || !evt.type) return;
+      if (evt.type === "state_sync" && evt.snapshot) {
+        window.renderState(evt.snapshot);
+        return;
+      }
+      if (evt.type === "comfy_tick") {
+        if (latestSnap) {
+          latestSnap.comfy = evt.comfy;
+          if (evt.comfy && evt.comfy.has_error) {
+            latestSnap.mood = "sad";
+          } else if (latestSnap.is_running && !latestSnap.low_balance && !latestSnap.long_running_alert && latestSnap.ok) {
+            latestSnap.mood = "idle";
+          }
+        }
+        renderOpsPanel(latestSnap);
+        renderComfyState(evt.comfy || null);
+        updateSpriteFrame();
+        return;
+      }
+
+      if (evt.type === "outputs_ready") {
+        playTapBounce();
+        spawnPetSparkles();
+        proudOverrideUntil = Date.now() + 4500;
+        updateSpriteFrame();
+        flushSyncRegion();
+        setTimeout(() => {
+          updateSpriteFrame();
+          flushSyncRegion();
+        }, 4550);
+        showToast(evt.summary || "✨ 新出图完成！点我查看", {
+          duration: 8000,
+          action: "outputs"
+        });
+        return;
+      }
+
+      if (evt.type === "comfy_error") {
+        if (latestSnap) {
+          latestSnap.comfy = { ...(latestSnap.comfy || {}), has_error: true, error_summary: evt.summary || "" };
+          latestSnap.mood = "sad";
+        }
+        renderComfyState(latestSnap ? latestSnap.comfy : { online: true, has_error: true, error_summary: evt.summary || "" });
+        updateSpriteFrame();
+        showToast(evt.summary ? `⚠️ ${evt.summary}` : "⚠️ 推理报错，点我查看", {
+          duration: 10000,
+          action: "error",
+          isError: true
+        });
+        return;
+      }
+
+      if (evt.type === "png_workflow_choice") {
+        showToast("🔍 含工作流:", {
+          duration: 12000,
+          choices: [
+            {
+              label: "传参考图",
+              primary: false,
+              onClick: () => {
+                showToast("📤 正在按参考图投递...", 5000);
+                if (window.pywebview && window.pywebview.api) {
+                  window.pywebview.api.confirm_png_drop(evt.path, "image");
+                }
+              }
+            },
+            {
+              label: "直铺画布",
+              primary: true,
+              onClick: () => {
+                showToast("📤 正在提取并直铺工作流到画布...", 5000);
+                if (window.pywebview && window.pywebview.api) {
+                  window.pywebview.api.confirm_png_drop(evt.path, "workflow");
+                }
+              }
+            }
+          ]
+        });
+        return;
+      }
+
+      if (evt.type === "upload_progress") {
+        announceActionStatus(evt.summary || "正在上传...");
+        showToast(evt.summary || "📤 正在上传...", 5000);
+        return;
+      }
+
+      if (evt.type === "upload_done") {
+        announceActionStatus(evt.summary || "投递完成");
+        playTapBounce();
+        spawnPetSparkles();
+        proudOverrideUntil = Date.now() + 2600;
+        updateSpriteFrame();
+        flushSyncRegion();
+        setTimeout(() => {
+          updateSpriteFrame();
+          flushSyncRegion();
+        }, 2650);
+        const act = evt.action || null;
+        const holdMs = act && String(act).startsWith("open_comfy_wf:") ? 7500 : 5500;
+        showToast(evt.summary || "✅ 投递完成", {
+          duration: holdMs,
+          action: act
+        });
+        return;
+      }
+
+      if (evt.type === "deploy_progress") {
+        if (latestSnap) latestSnap.deploy = evt.deploy;
+        renderBootPanel(latestSnap || { deploy: evt.deploy });
+        renderComfyState(latestSnap ? latestSnap.comfy : null);
+        return;
+      }
+
+      if (evt.type === "deploy_done") {
+        if (evt.snapshot) {
+          window.renderState(evt.snapshot);
+        } else if (latestSnap) {
+          latestSnap.deploy = evt.deploy;
+          renderBootPanel(latestSnap);
+          renderOpsPanel(latestSnap);
+          renderComfyState(latestSnap.comfy || null);
+        }
+        playTapBounce();
+        spawnPetSparkles();
+        proudOverrideUntil = Date.now() + 4500;
+        updateSpriteFrame();
+        flushSyncRegion();
+        setTimeout(() => {
+          updateSpriteFrame();
+          flushSyncRegion();
+        }, 4550);
+        showToast(evt.summary || "🎉 部署完成！点我打开", {
+          duration: 10000,
+          action: evt.action || "open_comfy"
+        });
+        return;
+      }
+
+      if (evt.type === "deploy_error") {
+        if (evt.snapshot) {
+          window.renderState(evt.snapshot);
+        } else if (latestSnap) {
+          latestSnap.deploy = evt.deploy;
+          renderBootPanel(latestSnap);
+          renderOpsPanel(latestSnap);
+          renderComfyState(latestSnap.comfy || null);
+        }
+        if (latestSnap && !evt.cancelled) {
+          latestSnap.mood = "sad";
+          updateSpriteFrame();
+        }
+        const choices = evt.suggest_gpu
+          ? [{
+              label: `改选 ${evt.suggest_gpu}`,
+              primary: true,
+              onClick: () => applyBootSuggestion(evt.suggest_gpu)
+            }]
+          : null;
+        showToast(evt.summary || "⚠️ 开机部署失败", {
+          duration: evt.cancelled ? 4500 : 12000,
+          isError: !evt.cancelled,
+          choices: choices
+        });
+        return;
+      }
+
+      if (evt.type === "idle_warning") {
+        announceActionStatus(evt.summary || "实例闲置提醒");
+        showToast(evt.summary || "⏳ 实例闲置提醒，点我续期", {
+          duration: 15000,
+          action: evt.action || "keep_working"
+        });
+        return;
+      }
+
+      if (evt.type === "idle_stopped") {
+        if (evt.snapshot) {
+          window.renderState(evt.snapshot);
+        }
+        proudOverrideUntil = Date.now() + 3000;
+        updateSpriteFrame();
+        announceActionStatus(evt.summary || "已闲置自动停卡");
+        showToast(evt.summary || "🛑 已闲置自动归档并停卡", {
+          duration: 10000
+        });
+        return;
+      }
+
+      if (evt.type === "upload_error") {
+        announceActionStatus(evt.summary || "投递失败");
+        showToast(evt.summary || "⚠️ 投递失败", {
+          duration: 6000,
+          isError: true
+        });
+      }
+    };
+
+    /* 原生 Win32 拖拽接管 + 轻量单击互动 */
+    function bindDragAndTap(targetEl, isPet) {
+      let down = false;
+      let startX = 0;
+      let startY = 0;
+
+      targetEl.addEventListener("mousedown", (e) => {
+        if (e.button !== 0 || e.target.closest("button")) return;
+        down = true;
+        startX = e.screenX;
+        startY = e.screenY;
+        if (isPet) {
+          startPressAnim();
+        }
+      });
+
+      window.addEventListener("mousemove", (e) => {
+        if (!down) return;
+        const dist = Math.hypot(e.screenX - startX, e.screenY - startY);
+        if (dist > 4) {
+          down = false;
+          if (isPet) cancelPressToIdle();
+          if (window.pywebview && window.pywebview.api) {
+            window.pywebview.api.begin_drag();
+          }
+        }
+      });
+
+      window.addEventListener("mouseup", () => {
+        if (!down) return;
+        down = false;
+        if (isPet) {
+          playTapBounce();
+          spawnPetSparkles();
+          proudOverrideUntil = Date.now() + 1100;
+          updateSpriteFrame();
+          flushSyncRegion();
+          setTimeout(() => {
+            updateSpriteFrame();
+            flushSyncRegion();
+          }, 1150);
+
+          showToast(pickRandomLine(latestSnap));
+          const now = Date.now();
+          if (now - lastManualRefreshTs > 3500) {
+            lastManualRefreshTs = now;
+            manualRefresh(true);
+          }
+        }
+      });
+    }
+
+    bindDragAndTap(el("pet-hit"), true);
+    bindDragAndTap(el("drag-header"), false);
+    el("pet-hit").addEventListener("dblclick", () => toggleBubble());
+
+    setInterval(() => {
+      if (latestSnap && latestSnap.is_running) {
+        if (syncLiveUptimeUI(latestSnap)) {
+          scheduleSyncRegion();
+        }
+      }
+    }, 15000);
+
+    window.addEventListener("pywebviewready", async () => {
+      scheduleBlink();
+      if (window.pywebview && window.pywebview.api) {
+        const snap = await window.pywebview.api.get_state();
+        window.renderState(snap);
+        // 部署进行中发生热重载或启动恢复时，自动停留在第 2 页实时部署进度面板
+        if (snap && snap.deploy && snap.deploy.active) {
+          setConsoleTab("boot", true);
+          setPage(2, { immediate: true });
+        }
+        requestAnimationFrame(() => syncAllSegGliders(true));
+        scheduleSyncRegion();
+      }
+    });
+  </script>
+</body>
+</html>

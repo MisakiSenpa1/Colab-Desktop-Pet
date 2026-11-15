@@ -1,0 +1,486 @@
+{
+  "id": "82e2926c-00f6-40d6-b9e0-0754c41dea11",
+  "revision": 0,
+  "last_node_id": 6,
+  "last_link_id": 4,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "MarkdownNote",
+      "pos": [
+        20,
+        20
+      ],
+      "size": [
+        560,
+        470
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "## Fish Audio Drama 3 · 无参考纯文本演戏 (TTS)\n\n本工作流不传入参考音频，每次换 Seed 会随机生成一个新声音。\n要克隆固定音色，请使用左侧的 `drama3_voice_clone.json`。"
+      ],
+      "widgets_values_named": {
+        "text": "## Fish Audio Drama 3 · 无参考纯文本演戏 (TTS)\n\n本工作流不传入参考音频，每次换 Seed 会随机生成一个新声音。\n要克隆固定音色，请使用左侧的 `drama3_voice_clone.json`。"
+      },
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 2,
+      "type": "Drama3Loader",
+      "pos": [
+        620,
+        20
+      ],
+      "size": [
+        360,
+        182
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "model_name",
+          "name": "model_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "model_name"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "experts",
+          "name": "experts",
+          "type": "COMBO",
+          "widget": {
+            "name": "experts"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "expert_cache_gb",
+          "name": "expert_cache_gb",
+          "type": "FLOAT",
+          "widget": {
+            "name": "expert_cache_gb"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "second_gpu",
+          "name": "second_gpu",
+          "type": "COMBO",
+          "widget": {
+            "name": "second_gpu"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "split_layer",
+          "name": "split_layer",
+          "type": "INT",
+          "widget": {
+            "name": "split_layer"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "pin_experts",
+          "name": "pin_experts",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "pin_experts"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "DRAMA3_MODEL",
+          "name": "DRAMA3_MODEL",
+          "type": "DRAMA3_MODEL",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Drama3Loader"
+      },
+      "widgets_values": [
+        "drama3_fp8experts_bf16.safetensors",
+        "in RAM",
+        0,
+        "none",
+        0,
+        true
+      ],
+      "widgets_values_named": {
+        "model_name": "drama3_fp8experts_bf16.safetensors",
+        "experts": "in RAM",
+        "expert_cache_gb": 0,
+        "second_gpu": "none",
+        "split_layer": 0,
+        "pin_experts": true
+      }
+    },
+    {
+      "id": 3,
+      "type": "Drama3CodecLoader",
+      "pos": [
+        620,
+        260
+      ],
+      "size": [
+        360,
+        58
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "codec_name",
+          "name": "codec_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "codec_name"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "DRAMA3_CODEC",
+          "name": "DRAMA3_CODEC",
+          "type": "DRAMA3_CODEC",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Drama3CodecLoader"
+      },
+      "widgets_values": [
+        "drama3_codec.safetensors"
+      ],
+      "widgets_values_named": {
+        "codec_name": "drama3_codec.safetensors"
+      }
+    },
+    {
+      "id": 4,
+      "type": "Drama3Generate",
+      "pos": [
+        1020,
+        20
+      ],
+      "size": [
+        380,
+        332
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "model",
+          "name": "model",
+          "type": "DRAMA3_MODEL",
+          "link": 1
+        },
+        {
+          "localized_name": "voice0",
+          "name": "voices.voice0",
+          "shape": 7,
+          "type": "DRAMA3_VOICE",
+          "link": null
+        },
+        {
+          "localized_name": "text",
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "seed",
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "temperature",
+          "name": "temperature",
+          "type": "FLOAT",
+          "widget": {
+            "name": "temperature"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "top_p",
+          "name": "top_p",
+          "type": "FLOAT",
+          "widget": {
+            "name": "top_p"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "top_k",
+          "name": "top_k",
+          "type": "INT",
+          "widget": {
+            "name": "top_k"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "max_frames",
+          "name": "max_frames",
+          "type": "INT",
+          "widget": {
+            "name": "max_frames"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "split_long_text",
+          "name": "split_long_text",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "split_long_text"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "speakers",
+          "name": "speakers",
+          "type": "COMBO",
+          "widget": {
+            "name": "speakers"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "voice_guidance",
+          "name": "voice_guidance",
+          "type": "FLOAT",
+          "widget": {
+            "name": "voice_guidance"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "DRAMA3_CODES",
+          "name": "DRAMA3_CODES",
+          "type": "DRAMA3_CODES",
+          "links": [
+            3
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Drama3Generate"
+      },
+      "widgets_values": [
+        "你好呀！这是 Fish Audio Drama 3 无参考音色的自由演戏测试。[laughs] 每次更换随机种子，都会抽到一位新演员的嗓音。",
+        1,
+        "randomize",
+        1,
+        0.9,
+        0,
+        0,
+        true,
+        "one take per line",
+        0.0
+      ],
+      "widgets_values_named": {
+        "text": "你好呀！这是 Fish Audio Drama 3 无参考音色的自由演戏测试。[laughs] 每次更换随机种子，都会抽到一位新演员的嗓音。",
+        "seed": 1,
+        "control_after_generate": "randomize",
+        "temperature": 1,
+        "top_p": 0.9,
+        "top_k": 0,
+        "max_frames": 0,
+        "split_long_text": true,
+        "speakers": "one take per line",
+        "voice_guidance": 0.0
+      }
+    },
+    {
+      "id": 5,
+      "type": "Drama3Decode",
+      "pos": [
+        1440,
+        20
+      ],
+      "size": [
+        260,
+        74
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "codec",
+          "name": "codec",
+          "type": "DRAMA3_CODEC",
+          "link": 2
+        },
+        {
+          "localized_name": "codes",
+          "name": "codes",
+          "type": "DRAMA3_CODES",
+          "link": 3
+        },
+        {
+          "localized_name": "shorten_long_pauses",
+          "name": "shorten_long_pauses",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "shorten_long_pauses"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "AUDIO",
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            4
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Drama3Decode"
+      },
+      "widgets_values_named": {
+        "shorten_long_pauses": true
+      },
+      "widgets_values": [
+        true
+      ]
+    },
+    {
+      "id": 6,
+      "type": "SaveAudio",
+      "pos": [
+        1440,
+        140
+      ],
+      "size": [
+        360,
+        112
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 4
+        },
+        {
+          "localized_name": "filename_prefix",
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "audioUI",
+          "name": "audioUI",
+          "type": "AUDIO_UI",
+          "widget": {
+            "name": "audioUI"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "type": "AUDIO",
+          "links": null
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "drama3/drama3_tts"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "drama3/drama3_tts"
+      }
+    }
+  ],
+  "links": [
+    [
+      1,
+      2,
+      0,
+      4,
+      0,
+      "DRAMA3_MODEL"
+    ],
+    [
+      2,
+      3,
+      0,
+      5,
+      0,
+      "DRAMA3_CODEC"
+    ],
+    [
+      3,
+      4,
+      0,
+      5,
+      1,
+      "DRAMA3_CODES"
+    ],
+    [
+      4,
+      5,
+      0,
+      6,
+      0,
+      "AUDIO"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.9,
+      "offset": [
+        416,
+        110
+      ]
+    }
+  },
+  "version": 0.4
+}
