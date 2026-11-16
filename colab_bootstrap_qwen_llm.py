@@ -32,33 +32,33 @@ import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
 
-HF_REPO = "huihui-ai/Huihui-Qwen3.8-Flash-Next-abliterated-v2-GGUF"
+HF_REPO_180B = "huihui-ai/Huihui-Qwen3.8-Flash-Next-abliterated-v2-GGUF"
+HF_REPO_27B = "huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF"
 LLAMA_CPP_TAG = "b12415"
 LLAMA_DIR = Path("/opt/llama_cpp")
-MODELS_ROOT = Path("/content/models/qwen38_flash_next")
 
 LLAMA_PORT = 18080
 LLAMA_INTERNAL_PORT = 18081
 LLAMA_API = f"http://127.0.0.1:{LLAMA_PORT}"
 LLAMA_INTERNAL_API = f"http://127.0.0.1:{LLAMA_INTERNAL_PORT}"
-MODEL_ALIAS = "Qwen3.8-Flash-Next-abliterated"
 
 LLAMA_LOG = Path("/root/llama_server.log")
 SSE_GATEWAY_FILE = Path("/root/llm_sse_gateway.py")
 SSE_GATEWAY_LOG = Path("/root/llm_sse_gateway.log")
 CLOUDFLARED_BIN = Path("/usr/local/bin/cloudflared")
 CLOUDFLARED_LOG = Path("/root/cloudflared.log")
+CLOUDFLARED_LLM_LOG = Path("/root/cloudflared_llm.log")
 TUNNEL_URL_FILE = Path("/root/comfy_tunnel_url.txt")
+LLM_TUNNEL_URL_FILE = Path("/root/llm_tunnel_url.txt")
 SERVICE_META_FILE = Path("/root/colab_service_meta.json")
 RCLONE_CONF = Path("/tmp/rclone.conf")
 
 GDRIVE_BIN_REMOTE = "gdrive_save:Colab_LLM_Binaries"
-GDRIVE_MODEL_REMOTE = "gdrive_save:Colab_LLM_Models"
 
 TUNNEL_URL_RE = re.compile(r"https://(?!api\.)[a-z0-9-]+\.trycloudflare\.com")
 
-# 精确量化分片配置表（v2 仓库实测路径与最小字节阈值，注意 Unsloth 首片仅为 ~10.9 MB 元数据头）
-QUANT_SPECS: dict[str, dict] = {
+# 180B 精确量化分片配置表（v2 仓库实测路径与最小字节阈值，注意 Unsloth 首片仅为 ~10.9 MB 元数据头）
+QUANT_SPECS_180B: dict[str, dict] = {
     "UD-Q4_K_XL": {
         "min_free_gib": 112.0,
         "shards": [
@@ -88,6 +88,31 @@ QUANT_SPECS: dict[str, dict] = {
     },
 }
 
+# 27B 稠密破限版量化配置表（huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF 实测文件与最小字节阈值）
+QUANT_SPECS_27B: dict[str, dict] = {
+    "UD-Q4_K_XL": {
+        "min_free_gib": 24.0,
+        "shards": [
+            ("Huihui-Qwen3.8-27B-abliterated-UD-Q4_K_XL.gguf", 17_000_000_000),
+        ],
+        "mmproj": ("mmproj-model-bf16.gguf", 900_000_000),
+    },
+    "UD-IQ4_XS": {
+        "min_free_gib": 20.0,
+        "shards": [
+            ("Huihui-Qwen3.8-27B-abliterated-UD-IQ4_XS.gguf", 14_000_000_000),
+        ],
+        "mmproj": ("mmproj-model-bf16.gguf", 900_000_000),
+    },
+    "IQ3_XXS": {
+        "min_free_gib": 16.0,
+        "shards": [
+            ("Huihui-Qwen3.8-27B-abliterated-UD-IQ3_XXS.gguf", 10_800_000_000),
+        ],
+        "mmproj": ("mmproj-model-bf16.gguf", 900_000_000),
+    },
+}
+
 
 def _env_flag(name: str, default: bool) -> bool:
     """读取布尔环境变量。"""
@@ -109,21 +134,45 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+_raw_variant = (os.environ.get("LLM_MODEL_VARIANT") or "180b").strip().lower()
+MODEL_VARIANT = "27b" if _raw_variant == "27b" else "180b"
+COHOST_COMFY = _env_flag("LLM_COHOST_COMFY", False)
+
+if MODEL_VARIANT == "27b":
+    HF_REPO = HF_REPO_27B
+    MODELS_ROOT = Path("/content/models/qwen38_27b")
+    MODEL_ALIAS = "Qwen3.8-27B-abliterated"
+    GDRIVE_MODEL_REMOTE = "gdrive_save:Colab_LLM_Models_27B"
+    QUANT_SPECS = QUANT_SPECS_27B
+    _DEFAULT_CTX = 65536
+else:
+    HF_REPO = HF_REPO_180B
+    MODELS_ROOT = Path("/content/models/qwen38_flash_next")
+    MODEL_ALIAS = "Qwen3.8-Flash-Next-abliterated"
+    GDRIVE_MODEL_REMOTE = "gdrive_save:Colab_LLM_Models"
+    QUANT_SPECS = QUANT_SPECS_180B
+    _DEFAULT_CTX = 32768
+
 REQ_QUANT = (os.environ.get("LLM_QUANT") or "UD-Q4_K_XL").strip().upper()
-CTX_SIZE = _env_int("LLM_CTX_SIZE", 32768)
+CTX_SIZE = _env_int("LLM_CTX_SIZE", _DEFAULT_CTX)
 WITH_MMPROJ = _env_flag("LLM_WITH_MMPROJ", True)
 WITH_WEBUI = _env_flag("LLM_WITH_WEBUI", True)
 WITH_GDRIVE_CACHE = _env_flag("LLM_GDRIVE_CACHE", False)
 RAW_API_KEY = (os.environ.get("LLM_API_KEY") or "auto").strip() or "auto"
 CF_TUNNEL_TOKEN = (os.environ.get("CF_TUNNEL_TOKEN") or "").strip()
 CF_TUNNEL_URL = (os.environ.get("CF_TUNNEL_URL") or "").strip().rstrip("/")
+CF_COMFY_TUNNEL_URL = (os.environ.get("CF_COMFY_TUNNEL_URL") or "").strip().rstrip("/")
 _VALID_EFFORTS = {"none", "low", "medium", "high", "xhigh"}
 _raw_default_effort = (os.environ.get("LLM_DEFAULT_EFFORT") or "medium").strip().lower()
 DEFAULT_EFFORT = _raw_default_effort if _raw_default_effort in _VALID_EFFORTS else "medium"
 
 
 def _calc_n_parallel(vram_gib: float) -> int:
-    """根据 GPU 显存动态计算并发槽位数（G4 96G 默认 4 路并发共享统一 KV 池）。"""
+    """根据 GPU 显存、模型变体与是否双栖共驻动态计算并发槽位数。"""
+    if COHOST_COMFY:
+        return 2
+    if MODEL_VARIANT == "27b":
+        return 4 if vram_gib >= 38.0 else 2
     return 4 if vram_gib >= 88.0 else 2
 
 
@@ -257,7 +306,8 @@ def _existing_quant_gib(quant: str) -> float:
 
 def check_environment() -> tuple[str, float, str]:
     """检查 GPU 算力架构、总显存与 /content 磁盘空间，返回 `(active_quant, vram_gib, sm_num)`。"""
-    print("=== [1/7] 检测 Qwen3.8-Flash-Next 运行环境 ===", flush=True)
+    global CTX_SIZE
+    print(f"=== [1/7] 检测 {MODEL_ALIAS} 运行环境 (variant={MODEL_VARIANT}) ===", flush=True)
     if REQ_QUANT not in QUANT_SPECS:
         raise ValueError(
             f"不支持的量化档位 LLM_QUANT={REQ_QUANT!r}，可选值: {', '.join(QUANT_SPECS.keys())}"
@@ -304,7 +354,13 @@ def check_environment() -> tuple[str, float, str]:
         vram_gib = float(mem_mib_str) / 1024.0
         print(f"nvidia-smi 硬件探测: SM=sm_{sm_num} | VRAM={vram_gib:.1f} GiB", flush=True)
 
-    if vram_gib < 35.0:
+    min_vram_gib = 14.5 if MODEL_VARIANT == "27b" else 35.0
+    if vram_gib < min_vram_gib:
+        if MODEL_VARIANT == "27b":
+            raise RuntimeError(
+                f"显存不足：当前 GPU 显存仅 {vram_gib:.1f} GiB (< 14.5 GiB)，无法运行 Qwen3.8-27B 模型，"
+                f"请至少使用 Colab T4 (16GB) 或推荐的 L4 (24GB)！"
+            )
         raise RuntimeError(
             f"显存不足：当前 GPU 显存仅 {vram_gib:.1f} GiB (< 35.0 GiB)，无法运行 180B 规模的 "
             f"Qwen3.8-Flash-Next 模型（T4/L4 不支持），请切换至 Colab G4 (96GB) 或 A100 (80GB 高内存)！"
@@ -313,24 +369,60 @@ def check_environment() -> tuple[str, float, str]:
     Path("/content").mkdir(parents=True, exist_ok=True)
     free_gib = shutil.disk_usage("/content").free / (1024 ** 3)
     active_quant = REQ_QUANT
-    eff_free_gib = free_gib + _existing_quant_gib(active_quant)
-    min_needed = float(QUANT_SPECS[active_quant]["min_free_gib"])
-    print(
-        f"可用磁盘空间 (/content): 剩余 {free_gib:.1f} GiB (计入已有分片有效可用 {eff_free_gib:.1f} GiB, {active_quant} 需 >= {min_needed:.1f} GiB)",
-        flush=True,
-    )
 
-    if active_quant == "UD-Q4_K_XL" and eff_free_gib < 112.0:
-        iq4_eff_free = free_gib + _existing_quant_gib("UD-IQ4_XS")
-        if iq4_eff_free >= 94.0:
+    if MODEL_VARIANT == "27b":
+        # 低显存卡显存平滑自适应：16G T4 降为 IQ3_XXS；24G L4 运行 Q4 时钳制最大上下文至 96K
+        if vram_gib < 20.0 and active_quant == "UD-Q4_K_XL":
             print(
-                f"[警告] /content 剩余可用空间 ({eff_free_gib:.1f} GiB) 不足 112.0 GiB，无法容纳 UD-Q4_K_XL，"
-                f"已自动平滑降级为 UD-IQ4_XS（需 >= 94.0 GiB）！",
+                f"[警告] 当前显存仅 {vram_gib:.1f} GiB (< 20.0 GiB)，27B UD-Q4_K_XL 易爆显存，已自动平滑切换为 IQ3_XXS！",
                 flush=True,
             )
-            active_quant = "UD-IQ4_XS"
-            eff_free_gib = iq4_eff_free
-            min_needed = float(QUANT_SPECS[active_quant]["min_free_gib"])
+            active_quant = "IQ3_XXS"
+            if CTX_SIZE > 65536:
+                CTX_SIZE = 65536
+        elif 20.0 <= vram_gib < 26.0 and active_quant == "UD-Q4_K_XL" and CTX_SIZE > 98304:
+            print(
+                f"[提示] 当前显存 {vram_gib:.1f} GiB (L4 档) 运行 27B UD-Q4_K_XL，已将上下文平滑钳制为 98304 (96K) 保留显存余量。",
+                flush=True,
+            )
+            CTX_SIZE = 98304
+
+        eff_free_gib = free_gib + _existing_quant_gib(active_quant)
+        min_needed = float(QUANT_SPECS[active_quant]["min_free_gib"])
+        print(
+            f"可用磁盘空间 (/content): 剩余 {free_gib:.1f} GiB (计入已有分片有效可用 {eff_free_gib:.1f} GiB, {active_quant} 需 >= {min_needed:.1f} GiB)",
+            flush=True,
+        )
+        if active_quant == "UD-Q4_K_XL" and eff_free_gib < 24.0:
+            iq4_eff_free = free_gib + _existing_quant_gib("UD-IQ4_XS")
+            if iq4_eff_free >= 20.0:
+                print(
+                    f"[警告] /content 剩余可用空间 ({eff_free_gib:.1f} GiB) 不足 24.0 GiB，无法容纳 27B UD-Q4_K_XL，"
+                    f"已自动平滑降级为 UD-IQ4_XS（需 >= 20.0 GiB）！",
+                    flush=True,
+                )
+                active_quant = "UD-IQ4_XS"
+                eff_free_gib = iq4_eff_free
+                min_needed = float(QUANT_SPECS[active_quant]["min_free_gib"])
+    else:
+        eff_free_gib = free_gib + _existing_quant_gib(active_quant)
+        min_needed = float(QUANT_SPECS[active_quant]["min_free_gib"])
+        print(
+            f"可用磁盘空间 (/content): 剩余 {free_gib:.1f} GiB (计入已有分片有效可用 {eff_free_gib:.1f} GiB, {active_quant} 需 >= {min_needed:.1f} GiB)",
+            flush=True,
+        )
+
+        if active_quant == "UD-Q4_K_XL" and eff_free_gib < 112.0:
+            iq4_eff_free = free_gib + _existing_quant_gib("UD-IQ4_XS")
+            if iq4_eff_free >= 94.0:
+                print(
+                    f"[警告] /content 剩余可用空间 ({eff_free_gib:.1f} GiB) 不足 112.0 GiB，无法容纳 UD-Q4_K_XL，"
+                    f"已自动平滑降级为 UD-IQ4_XS（需 >= 94.0 GiB）！",
+                    flush=True,
+                )
+                active_quant = "UD-IQ4_XS"
+                eff_free_gib = iq4_eff_free
+                min_needed = float(QUANT_SPECS[active_quant]["min_free_gib"])
 
     if eff_free_gib < min_needed:
         raise RuntimeError(
@@ -745,7 +837,7 @@ def _download_model_file(rel_path: str, dst: Path, min_bytes: int, quant: str):
 def download_qwen_models(active_quant: str) -> tuple[Path, Path | None]:
     """高速拉取目标量化分片与可选视觉投影器，返回 `(首分片路径, mmproj路径或None)`。"""
     print(
-        f"=== [4/7] 高速拉取 Qwen3.8-Flash-Next 量化分片 (quant={active_quant}, mmproj={WITH_MMPROJ}) ===",
+        f"=== [4/7] 高速拉取 {MODEL_ALIAS} 量化分片 (quant={active_quant}, mmproj={WITH_MMPROJ}) ===",
         flush=True,
     )
     spec = QUANT_SPECS[active_quant]
@@ -802,26 +894,33 @@ def build_auth_and_args(
         api_key = RAW_API_KEY
         key_src = "使用外部指定密钥"
 
-    # 根据显存与上下文分档动态卸载 MoE 专家层，并配置并发统一 KV 缓存、超大内存 Prompt 缓存与默认思考强度
-    if vram_gib >= 88.0:
+    # 根据显存与模型形态动态配置分流参数：27B 为纯稠密架构，严禁附加 MoE/PLE 卸载参数
+    n_cpu_moe: int | None = None
+    if MODEL_VARIANT == "27b":
+        batch_size = 2048
+        ubatch_size = 512 if (COHOST_COMFY or vram_gib < 35.0) else 1024
+    elif vram_gib >= 88.0:
         n_cpu_moe = 0
-        batch_size = 4096
-        ubatch_size = 2048
+        batch_size = 2048 if COHOST_COMFY else 4096
+        ubatch_size = 512 if COHOST_COMFY else 2048
     elif vram_gib >= 75.0:
         n_cpu_moe = (10 if CTX_SIZE >= 262144 else 6) if active_quant == "UD-Q4_K_XL" else 0
         batch_size = 2048
-        ubatch_size = 1024
+        ubatch_size = 512 if COHOST_COMFY else 1024
     else:
         n_cpu_moe = 28
         batch_size = 2048
-        ubatch_size = 1024
+        ubatch_size = 512 if COHOST_COMFY else 1024
 
     n_parallel = _calc_n_parallel(vram_gib)
     try:
         total_ram_mib = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") // (1024 * 1024)
     except Exception:
         total_ram_mib = 32768
-    if total_ram_mib >= 131072:
+    if COHOST_COMFY:
+        # 双栖共驻模式下控制 llama-server Prompt RAM 缓存至 8 GiB，给 ComfyUI 模型动态调度留足内存
+        cache_ram_mib = 8192
+    elif total_ram_mib >= 131072:
         cache_ram_mib = 49152
     elif total_ram_mib >= 65536:
         cache_ram_mib = 16384
@@ -838,8 +937,13 @@ def build_auth_and_args(
 
     cmd.extend([
         "-ngl", "99",
-        "--n-cpu-moe", str(n_cpu_moe),
-        "-ot", r"^per_layer_token_embd\.weight$=CPU",
+    ])
+    if MODEL_VARIANT != "27b" and n_cpu_moe is not None:
+        cmd.extend([
+            "--n-cpu-moe", str(n_cpu_moe),
+            "-ot", r"^per_layer_token_embd\.weight$=CPU",
+        ])
+    cmd.extend([
         "--flash-attn", "on",
         "-ctk", "q8_0",
         "-ctv", "q8_0",
@@ -863,10 +967,11 @@ def build_auth_and_args(
     if not WITH_WEBUI:
         cmd.append("--no-ui")
 
+    moe_desc = "dense" if MODEL_VARIANT == "27b" else str(n_cpu_moe)
     print(
         f"鉴权配置就绪 ({key_src}): key={_mask_key(api_key)} | "
-        f"quant={active_quant} | ctx={CTX_SIZE} | n_cpu_moe={n_cpu_moe} | "
-        f"np={n_parallel} kvu=on cram={cache_ram_mib} effort={DEFAULT_EFFORT} b={batch_size} ub={ubatch_size} tb={threads_batch} | "
+        f"variant={MODEL_VARIANT} | model={MODEL_ALIAS} | quant={active_quant} | ctx={CTX_SIZE} | n_cpu_moe={moe_desc} | "
+        f"np={n_parallel} kvu=on cram={cache_ram_mib} cohost={COHOST_COMFY} effort={DEFAULT_EFFORT} b={batch_size} ub={ubatch_size} tb={threads_batch} | "
         f"webui={WITH_WEBUI} | mmproj={WITH_MMPROJ}",
         flush=True,
     )
@@ -1622,7 +1727,9 @@ def start_llama_and_wait(
     print("=== [6/7] 启动 llama-server 与 SSE 保活网关并等待就绪 ===", flush=True)
     old_meta = _read_existing_meta()
     same_cfg = (
-        old_meta.get("kind") == "llm"
+        old_meta.get("kind") in ("llm", "dual")
+        and old_meta.get("model_variant", "180b") == MODEL_VARIANT
+        and old_meta.get("model") == MODEL_ALIAS
         and old_meta.get("quant") == active_quant
         and int(old_meta.get("ctx_size") or 0) == CTX_SIZE
         and bool(old_meta.get("mmproj_enabled")) == WITH_MMPROJ
@@ -1645,8 +1752,11 @@ def start_llama_and_wait(
     if _probe_http_health(LLAMA_PORT, timeout=1.0) or _probe_http_health(LLAMA_INTERNAL_PORT, timeout=1.0):
         _wait_slots_idle_briefly(old_key, max_wait_s=10.0)
 
-    # 停止可能残留的 ComfyUI、SSE 网关或旧版 llama-server 进程以释放显存与端口
-    for pattern in ("ComfyUI/main.py", "main.py.*8188", "llm_sse_gateway.py", "llama-server"):
+    # 停止旧版 SSE 网关与 llama-server；非双栖模式下同步清理残留 ComfyUI 释放显存
+    kill_patterns = ["llm_sse_gateway.py", "llama-server"]
+    if not COHOST_COMFY:
+        kill_patterns = ["ComfyUI/main.py", "main.py.*8188", *kill_patterns]
+    for pattern in kill_patterns:
         subprocess.run(
             ["pkill", "-f", pattern],
             check=False,
@@ -1700,7 +1810,7 @@ def start_llama_and_wait(
 
         now = time.monotonic()
         if now - last_beat >= 10.0:
-            print(f"  正在加载 180B 稀疏权重与分配 KV 缓存... (已等待 {now - t0:.0f}s)", flush=True)
+            print(f"  正在加载 {MODEL_ALIAS} 权重与分配 KV 缓存... (已等待 {now - t0:.0f}s)", flush=True)
             last_beat = now
         time.sleep(2.0)
 
@@ -1763,6 +1873,15 @@ def _write_private_meta(meta: dict):
     os.chmod(tmp_meta, 0o600)
     tmp_meta.replace(SERVICE_META_FILE)
     os.chmod(SERVICE_META_FILE, 0o600)
+
+
+def _probe_local_comfy_ready(timeout: float = 2.0) -> bool:
+    """探测本机 ComfyUI (:8188/system_stats) 是否正在运行。"""
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:8188/system_stats", timeout=timeout) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
 
 
 def _probe_public_llm_tunnel(url: str, timeout: float = 5.0) -> bool:
@@ -1871,20 +1990,23 @@ def start_tunnel_and_write_contract(
                     time.sleep(1.5)
                 tunnel_url = CF_TUNNEL_URL
     else:
+        quick_log = CLOUDFLARED_LLM_LOG if COHOST_COMFY else CLOUDFLARED_LOG
+        quick_url_file = LLM_TUNNEL_URL_FILE if COHOST_COMFY else TUNNEL_URL_FILE
         if (
             pgrep_res.returncode == 0
             and f"127.0.0.1:{LLAMA_PORT}" in proc_lines
-            and TUNNEL_URL_FILE.is_file()
+            and quick_url_file.is_file()
         ):
-            cached = TUNNEL_URL_FILE.read_text(encoding="utf-8", errors="ignore").strip()
+            cached = quick_url_file.read_text(encoding="utf-8", errors="ignore").strip()
             m_cached = TUNNEL_URL_RE.search(cached)
             if m_cached and _probe_public_llm_tunnel(m_cached.group(0)):
                 tunnel_url = m_cached.group(0)
                 print(f"复用运行中的 {LLAMA_PORT} 端口 cloudflared 隧道: {tunnel_url}", flush=True)
 
         if not tunnel_url:
+            kill_pat = f"cloudflared tunnel.*{LLAMA_PORT}" if COHOST_COMFY else "cloudflared tunnel"
             subprocess.run(
-                ["pkill", "-f", "cloudflared tunnel"],
+                ["pkill", "-f", kill_pat],
                 check=False,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
@@ -1896,7 +2018,7 @@ def start_tunnel_and_write_contract(
             if not Path(cf_bin).is_file():
                 raise FileNotFoundError(f"未找到 cloudflared 可执行文件: {cf_bin}")
 
-            log_f = open(CLOUDFLARED_LOG, "wb")
+            log_f = open(quick_log, "wb")
             try:
                 proc = subprocess.Popen(
                     [cf_bin, "tunnel", "--no-autoupdate", "--protocol", "http2", "--url", LLAMA_API],
@@ -1908,33 +2030,52 @@ def start_tunnel_and_write_contract(
                 )
             finally:
                 log_f.close()
-            print(f"已拉起 cloudflared (PID={proc.pid})", flush=True)
+            print(f"已拉起 cloudflared (PID={proc.pid}, port={LLAMA_PORT})", flush=True)
 
             for _ in range(30):
-                if CLOUDFLARED_LOG.is_file():
-                    m = TUNNEL_URL_RE.search(CLOUDFLARED_LOG.read_text(encoding="utf-8", errors="ignore"))
+                if quick_log.is_file():
+                    m = TUNNEL_URL_RE.search(quick_log.read_text(encoding="utf-8", errors="ignore"))
                     if m:
                         tunnel_url = m.group(0)
                         break
                 time.sleep(1.0)
 
             if not tunnel_url:
-                tail = CLOUDFLARED_LOG.read_text(encoding="utf-8", errors="ignore")[-1500:] if CLOUDFLARED_LOG.is_file() else ""
+                tail = quick_log.read_text(encoding="utf-8", errors="ignore")[-1500:] if quick_log.is_file() else ""
                 raise TimeoutError(f"等待 cloudflared 分配隧道地址超时（30s），末尾日志:\n{tail}")
 
-    TUNNEL_URL_FILE.write_text(tunnel_url + "\n", encoding="utf-8")
+    LLM_TUNNEL_URL_FILE.write_text(tunnel_url + "\n", encoding="utf-8")
+    if not COHOST_COMFY:
+        TUNNEL_URL_FILE.write_text(tunnel_url + "\n", encoding="utf-8")
+
+    comfy_alive = _probe_local_comfy_ready(timeout=2.0)
+    is_dual = bool(COHOST_COMFY or comfy_alive)
+    comfy_url_val = CF_COMFY_TUNNEL_URL or ""
+    if not comfy_url_val and comfy_alive and TUNNEL_URL_FILE.is_file():
+        m_comfy = TUNNEL_URL_RE.search(TUNNEL_URL_FILE.read_text(encoding="utf-8", errors="ignore"))
+        if m_comfy:
+            comfy_url_val = m_comfy.group(0)
+
+    prof_id = "qwen_27b" if MODEL_VARIANT == "27b" else "qwen_llm"
+    old_meta = _read_existing_meta()
+    existing_comfy_profs = old_meta.get("comfy_profiles") if isinstance(old_meta.get("comfy_profiles"), list) else []
+
     meta = {
-        "kind": "llm",
-        "profile": "qwen_llm",
+        "kind": "dual" if is_dual else "llm",
+        "profile": prof_id,
+        "llm_profile": prof_id,
+        "model_variant": MODEL_VARIANT,
         "engine": "llama-server",
         "model": MODEL_ALIAS,
         "port": LLAMA_PORT,
+        "llm_port": LLAMA_PORT,
         "internal_port": LLAMA_INTERNAL_PORT,
         "sse_keepalive": True,
         "kv_unified": True,
         "n_parallel": n_parallel,
         "default_effort": DEFAULT_EFFORT,
-        "tunnel_url": tunnel_url,
+        "tunnel_url": (comfy_url_val or tunnel_url) if is_dual else tunnel_url,
+        "llm_tunnel_url": tunnel_url,
         "api_key": api_key,
         "webui_enabled": WITH_WEBUI,
         "mmproj_enabled": WITH_MMPROJ,
@@ -1944,17 +2085,26 @@ def start_tunnel_and_write_contract(
         "vram_used_gb": vram_used_gb,
         "vram_total_gb": vram_total_gb,
     }
+    if is_dual:
+        meta["comfy_port"] = 8188
+        if comfy_url_val:
+            meta["comfy_tunnel_url"] = comfy_url_val
+        if existing_comfy_profs:
+            meta["comfy_profiles"] = existing_comfy_profs
+            meta["profiles"] = [*existing_comfy_profs, prof_id]
     _write_private_meta(meta)
 
     print("========================================", flush=True)
     print(f"SERVICE_TUNNEL_URL: {tunnel_url}", flush=True)
-    print(f"COMFYUI_TUNNEL_URL: {tunnel_url}", flush=True)
+    print(f"LLM_TUNNEL_URL: {tunnel_url}", flush=True)
+    if not COHOST_COMFY:
+        print(f"COMFYUI_TUNNEL_URL: {tunnel_url}", flush=True)
     print("========================================", flush=True)
     return tunnel_url
 
 
 def main():
-    """串联执行 Qwen3.8-Flash-Next-abliterated 云端一键自举全流程。"""
+    """串联执行 Qwen3.8 无审查 LLM 云端一键自举全流程（支持 180B-Flash 与 27B 稠密双版本）。"""
     active_quant, vram_gib, sm_num = check_environment()
     ensure_tools()
     server_bin, ld_library_path = ensure_llama_server(sm_num)

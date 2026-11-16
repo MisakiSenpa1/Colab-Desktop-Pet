@@ -32,69 +32,149 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
 
-def _first_existing_path(candidates: list[Path], fallback: Path) -> Path:
-    """按优先级返回第一个存在的本地文件，均缺失时回退至默认路径。"""
+def _load_pet_prefs_paths() -> dict[str, str]:
+    """安全读取桌宠状态文件中的工具自定义路径配置，缺失或损坏时返回空字典。"""
+    state_path = Path(__file__).resolve().parent / "colab_pet" / "pet_state.json"
+    if not state_path.is_file():
+        return {}
+    try:
+        raw = json.loads(state_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    prefs = raw.get("prefs") if isinstance(raw, dict) else None
+    if not isinstance(prefs, dict):
+        return {}
+    out: dict[str, str] = {}
+    for key in ("colab_exe_path", "colab_py_path", "rclone_exe_path", "rclone_conf_path"):
+        val = str(prefs.get(key) or "").strip()
+        if val:
+            out[key] = val
+    return out
+
+
+def _pick_first_existing(candidates: list[Path], fallback: Path) -> Path:
+    """按优先级筛选首个存在的文件路径，全未命中时回落到默认路径。"""
     for cand in candidates:
-        if cand.is_file():
-            return cand
+        try:
+            if cand and cand.is_file():
+                return cand
+        except OSError:
+            continue
     return fallback
 
 
-def _resolve_colab_exe() -> Path:
-    """定位 colab 可执行文件（支持环境变量 COLAB_EXE 覆盖）。"""
-    env_p = (os.environ.get("COLAB_EXE") or "").strip()
-    if env_p:
-        return Path(env_p)
-    which_p = shutil.which("colab")
-    default_p = Path.home() / ".local" / "bin" / "colab.exe"
-    return _first_existing_path(([Path(which_p)] if which_p else []) + [default_p], default_p)
-
-
-def _resolve_colab_py() -> Path:
-    """定位 google-colab-cli 托管 Python 解释器（支持环境变量 COLAB_PY 覆盖）。"""
-    env_p = (os.environ.get("COLAB_PY") or "").strip()
-    if env_p:
-        return Path(env_p)
-    appdata = Path(os.environ.get("APPDATA") or (Path.home() / "AppData" / "Roaming"))
-    uv_py = appdata / "uv" / "tools" / "google-colab-cli" / "Scripts" / "python.exe"
-    return _first_existing_path(
-        [uv_py, Path.home() / ".local" / "share" / "uv" / "tools" / "google-colab-cli" / "Scripts" / "python.exe"],
-        uv_py,
+def resolve_colab_exe() -> Path:
+    """按环境变量、桌宠配置、PATH 与常见安装位置自适应定位 colab.exe。"""
+    prefs = _load_pet_prefs_paths()
+    env_p = str(os.environ.get("COLAB_PET_COLAB_EXE") or os.environ.get("COLAB_EXE") or "").strip()
+    pref_p = str(prefs.get("colab_exe_path") or "").strip()
+    which_p = shutil.which("colab") or shutil.which("colab.exe") or ""
+    appdata = os.environ.get("APPDATA", "")
+    localappdata = os.environ.get("LOCALAPPDATA", "")
+    cands: list[Path] = []
+    for raw in (env_p, pref_p, which_p):
+        if raw:
+            cands.append(Path(raw))
+    cands.append(Path.home() / ".local" / "bin" / "colab.exe")
+    if appdata:
+        cands.append(Path(appdata) / "uv" / "tools" / "google-colab-cli" / "Scripts" / "colab.exe")
+    cands.append(
+        Path.home() / "AppData" / "Roaming" / "uv" / "tools" / "google-colab-cli" / "Scripts" / "colab.exe"
     )
+    if localappdata:
+        cands.append(
+            Path(localappdata) / "uv" / "tools" / "google-colab-cli" / "Scripts" / "colab.exe"
+        )
+    cands.append(Path.home() / ".local" / "pipx" / "venvs" / "google-colab-cli" / "Scripts" / "colab.exe")
+    fallback = Path.home() / ".local" / "bin" / "colab.exe"
+    cands.append(fallback)
+    return _pick_first_existing(cands, fallback)
 
 
-def _resolve_rclone_exe() -> Path:
-    """定位 rclone 可执行文件（可选，支持环境变量 RCLONE_EXE 覆盖）。"""
-    env_p = (os.environ.get("RCLONE_EXE") or "").strip()
-    if env_p:
-        return Path(env_p)
-    which_p = shutil.which("rclone")
-    scoop_p = Path.home() / "scoop" / "shims" / "rclone.exe"
-    return _first_existing_path(([Path(which_p)] if which_p else []) + [scoop_p], Path(which_p) if which_p else scoop_p)
-
-
-def _resolve_rclone_conf() -> Path:
-    """定位 rclone 配置文件（可选，支持环境变量 RCLONE_CONF 覆盖）。"""
-    env_p = (os.environ.get("RCLONE_CONF") or "").strip()
-    if env_p:
-        return Path(env_p)
-    appdata = Path(os.environ.get("APPDATA") or (Path.home() / "AppData" / "Roaming"))
-    default_p = appdata / "rclone" / "rclone.conf"
-    return _first_existing_path(
-        [
-            default_p,
-            Path.home() / ".config" / "rclone" / "rclone.conf",
-            Path.home() / "scoop" / "apps" / "rclone" / "current" / "rclone.conf",
-        ],
-        default_p,
+def resolve_colab_py(colab_exe: Path | None = None) -> Path:
+    """按环境变量、桌宠配置与 uv/pipx 虚拟环境自动定位带 colab_cli 的 python.exe。"""
+    prefs = _load_pet_prefs_paths()
+    env_p = str(os.environ.get("COLAB_PET_COLAB_PY") or os.environ.get("COLAB_PY") or "").strip()
+    pref_p = str(prefs.get("colab_py_path") or "").strip()
+    appdata = os.environ.get("APPDATA", "")
+    localappdata = os.environ.get("LOCALAPPDATA", "")
+    cands: list[Path] = []
+    for raw in (env_p, pref_p):
+        if raw:
+            cands.append(Path(raw))
+    if appdata:
+        cands.append(Path(appdata) / "uv" / "tools" / "google-colab-cli" / "Scripts" / "python.exe")
+    cands.append(
+        Path.home() / "AppData" / "Roaming" / "uv" / "tools" / "google-colab-cli" / "Scripts" / "python.exe"
     )
+    if localappdata:
+        cands.append(
+            Path(localappdata) / "uv" / "tools" / "google-colab-cli" / "Scripts" / "python.exe"
+        )
+    cands.append(Path.home() / ".local" / "pipx" / "venvs" / "google-colab-cli" / "Scripts" / "python.exe")
+    if colab_exe is not None:
+        try:
+            cands.append(Path(colab_exe).resolve().with_name("python.exe"))
+        except OSError:
+            pass
+    fallback = Path(appdata or (Path.home() / "AppData" / "Roaming")) / "uv" / "tools" / "google-colab-cli" / "Scripts" / "python.exe"
+    cands.append(fallback)
+    return _pick_first_existing(cands, fallback)
 
 
-# 本机工具与目录配置（均支持环境变量覆盖，避免硬编码用户路径）
-COLAB_EXE = _resolve_colab_exe()
-COLAB_PY = _resolve_colab_py()
-RCLONE_EXE = _resolve_rclone_exe()
-RCLONE_CONF = _resolve_rclone_conf()
+def resolve_rclone_exe() -> Path:
+    """按环境变量、桌宠配置、PATH、Scoop/WinGet/Choco 自动定位 rclone.exe。"""
+    prefs = _load_pet_prefs_paths()
+    env_p = str(os.environ.get("COLAB_PET_RCLONE_EXE") or os.environ.get("RCLONE_EXE") or "").strip()
+    pref_p = str(prefs.get("rclone_exe_path") or "").strip()
+    which_p = shutil.which("rclone") or shutil.which("rclone.exe") or ""
+    localappdata = os.environ.get("LOCALAPPDATA", "")
+    cands: list[Path] = []
+    for raw in (env_p, pref_p, which_p):
+        if raw:
+            cands.append(Path(raw))
+    cands.append(Path.home() / "scoop" / "shims" / "rclone.exe")
+    cands.append(Path.home() / "scoop" / "apps" / "rclone" / "current" / "rclone.exe")
+    if localappdata:
+        cands.append(Path(localappdata) / "Microsoft" / "WinGet" / "Links" / "rclone.exe")
+    cands.append(Path(r"C:\ProgramData\chocolatey\bin\rclone.exe"))
+    fallback = Path(which_p) if which_p else (Path.home() / "scoop" / "shims" / "rclone.exe")
+    cands.append(fallback)
+    return _pick_first_existing(cands, fallback)
+
+
+def resolve_rclone_conf(rclone_exe: Path | None = None) -> Path:
+    """按环境变量、桌宠配置与标准 rclone 配置目录自动定位 rclone.conf。"""
+    prefs = _load_pet_prefs_paths()
+    env_p = str(os.environ.get("COLAB_PET_RCLONE_CONF") or os.environ.get("RCLONE_CONF") or "").strip()
+    pref_p = str(prefs.get("rclone_conf_path") or "").strip()
+    appdata = os.environ.get("APPDATA", "")
+    cands: list[Path] = []
+    for raw in (env_p, pref_p):
+        if raw:
+            cands.append(Path(raw))
+    if appdata:
+        cands.append(Path(appdata) / "rclone" / "rclone.conf")
+    cands.append(Path.home() / ".config" / "rclone" / "rclone.conf")
+    if rclone_exe is not None:
+        try:
+            exe_dir = Path(rclone_exe).resolve().parent
+            cands.append(exe_dir / "rclone.conf")
+            if exe_dir.name.lower() == "shims":
+                cands.append(exe_dir.parent / "apps" / "rclone" / "current" / "rclone.conf")
+        except OSError:
+            pass
+    cands.append(Path.home() / "scoop" / "apps" / "rclone" / "current" / "rclone.conf")
+    fallback = Path(appdata or (Path.home() / "AppData" / "Roaming")) / "rclone" / "rclone.conf"
+    cands.append(fallback)
+    return _pick_first_existing(cands, fallback)
+
+
+# 自适应工具路径解析（跨设备开箱即用并兼容既有环境）
+COLAB_EXE = resolve_colab_exe()
+COLAB_PY = resolve_colab_py(COLAB_EXE)
+RCLONE_EXE = resolve_rclone_exe()
+RCLONE_CONF = resolve_rclone_conf(RCLONE_EXE)
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 LORA_BACKUP_DIR = Path(os.environ.get("COLAB_LORA_DIR") or (PACKAGE_DIR / "loras"))
@@ -110,6 +190,7 @@ DRAMA3_BOOTSTRAP_SCRIPT = PACKAGE_DIR / "colab_bootstrap_drama3.py"
 DRAMA3_SMOKE_SCRIPT = PACKAGE_DIR / "verify_drama3.py"
 DRAMA3_REFS_LOCAL_DIR = Path(os.environ.get("COLAB_DRAMA3_REFS_DIR") or (PACKAGE_DIR / "drama3_refs"))
 CF_TUNNEL_SECRET_FILE = PACKAGE_DIR / ".cf_tunnel_secret.json"
+_CUSTOM_TUNNEL_HOST_RE = re.compile(r"^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$", re.IGNORECASE)
 
 
 def _load_cf_tunnel_secret() -> dict:
@@ -123,6 +204,34 @@ def _load_cf_tunnel_secret() -> dict:
         return {}
 
 
+def _extract_valid_https_host(url: str) -> str | None:
+    """校验并返回纯正的 HTTPS 主机名，用于扩展本地/远端公网隧道域名白名单。"""
+    raw = str(url or "").strip().rstrip("/")
+    if not raw.lower().startswith("https://"):
+        return None
+    rest = raw[8:]
+    if not rest or any(ch in rest for ch in ("/", "?", "#", "@", ":", " ")):
+        return None
+    if "." not in rest or not _CUSTOM_TUNNEL_HOST_RE.match(rest):
+        return None
+    return rest.lower()
+
+
+def _build_tunnel_url_pattern(cf_cfg: dict | None = None) -> str:
+    """构造支持 trycloudflare、默认域名及用户自定义 Cloudflare 固定域名的正则模式。"""
+    branches = [r"(?!api\.)[a-z0-9-]+\.trycloudflare\.com"]
+    cfg = cf_cfg if isinstance(cf_cfg, dict) else _load_cf_tunnel_secret()
+    dom_host = _extract_valid_https_host("https://" + str(cfg.get("domain") or "").strip().lstrip("."))
+    if dom_host:
+        branches.append(r"[a-z0-9-]+\." + re.escape(dom_host))
+    for key in ("comfy_url", "llm_url"):
+        host = _extract_valid_https_host(str(cfg.get(key) or ""))
+        if host:
+            esc = re.escape(host)
+            if esc not in branches:
+                branches.append(esc)
+    return r"https://(?:" + "|".join(branches) + r")"
+
 _RCLONE_REMOTE = (os.environ.get("COLAB_RCLONE_REMOTE") or "gdrive_save").strip().rstrip(":") or "gdrive_save"
 GDRIVE_LORA_REMOTE = f"{_RCLONE_REMOTE}:Colab_ComfyUI_Models/loras"
 GDRIVE_DRAMA3_REFS_REMOTE = f"{_RCLONE_REMOTE}:Colab_ComfyUI_Models/drama3/refs"
@@ -131,6 +240,39 @@ REMOTE_OUT_ROOT = "/root/comfy_out"
 REMOTE_RCLONE_CONF = "/tmp/rclone.conf"
 REMOTE_PULL_TAR = "/tmp/comfy_pull.tar.gz"
 
+SUPPORTED_PROFILES = ("anima", "minimax", "drama3", "qwen_27b", "qwen_llm")
+COMFY_PROFILES = ("anima", "minimax", "drama3")
+LLM_PROFILES = ("qwen_27b", "qwen_llm")
+
+
+def _parse_profiles_arg(profile_arg: str | None, profiles_arg: str | None = None) -> list[str]:
+    """解析并校验 --profile / --profiles 参数，返回按规范排序且去重的工作流列表。"""
+    raw_tokens: list[str] = []
+    if profiles_arg and str(profiles_arg).strip():
+        raw_tokens.extend(str(profiles_arg).split(","))
+    elif profile_arg and str(profile_arg).strip():
+        raw_tokens.extend(str(profile_arg).split(","))
+
+    selected: list[str] = []
+    for tok in raw_tokens:
+        p = tok.strip().lower()
+        if not p:
+            continue
+        if p not in SUPPORTED_PROFILES:
+            raise ValueError(
+                f"不支持的工作流生态 {p!r}，可选值: {', '.join(SUPPORTED_PROFILES)}"
+            )
+        if p not in selected:
+            selected.append(p)
+
+    if not selected:
+        return ["anima"]
+
+    # 同时选中两个 LLM 变体时保留显存/规格更高的 180B (qwen_llm)
+    if "qwen_27b" in selected and "qwen_llm" in selected:
+        selected = [p for p in selected if p != "qwen_27b"]
+
+    return [p for p in SUPPORTED_PROFILES if p in selected]
 
 def _discover_local_loras(lora_dir: Path) -> list[tuple[str, int | None, str | None]]:
     """加载可选 loras_manifest.json 清单，否则自动扫描目录下的 *.safetensors 文件。"""
@@ -648,7 +790,7 @@ def cmd_sync_loras(args):
             for fut in as_completed(futures):
                 fut.result()
     else:
-        print(f"  所有 {len(verified)} 个 LoRA 均已存在于远端，无需重复上传。", flush=True)
+        print("  所有 7 个 LoRA 均已存在于远端，无需重复上传。", flush=True)
 
     print("=== [3/4] 生成并上传 sha256sums.txt ===", flush=True)
     with tempfile.TemporaryDirectory(prefix="lora_sums_") as tmp_dir:
@@ -787,28 +929,39 @@ def cmd_status(_args):
     _run([COLAB_EXE, "usage"])
 
 
+def _profile_bootstrap_spec(profile: str) -> tuple[Path, int]:
+    """返回指定工作流对应的云端自举脚本路径与单阶段执行超时时间。"""
+    if profile in LLM_PROFILES:
+        return QWEN_LLM_BOOTSTRAP_SCRIPT, 2400
+    if profile == "minimax":
+        return MINIMAX_BOOTSTRAP_SCRIPT, 2400
+    if profile == "drama3":
+        return DRAMA3_BOOTSTRAP_SCRIPT, 1800
+    return BOOTSTRAP_SCRIPT, 600
+
+
 def cmd_up(args):
-    """创建或复用 Colab GPU 会话，上传可选 rclone 配置并完成指定生态（ComfyUI 或 Qwen3.8 LLM）自举部署。"""
+    """创建或复用 Colab GPU 会话，上传 rclone 配置并完成单生态或多工作流双栖协同自举部署。"""
     _ensure_bin(COLAB_EXE, "colab.exe")
 
-    profile = getattr(args, "profile", "anima") or "anima"
-    if profile == "qwen_llm":
-        target_bootstrap = QWEN_LLM_BOOTSTRAP_SCRIPT
+    profiles_list = _parse_profiles_arg(
+        getattr(args, "profile", None),
+        getattr(args, "profiles", None),
+    )
+    llm_prof = next((p for p in profiles_list if p in LLM_PROFILES), None)
+    comfy_profs = [p for p in profiles_list if p in COMFY_PROFILES]
+
+    if "qwen_llm" in profiles_list or "minimax" in profiles_list or "drama3" in profiles_list or len(profiles_list) >= 2:
         default_gpu = "G4"
-        exec_timeout = 2400
-    elif profile == "minimax":
-        target_bootstrap = MINIMAX_BOOTSTRAP_SCRIPT
-        default_gpu = "G4"
-        exec_timeout = 2400
-    elif profile == "drama3":
-        target_bootstrap = DRAMA3_BOOTSTRAP_SCRIPT
-        default_gpu = "G4"
-        exec_timeout = 1800
     else:
-        target_bootstrap = BOOTSTRAP_SCRIPT
+        # 单跑 anima 或 qwen_27b 均以高性价比 L4 作为默认推荐卡
         default_gpu = "L4"
-        exec_timeout = 600
-    _ensure_bin(target_bootstrap, target_bootstrap.name)
+
+    # 双栖模式优先在第 1 阶段拉起静态占显存的 LLM 服务，再加载带显存缓冲的 ComfyUI 生态
+    exec_order: list[str] = ([llm_prof] if llm_prof else []) + comfy_profs
+    for p in exec_order:
+        script_p, _ = _profile_bootstrap_spec(p)
+        _ensure_bin(script_p, script_p.name)
 
     gpu = getattr(args, "gpu", None) or default_gpu
     # L4 与 G4 均无需也不能叠加 --high-mem（Colab 后端不支持 G4 HIGH_RAM 会拒分配）
@@ -843,13 +996,14 @@ for item in assignments:
             _run([COLAB_PY, "-c", cleanup_code], check=False)
         has_session = False
 
+    prof_desc = "+".join(profiles_list)
     if has_session:
         print(
-            f"检测到会话 {args.session} 已存在，跳过 colab new，继续增量部署 ({profile})...",
+            f"检测到会话 {args.session} 已存在，跳过 colab new，继续增量部署 ({prof_desc})...",
             flush=True,
         )
     else:
-        print(f"=== 开启 Colab 实例 (session={args.session}, profile={profile}, gpu={gpu}, high_mem={high_mem}) ===", flush=True)
+        print(f"=== 开启 Colab 实例 (session={args.session}, profile={prof_desc}, gpu={gpu}, high_mem={high_mem}) ===", flush=True)
         new_cmd = [COLAB_EXE, "new", "-s", args.session, "--gpu", gpu]
         if high_mem:
             new_cmd.append("--high-mem")
@@ -864,68 +1018,169 @@ for item in assignments:
     cf_llm_url = str(cf_cfg.get("llm_url") or "").strip().rstrip("/")
     cf_comfy_url = str(cf_cfg.get("comfy_url") or "").strip().rstrip("/")
 
-    if profile == "qwen_llm":
-        llm_quant = str(getattr(args, "llm_quant", None) or "UD-Q4_K_XL").strip()
-        llm_ctx = str(int(getattr(args, "llm_ctx", None) or 32768))
-        llm_mmproj = "0" if bool(getattr(args, "no_mmproj", False)) else "1"
-        llm_webui = "0" if bool(getattr(args, "no_webui", False)) else "1"
-        llm_gdrive = "1" if bool(getattr(args, "gdrive_cache", False)) else "0"
-        llm_api_key = str(getattr(args, "llm_api_key", None) or "auto").strip() or "auto"
-        if llm_api_key.lower() == "auto":
-            fixed_key = str(cf_cfg.get("llm_api_key") or "").strip()
-            if len(fixed_key) >= 16:
-                llm_api_key = fixed_key
+    is_dual = bool(llm_prof and comfy_profs)
+    total_phases = len(exec_order)
 
-        env_lines = [
-            "import os",
-            f"os.environ['LLM_QUANT'] = {llm_quant!r}",
-            f"os.environ['LLM_CTX_SIZE'] = {llm_ctx!r}",
-            f"os.environ['LLM_WITH_MMPROJ'] = {llm_mmproj!r}",
-            f"os.environ['LLM_WITH_WEBUI'] = {llm_webui!r}",
-            f"os.environ['LLM_GDRIVE_CACHE'] = {llm_gdrive!r}",
-            f"os.environ['LLM_API_KEY'] = {llm_api_key!r}",
-        ]
-        if cf_tok and cf_llm_url:
-            env_lines.append(f"os.environ['CF_TUNNEL_TOKEN'] = {cf_tok!r}")
-            env_lines.append(f"os.environ['CF_TUNNEL_URL'] = {cf_llm_url!r}")
-        env_header = "\n".join(env_lines) + "\n"
-        with tempfile.TemporaryDirectory(prefix="qwen_llm_opts_") as tmp_dir:
-            wrapped = Path(tmp_dir) / target_bootstrap.name
-            wrapped.write_text(
-                env_header + target_bootstrap.read_text(encoding="utf-8"),
-                encoding="utf-8",
-            )
-            _colab_exec_file(args.session, wrapped, timeout=exec_timeout)
-    else:
-        # 部署 ComfyUI 生态（anima / minimax / drama3）时，前置清理可能遗留的 LLM 服务契约与进程
-        prep_lines = [
-            "import os, subprocess",
-            "from pathlib import Path",
-            "_meta_p = Path('/root/colab_service_meta.json')",
-            "if _meta_p.exists():",
-            "    _meta_p.unlink(missing_ok=True)",
-            "    subprocess.run(['pkill', '-f', 'cloudflared tunnel'], check=False, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)",
-            "subprocess.run(['pkill', '-f', 'llm_sse_gateway.py'], check=False, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)",
-            "subprocess.run(['pkill', '-f', 'llama-server'], check=False, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)",
-        ]
-        if cf_tok and cf_comfy_url:
-            prep_lines.append(f"os.environ['CF_TUNNEL_TOKEN'] = {cf_tok!r}")
-            prep_lines.append(f"os.environ['CF_TUNNEL_URL'] = {cf_comfy_url!r}")
-        if profile == "minimax":
-            if minimax_lite:
-                prep_lines.append("os.environ['MINIMAX_LITE'] = '1'")
-            if no_r2v:
-                prep_lines.append("os.environ['MINIMAX_WITH_R2V'] = '0'")
-            if no_pe:
-                prep_lines.append("os.environ['MINIMAX_WITH_PE'] = '0'")
-        prep_header = "\n".join(prep_lines) + "\n"
-        with tempfile.TemporaryDirectory(prefix=f"{profile}_opts_") as tmp_dir:
-            wrapped = Path(tmp_dir) / target_bootstrap.name
-            wrapped.write_text(
-                prep_header + target_bootstrap.read_text(encoding="utf-8"),
-                encoding="utf-8",
-            )
-            _colab_exec_file(args.session, wrapped, timeout=exec_timeout)
+    for phase_idx, cur_prof in enumerate(exec_order, start=1):
+        target_bootstrap, exec_timeout = _profile_bootstrap_spec(cur_prof)
+        if total_phases >= 2:
+            print(f"=== DEPLOY_PHASE {phase_idx}/{total_phases}: {cur_prof} ===", flush=True)
+
+        if cur_prof in LLM_PROFILES:
+            variant = "27b" if cur_prof == "qwen_27b" else "180b"
+            default_ctx = 65536 if variant == "27b" else 32768
+            llm_quant = str(getattr(args, "llm_quant", None) or "UD-Q4_K_XL").strip()
+            raw_ctx = getattr(args, "llm_ctx", None)
+            llm_ctx = str(int(raw_ctx if raw_ctx is not None else default_ctx))
+            llm_mmproj = "0" if bool(getattr(args, "no_mmproj", False)) else "1"
+            llm_webui = "0" if bool(getattr(args, "no_webui", False)) else "1"
+            llm_gdrive = "1" if bool(getattr(args, "gdrive_cache", False)) else "0"
+            llm_api_key = str(getattr(args, "llm_api_key", None) or "auto").strip() or "auto"
+            if llm_api_key.lower() == "auto":
+                fixed_key = str(cf_cfg.get("llm_api_key") or "").strip()
+                if len(fixed_key) >= 16:
+                    llm_api_key = fixed_key
+
+            env_lines = [
+                "import os",
+                f"os.environ['LLM_MODEL_VARIANT'] = {variant!r}",
+                f"os.environ['LLM_COHOST_COMFY'] = {'1' if is_dual else '0'!r}",
+                f"os.environ['LLM_QUANT'] = {llm_quant!r}",
+                f"os.environ['LLM_CTX_SIZE'] = {llm_ctx!r}",
+                f"os.environ['LLM_WITH_MMPROJ'] = {llm_mmproj!r}",
+                f"os.environ['LLM_WITH_WEBUI'] = {llm_webui!r}",
+                f"os.environ['LLM_GDRIVE_CACHE'] = {llm_gdrive!r}",
+                f"os.environ['LLM_API_KEY'] = {llm_api_key!r}",
+            ]
+            if cf_tok and cf_llm_url:
+                env_lines.append(f"os.environ['CF_TUNNEL_TOKEN'] = {cf_tok!r}")
+                env_lines.append(f"os.environ['CF_TUNNEL_URL'] = {cf_llm_url!r}")
+            if is_dual and cf_comfy_url:
+                env_lines.append(f"os.environ['CF_COMFY_TUNNEL_URL'] = {cf_comfy_url!r}")
+            env_header = "\n".join(env_lines) + "\n"
+            with tempfile.TemporaryDirectory(prefix=f"{cur_prof}_opts_") as tmp_dir:
+                wrapped = Path(tmp_dir) / target_bootstrap.name
+                wrapped.write_text(
+                    env_header + target_bootstrap.read_text(encoding="utf-8"),
+                    encoding="utf-8",
+                )
+                _colab_exec_file(args.session, wrapped, timeout=exec_timeout)
+        else:
+            prep_lines = [
+                "import os, subprocess",
+                "from pathlib import Path",
+            ]
+            if not is_dual and phase_idx == 1:
+                # 纯 ComfyUI 生态首个步骤前置清理可能遗留的 LLM 服务契约与进程
+                prep_lines.extend([
+                    "_meta_p = Path('/root/colab_service_meta.json')",
+                    "if _meta_p.exists():",
+                    "    _meta_p.unlink(missing_ok=True)",
+                    "    subprocess.run(['pkill', '-f', 'cloudflared tunnel'], check=False, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)",
+                    "subprocess.run(['pkill', '-f', 'llm_sse_gateway.py'], check=False, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)",
+                    "subprocess.run(['pkill', '-f', 'llama-server'], check=False, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)",
+                ])
+            if is_dual:
+                # 双栖模式保留 LLM 进程，并为 ComfyUI 注入显存预留缓冲与共存隧道标识
+                prep_lines.extend([
+                    "os.environ['COMFY_RESERVE_VRAM'] = '4.0'",
+                    "os.environ['COMFY_ENSURE_RESERVE_VRAM'] = '1'",
+                    "os.environ['COMFY_COHOST_LLM'] = '1'",
+                ])
+            if cf_tok and cf_comfy_url:
+                prep_lines.append(f"os.environ['CF_TUNNEL_TOKEN'] = {cf_tok!r}")
+                prep_lines.append(f"os.environ['CF_TUNNEL_URL'] = {cf_comfy_url!r}")
+            if cur_prof == "minimax":
+                if minimax_lite:
+                    prep_lines.append("os.environ['MINIMAX_LITE'] = '1'")
+                if no_r2v:
+                    prep_lines.append("os.environ['MINIMAX_WITH_R2V'] = '0'")
+                if no_pe:
+                    prep_lines.append("os.environ['MINIMAX_WITH_PE'] = '0'")
+            prep_header = "\n".join(prep_lines) + "\n"
+
+            dual_tail = ""
+            if is_dual and phase_idx == total_phases:
+                dual_tail = f"""
+
+# === 双栖协同收尾：汇总 ComfyUI + LLM 服务契约 (kind='dual') 并以 0600 落盘 ===
+def _finalize_dual_contract():
+    import json as _djson
+    import os as _dos
+    import re as _dre
+    from pathlib import Path as _DPath
+
+    meta_p = _DPath("/root/colab_service_meta.json")
+    comfy_txt_p = _DPath("/root/comfy_tunnel_url.txt")
+    llm_txt_p = _DPath("/root/llm_tunnel_url.txt")
+    tun_re = _dre.compile({_build_tunnel_url_pattern(cf_cfg)!r})
+
+    meta = {{}}
+    if meta_p.is_file():
+        try:
+            loaded = _djson.loads(meta_p.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                meta = loaded
+        except Exception:
+            meta = {{}}
+
+    comfy_u = ""
+    if comfy_txt_p.is_file():
+        m_c = tun_re.search(comfy_txt_p.read_text(encoding="utf-8", errors="ignore"))
+        if m_c:
+            comfy_u = m_c.group(0).rstrip("/")
+    if not comfy_u:
+        comfy_u = str(meta.get("comfy_tunnel_url") or {_dos_cf_comfy!r}).strip().rstrip("/")
+
+    llm_u = ""
+    if llm_txt_p.is_file():
+        m_l = tun_re.search(llm_txt_p.read_text(encoding="utf-8", errors="ignore"))
+        if m_l:
+            llm_u = m_l.group(0).rstrip("/")
+    if not llm_u:
+        llm_u = str(meta.get("llm_tunnel_url") or {_dos_cf_llm!r}).strip().rstrip("/")
+
+    meta.update({{
+        "kind": "dual",
+        "profiles": {profiles_list!r},
+        "comfy_profiles": {comfy_profs!r},
+        "llm_profile": {llm_prof!r},
+        "comfy_port": 8188,
+        "llm_port": 18080,
+        "port": 8188,
+        "tunnel_url": comfy_u or llm_u,
+        "comfy_tunnel_url": comfy_u,
+        "llm_tunnel_url": llm_u,
+    }})
+
+    tmp_p = meta_p.with_suffix(".json.tmp")
+    fd = _dos.open(str(tmp_p), _dos.O_WRONLY | _dos.O_CREAT | _dos.O_TRUNC, 0o600)
+    with _dos.fdopen(fd, "w", encoding="utf-8") as mf:
+        _djson.dump(meta, mf, ensure_ascii=False, indent=2)
+        mf.write("\\n")
+    _dos.chmod(tmp_p, 0o600)
+    tmp_p.replace(meta_p)
+    _dos.chmod(meta_p, 0o600)
+
+    print("========================================", flush=True)
+    if llm_u:
+        print(f"LLM_TUNNEL_URL: {{llm_u}}", flush=True)
+    if comfy_u:
+        print(f"COMFYUI_TUNNEL_URL: {{comfy_u}}", flush=True)
+        print(f"SERVICE_TUNNEL_URL: {{comfy_u}}", flush=True)
+    print("========================================", flush=True)
+
+
+_finalize_dual_contract()
+""".replace("{_dos_cf_comfy!r}", repr(cf_comfy_url)).replace("{_dos_cf_llm!r}", repr(cf_llm_url))
+
+            with tempfile.TemporaryDirectory(prefix=f"{cur_prof}_opts_") as tmp_dir:
+                wrapped = Path(tmp_dir) / target_bootstrap.name
+                wrapped.write_text(
+                    prep_header + target_bootstrap.read_text(encoding="utf-8") + dual_tail,
+                    encoding="utf-8",
+                )
+                _colab_exec_file(args.session, wrapped, timeout=exec_timeout)
 
 
 def cmd_tunnel(args):
@@ -937,12 +1192,13 @@ def cmd_tunnel(args):
     cf_comfy_url = str(cf_cfg.get("comfy_url") or "").strip().rstrip("/")
 
     # 非强制重启时，优先走 Colab Contents HTTP REST 通道免 WebSocket 直读服务元数据与隧道地址（~1.5s）
+    tunnel_pat = _build_tunnel_url_pattern(cf_cfg)
     if not force_restart and COLAB_PY.is_file():
-        fast_read_code = """
+        fast_read_code = f"""
 import base64, json, re, sys, requests
 from colab_cli.common import state
 
-TUNNEL_RE = re.compile(r"https://(?!api\\.)(?:[a-z0-9-]+\\.)+[a-z]{2,}(?::\\d+)?")
+TUNNEL_RE = re.compile({tunnel_pat!r})
 sname = sys.argv[1] if len(sys.argv) > 1 else "comfy"
 local_sessions = state.store.list()
 assignments = state.client.list_assignments()
@@ -980,6 +1236,7 @@ meta_txt = _read_remote_text("root/colab_service_meta.json")
 kind = "comfy"
 port = 8188
 url = ""
+llm_url = ""
 model = ""
 gpu_desc = ""
 
@@ -989,7 +1246,8 @@ if meta_txt:
         if isinstance(meta, dict):
             kind = str(meta.get("kind") or "comfy")
             port = int(meta.get("port") or (18080 if kind == "llm" else 8188))
-            url = str(meta.get("tunnel_url") or "").strip()
+            url = str(meta.get("comfy_tunnel_url") or meta.get("tunnel_url") or "").strip()
+            llm_url = str(meta.get("llm_tunnel_url") or "").strip()
             model = str(meta.get("model") or "")
             gname = str(meta.get("gpu_name") or "")
             vtot = meta.get("vram_total_gb")
@@ -1004,11 +1262,24 @@ if not url:
     if m:
         url = m.group(0)
 
+if kind == "dual" and not llm_url:
+    txt_l = _read_remote_text("root/llm_tunnel_url.txt") or ""
+    m_l = TUNNEL_RE.search(txt_l)
+    if m_l:
+        llm_url = m_l.group(0)
+
 m_valid = TUNNEL_RE.search(url)
 if not m_valid:
     raise SystemExit(4)
 
-out = {"kind": kind, "port": port, "url": m_valid.group(0), "model": model, "gpu_desc": gpu_desc}
+out = {
+    "kind": kind,
+    "port": port,
+    "url": m_valid.group(0),
+    "llm_url": llm_url,
+    "model": model,
+    "gpu_desc": gpu_desc,
+}
 print("<<<FAST_TUNNEL>>>" + json.dumps(out, ensure_ascii=False) + "<<<END_FAST_TUNNEL>>>", flush=True)
 """.strip()
         try:
@@ -1034,11 +1305,41 @@ print("<<<FAST_TUNNEL>>>" + json.dumps(out, ensure_ascii=False) + "<<<END_FAST_T
                 if m_pkt:
                     pkt = json.loads(m_pkt.group(1))
                     fast_url = str(pkt.get("url") or "").strip()
+                    fast_llm_url = str(pkt.get("llm_url") or "").strip()
                     fast_kind = str(pkt.get("kind") or "comfy")
                     expected_cf_url = (cf_llm_url if fast_kind == "llm" else cf_comfy_url) if cf_tok else ""
                     if expected_cf_url and fast_url.rstrip("/") != expected_cf_url.rstrip("/"):
                         fast_url = ""
-                    if fast_url and fast_kind == "llm":
+                    if fast_kind == "dual" and cf_tok and cf_llm_url and fast_llm_url.rstrip("/") != cf_llm_url.rstrip("/"):
+                        fast_llm_url = ""
+                    if fast_url and fast_kind == "dual" and fast_llm_url:
+                        req_c = urllib.request.Request(
+                            f"{fast_url}/system_stats",
+                            headers={"User-Agent": "Mozilla/5.0"},
+                        )
+                        req_l = urllib.request.Request(
+                            f"{fast_llm_url}/health",
+                            headers={"User-Agent": "Mozilla/5.0"},
+                        )
+                        with urllib.request.urlopen(req_c, timeout=5) as resp_c, urllib.request.urlopen(req_l, timeout=5) as resp_l:
+                            if resp_c.status == 200 and resp_l.status == 200:
+                                cbody = json.loads(resp_c.read().decode("utf-8") or "{}")
+                                lbody = json.loads(resp_l.read().decode("utf-8") or "{}")
+                                if lbody.get("status") == "ok":
+                                    devices = cbody.get("devices") or []
+                                    dev_desc = ", ".join(
+                                        f"{d.get('name', 'unknown')} ({d.get('vram_total', 0) / (1024 ** 3):.1f} GiB)"
+                                        for d in devices
+                                    ) or "GPU 在线"
+                                    model_lbl = pkt.get("model") or "Qwen3.8"
+                                    print("复用运行中的双栖 cloudflared 隧道（HTTP 快速通道）。", flush=True)
+                                    print(f"COMFYUI_TUNNEL_URL: {fast_url}", flush=True)
+                                    print(f"LLM_TUNNEL_URL: {fast_llm_url}", flush=True)
+                                    print(f"[隧道正常] 双栖在线 | GPU: {dev_desc} | LLM: {model_lbl}", flush=True)
+                                    print(f"[ComfyUI WebUI 地址] {fast_url}", flush=True)
+                                    print(f"[LLM WebUI / API 地址] {fast_llm_url}", flush=True)
+                                    return
+                    elif fast_url and fast_kind == "llm":
                         req = urllib.request.Request(
                             f"{fast_url}/health",
                             headers={"User-Agent": "Mozilla/5.0"},
@@ -1084,7 +1385,7 @@ CLOUDFLARED_BIN = Path("/usr/local/bin/cloudflared")
 CLOUDFLARED_LOG = Path("/root/cloudflared.log")
 TUNNEL_URL_FILE = Path("/root/comfy_tunnel_url.txt")
 SERVICE_META_FILE = Path("/root/colab_service_meta.json")
-TUNNEL_RE = re.compile(r"https://(?!api\\.)(?:[a-z0-9-]+\\.)+[a-z]{2,}(?::\\d+)?")
+TUNNEL_RE = re.compile({tunnel_pat!r})
 FORCE_RESTART = {force_restart!r}
 CF_TOKEN = {cf_tok!r}
 CF_LLM_URL = {cf_llm_url!r}
@@ -1222,8 +1523,46 @@ if not tunnel_url:
             raise TimeoutError(f"等待 cloudflared 隧道地址超时（30s），末尾日志:\\n{{tail}}")
 
     TUNNEL_URL_FILE.write_text(tunnel_url + "\\n", encoding="utf-8")
+    dual_llm_url_val = None
+    if kind == "dual":
+        if use_named:
+            dual_llm_url_val = CF_LLM_URL or tunnel_url
+            Path("/root/llm_tunnel_url.txt").write_text(dual_llm_url_val + "\\n", encoding="utf-8")
+        else:
+            llm_port_val = int(meta.get("llm_port") or 18080) if isinstance(meta, dict) else 18080
+            llm_url_f = Path("/root/llm_tunnel_url.txt")
+            llm_log_f = Path("/root/cloudflared_llm.log")
+            pg_l = subprocess.run(["pgrep", "-af", "cloudflared tunnel"], stdin=subprocess.DEVNULL, capture_output=True, text=True)
+            if not FORCE_RESTART and pg_l.returncode == 0 and f"127.0.0.1:{{llm_port_val}}" in (pg_l.stdout or "") and llm_url_f.is_file():
+                m_l = TUNNEL_RE.search(llm_url_f.read_text(encoding="utf-8", errors="ignore"))
+                if m_l:
+                    dual_llm_url_val = m_l.group(0)
+            if not dual_llm_url_val:
+                cf_bin_l = shutil.which("cloudflared") or str(CLOUDFLARED_BIN)
+                with open(llm_log_f, "wb") as lf_h:
+                    subprocess.Popen(
+                        [cf_bin_l, "tunnel", "--no-autoupdate", "--protocol", "http2", "--url", f"http://127.0.0.1:{{llm_port_val}}"],
+                        stdin=subprocess.DEVNULL,
+                        stdout=lf_h,
+                        stderr=subprocess.STDOUT,
+                        start_new_session=True,
+                        close_fds=True,
+                    )
+                for _ in range(30):
+                    if llm_log_f.is_file():
+                        m_l2 = TUNNEL_RE.search(llm_log_f.read_text(encoding="utf-8", errors="ignore"))
+                        if m_l2:
+                            dual_llm_url_val = m_l2.group(0)
+                            break
+                    time.sleep(1)
+                if dual_llm_url_val:
+                    llm_url_f.write_text(dual_llm_url_val + "\\n", encoding="utf-8")
     if isinstance(meta, dict):
         meta["tunnel_url"] = tunnel_url
+        if kind == "dual":
+            meta["comfy_tunnel_url"] = tunnel_url
+            if dual_llm_url_val:
+                meta["llm_tunnel_url"] = dual_llm_url_val
         tmp_meta = SERVICE_META_FILE.with_suffix(".json.tmp")
         fd = os.open(str(tmp_meta), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as mf:
@@ -1234,7 +1573,11 @@ if not tunnel_url:
         os.chmod(SERVICE_META_FILE, 0o600)
 
 print(f"SERVICE_KIND: {{kind}}", flush=True)
-if kind == "llm":
+if kind == "dual":
+    dual_llm_url = str(meta.get("llm_tunnel_url") or CF_LLM_URL or tunnel_url) if isinstance(meta, dict) else (CF_LLM_URL or tunnel_url)
+    print(f"LLM_TUNNEL_URL: {{dual_llm_url}}", flush=True)
+    print(f"SERVICE_TUNNEL_URL: {{tunnel_url}}", flush=True)
+elif kind == "llm":
     print(f"SERVICE_TUNNEL_URL: {{tunnel_url}}", flush=True)
 print(f"COMFYUI_TUNNEL_URL: {{tunnel_url}}", flush=True)
 """
@@ -1246,15 +1589,20 @@ print(f"COMFYUI_TUNNEL_URL: {{tunnel_url}}", flush=True)
     service_kind = kind_match.group(1).strip().lower() if kind_match else "comfy"
 
     url_match = re.search(
-        r"(?:SERVICE_TUNNEL_URL|COMFYUI_TUNNEL_URL):\s*(https://(?!api\.)(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?)",
+        rf"(?:SERVICE_TUNNEL_URL|COMFYUI_TUNNEL_URL):\s*({tunnel_pat})",
         remote_out,
     )
     if not url_match:
-        url_match = re.search(r"https://(?!api\.)[a-z0-9-]+\.trycloudflare\.com", remote_out)
+        url_match = re.search(tunnel_pat, remote_out)
     if not url_match:
         raise RuntimeError("未能从远端输出中解析出隧道公网 URL")
 
     tunnel_url = url_match.group(1) if url_match.lastindex else url_match.group(0)
+    llm_match = re.search(
+        rf"LLM_TUNNEL_URL:\s*({tunnel_pat})",
+        remote_out,
+    )
+    llm_tunnel_url = llm_match.group(1) if llm_match else ""
     probe_path = "/health" if service_kind == "llm" else "/system_stats"
     print(f"=== 本机端到端校验隧道连通性: {tunnel_url}{probe_path} ===", flush=True)
 
@@ -1275,6 +1623,16 @@ print(f"COMFYUI_TUNNEL_URL: {{tunnel_url}}", flush=True)
                 print(f"[LLM WebUI / API 地址] {tunnel_url}", flush=True)
                 return
 
+            if service_kind == "dual" and llm_tunnel_url:
+                req_l = urllib.request.Request(
+                    f"{llm_tunnel_url}/health",
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
+                with urllib.request.urlopen(req_l, timeout=15) as resp_l:
+                    l_body = json.loads(resp_l.read().decode("utf-8") or "{}")
+                    if resp_l.status != 200 or l_body.get("status") != "ok":
+                        raise RuntimeError(f"双栖 LLM /health 未就绪: HTTP {resp_l.status}, body={l_body}")
+
             devices = body.get("devices") or []
             dev_desc = ", ".join(
                 f"{d.get('name', 'unknown')} ({d.get('vram_total', 0) / (1024 ** 3):.1f} GiB)"
@@ -1282,6 +1640,8 @@ print(f"COMFYUI_TUNNEL_URL: {{tunnel_url}}", flush=True)
             ) or "未返回设备列表"
             print(f"[隧道正常] HTTP {status} | GPU: {dev_desc}", flush=True)
             print(f"[ComfyUI WebUI 地址] {tunnel_url}", flush=True)
+            if service_kind == "dual" and llm_tunnel_url:
+                print(f"[LLM WebUI / API 地址] {llm_tunnel_url}", flush=True)
             return
         except Exception as exc:
             last_err = exc
@@ -1595,7 +1955,7 @@ def cmd_sync(args):
 def cmd_smoke(args):
     """在远端运行冒烟验证（ComfyUI 模式同步并拉回验证结果，LLM 模式执行对话与鉴权冒烟）。"""
     profile = getattr(args, "profile", "anima") or "anima"
-    if profile == "qwen_llm":
+    if profile in LLM_PROFILES:
         _ensure_bin(QWEN_LLM_SMOKE_SCRIPT, "verify_qwen_llm.py")
         _colab_exec_file(args.session, QWEN_LLM_SMOKE_SCRIPT, timeout=300)
         return
@@ -1612,7 +1972,7 @@ def cmd_smoke(args):
 
     _ensure_bin(SMOKE_SCRIPT, "verify_smoke.py")
     _colab_exec_file(args.session, SMOKE_SCRIPT, timeout=300)
-    sync_session_outputs(args.session, prefix="smoke_verify", pull=True)
+    sync_session_outputs(args.session, prefix="xe_verify", pull=True)
 
 
 def stop_session(session: str, clean_all: bool):
@@ -1782,17 +2142,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_status = sub.add_parser("status", help="查看当前活跃 Colab 会话及 CU 积分余量/消耗速率")
     p_status.set_defaults(func=cmd_status)
 
-    p_up = sub.add_parser("up", help="创建 GPU 实例、上传 rclone 配置并部署指定生态（ComfyUI 或 Qwen3.8 LLM）")
+    p_up = sub.add_parser("up", help="创建 GPU 实例、上传 rclone 配置并部署指定单/多工作流生态（ComfyUI 与 Qwen3.8 LLM）")
     p_up.add_argument("--session", "-s", default="comfy", help="Colab 会话名称（默认 comfy）")
-    p_up.add_argument("--profile", default="anima", choices=["anima", "minimax", "drama3", "qwen_llm"], help="部署工作流生态配置（默认 anima，可选 minimax / drama3 / qwen_llm）")
-    p_up.add_argument("--gpu", default=None, choices=["T4", "L4", "G4", "A100", "H100"], help="GPU 型号（anima 默认 L4，minimax / drama3 / qwen_llm 默认 G4）")
+    p_up.add_argument("--profile", default="anima", help="部署工作流生态配置（支持单值或逗号多选，如 anima / minimax / drama3 / qwen_27b / qwen_llm / minimax,qwen_27b）")
+    p_up.add_argument("--profiles", default=None, help="多工作流组合列表（逗号分隔，优先级高于 --profile，例如 minimax,qwen_27b）")
+    p_up.add_argument("--gpu", default=None, choices=["T4", "L4", "G4", "A100", "H100"], help="GPU 型号（anima / qwen_27b 默认 L4，minimax / drama3 / qwen_llm / 多工作流双栖默认 G4）")
     p_up.add_argument("--high-mem", action="store_true", help="申请高内存实例形态（如 A100 80GB High-RAM）")
     p_up.add_argument("--recreate", action="store_true", help="若目标会话已存在，先释放旧实例与遗留分配再按新显卡规格重新创建")
     p_up.add_argument("--minimax-lite", action="store_true", help="仅安装 MiniMax 核心生图 + FL2VA 视频（跳过 R2V 与扩写器）")
     p_up.add_argument("--no-r2v", action="store_true", help="MiniMax 模式下跳过 Ref2VA 多图参考视频模型（省 ~21.4 GiB）")
     p_up.add_argument("--no-pe", action="store_true", help="MiniMax 模式下跳过 Qwen3.5-9B 提示词扩写模型（省 ~6.8 GiB）")
     p_up.add_argument("--llm-quant", default="UD-Q4_K_XL", choices=["UD-Q4_K_XL", "UD-IQ4_XS", "IQ3_XXS"], help="Qwen3.8 LLM 量化档位（默认 UD-Q4_K_XL）")
-    p_up.add_argument("--llm-ctx", type=int, default=32768, help="Qwen3.8 LLM 上下文窗口长度（默认 32768）")
+    p_up.add_argument("--llm-ctx", type=int, default=None, help="Qwen3.8 LLM 上下文窗口长度（qwen_27b 默认 65536，qwen_llm 默认 32768）")
     p_up.add_argument("--no-mmproj", action="store_true", help="Qwen3.8 LLM 模式下跳过加载多模态视觉投影器（省 ~0.9 GiB）")
     p_up.add_argument("--no-webui", action="store_true", help="Qwen3.8 LLM 模式下关闭内置聊天 WebUI（传 --no-ui）")
     p_up.add_argument("--gdrive-cache", action="store_true", help="Qwen3.8 LLM 模式下启用 Google Drive 量化分片缓存")
@@ -1806,7 +2167,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_smoke = sub.add_parser("smoke", help="运行冒烟验证并同步/拉回结果")
     p_smoke.add_argument("--session", "-s", default="comfy", help="Colab 会话名称（默认 comfy）")
-    p_smoke.add_argument("--profile", default="anima", choices=["anima", "minimax", "drama3", "qwen_llm"], help="验证配置（默认 anima，可选 minimax / drama3 / qwen_llm）")
+    p_smoke.add_argument("--profile", default="anima", choices=["anima", "minimax", "drama3", "qwen_27b", "qwen_llm"], help="验证配置（默认 anima，可选 minimax / drama3 / qwen_27b / qwen_llm）")
     p_smoke.set_defaults(func=cmd_smoke)
 
     p_wait = sub.add_parser("wait", help="等待远端 ComfyUI 队列清空后再返回")
@@ -1816,7 +2177,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_sync = sub.add_parser("sync", help="同步远端输出图到 Google Drive，可选打包拉回本机")
     p_sync.add_argument("--session", "-s", default="comfy", help="Colab 会话名称（默认 comfy）")
-    p_sync.add_argument("--prefix", default=None, help="仅同步 /root/comfy_out 下的指定子目录，如 batch1")
+    p_sync.add_argument("--prefix", default=None, help="仅同步 /root/comfy_out 下的指定子目录，如 xeward")
     p_sync.add_argument("--pull", action="store_true", help="同时将对应输出打包下载解压至本机 _downloads/")
     p_sync.set_defaults(func=cmd_sync)
 

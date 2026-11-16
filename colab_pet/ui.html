@@ -85,10 +85,12 @@
     /* ========== 顶部云朵思维气泡 (Star-Suite 风格) ========== */
     .bubble-area {
       width: 356px;
+      flex: 1;
+      min-height: 0;
       display: flex;
       flex-direction: column;
       align-items: center;
-      margin-bottom: 2px;
+      margin-bottom: 0;
     }
 
     .bubble-area.collapsed {
@@ -97,7 +99,8 @@
 
     .bubble {
       width: 100%;
-      min-height: 256px;
+      flex: 1;
+      min-height: 0;
       background: var(--bubble-border);
       border: none;
       box-shadow: 0 0 0 5px var(--bubble-border);
@@ -226,6 +229,15 @@
       background: #7c3aed;
     }
 
+    .page-dot.needs-setup {
+      background: #f59e0b;
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.28);
+    }
+
+    .page-dot.active.needs-setup {
+      background: #d97706;
+    }
+
     .page-ind-hidden {
       position: absolute;
       width: 1px;
@@ -310,7 +322,7 @@
       display: flex;
       flex-direction: column;
       justify-content: center;
-      gap: 7px;
+      gap: 9px;
       padding-top: 6px;
       opacity: 0.32;
       transform: scale(0.985);
@@ -340,11 +352,11 @@
       background: rgba(255, 255, 255, 0.78);
       border: 1px solid #d8ccff;
       border-radius: 12px;
-      padding: 7px 10px;
+      padding: 8.5px 11px;
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 6px;
     }
 
     .comfy-strip.error {
@@ -442,7 +454,7 @@
     }
 
     .cu-number {
-      font-size: 28px;
+      font-size: 30px;
       font-weight: 800;
       color: #2e1065;
       line-height: 1.05;
@@ -586,14 +598,14 @@
     .ledger-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 8px;
+      gap: 9px;
     }
 
     .stat-card {
       background: rgba(255, 255, 255, 0.92);
       border: 1px solid #d8ccff;
       border-radius: 12px;
-      padding: 10px 10px;
+      padding: 12px 11px;
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
       min-width: 0;
     }
@@ -601,7 +613,7 @@
     .stat-card.primary-bal {
       background: linear-gradient(145deg, #ffffff 0%, #f3eeff 100%);
       border: 1.5px solid #b794f4;
-      padding: 9.5px 9.5px;
+      padding: 11.5px 10.5px;
       box-shadow: 0 2px 6px rgba(124, 58, 237, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.95);
     }
 
@@ -675,7 +687,7 @@
       background: rgba(255, 255, 255, 0.62);
       border: 1px solid #e4dcff;
       border-radius: 8px;
-      padding: 4px 10px;
+      padding: 5px 10px;
       font-size: 11px;
       color: var(--ink-sub);
       text-align: center;
@@ -687,8 +699,8 @@
     /* 第 3 页：快捷控制台（选卡开机舱 / 7步直播 / 运维控制） */
     .page-body[data-page="2"] {
       justify-content: space-between;
-      gap: 5px;
-      padding-top: 5px;
+      gap: 6px;
+      padding-top: 6px;
     }
 
     .console-top-bar {
@@ -799,7 +811,7 @@
     .boot-subview {
       display: none;
       flex-direction: column;
-      gap: 6px;
+      gap: 7.5px;
     }
 
     .boot-subview.active {
@@ -818,8 +830,8 @@
     .wf-trigger-btn {
       flex: 1;
       min-width: 0;
-      height: 30px;
-      padding: 0 8px 0 9px;
+      height: 32px;
+      padding: 0 7px 0 8px;
       border-radius: 10px;
       border: 1.5px solid #cbbcf9;
       background: rgba(255, 255, 255, 0.92);
@@ -827,7 +839,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 6px;
+      gap: 4px;
       cursor: pointer;
       color: #3b0764;
       transition: border-color 0.16s, background 0.16s, box-shadow 0.16s, scale 0.12s ease-out;
@@ -860,7 +872,7 @@
     .wf-trig-main {
       display: inline-flex;
       align-items: center;
-      gap: 4.5px;
+      gap: 3.5px;
       min-width: 0;
       overflow: hidden;
     }
@@ -890,11 +902,14 @@
     }
 
     .wf-trig-name {
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 800;
       color: #3b0764;
       white-space: nowrap;
-      flex-shrink: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex-shrink: 1;
+      min-width: 0;
     }
 
     .wf-trig-sub {
@@ -955,8 +970,8 @@
     }
 
     .mini-chip {
-      height: 30px;
-      padding: 0 9px;
+      height: 32px;
+      padding: 0 7.5px;
       border-radius: 10px;
       border: 1px solid #c4b5fd;
       background: #ffffff;
@@ -1071,8 +1086,8 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 3px;
-      padding: 5px 6px 4.5px;
+      gap: 2px;
+      padding: 4.5px 5px;
       border-bottom: 1px solid #e4dcff;
       background: rgba(255, 255, 255, 0.65);
     }
@@ -1106,9 +1121,9 @@
       border: 1px solid transparent;
       background: transparent;
       color: #5b4b8a;
-      font-size: 10px;
+      font-size: 9.8px;
       font-weight: 700;
-      padding: 2.5px 4.5px;
+      padding: 2px 3.5px;
       border-radius: 999px;
       cursor: pointer;
       white-space: nowrap;
@@ -1135,8 +1150,8 @@
     .wf-cat-btn[aria-selected="true"]::after {
       content: "";
       position: absolute;
-      left: 4.5px;
-      right: 4.5px;
+      left: 3.5px;
+      right: 3.5px;
       bottom: 1.5px;
       border-block-end: 2px solid #fbbf24;
       border-radius: 999px;
@@ -1144,9 +1159,9 @@
     }
 
     .wf-drawer-close {
-      border: 1px solid #cbbcf9;
-      background: #f5f3ff;
-      color: #5b21b6;
+      border: 1px solid #5b21b6;
+      background: #7c3aed;
+      color: #ffffff;
       font-size: 10px;
       font-weight: 800;
       padding: 2.5px 6px;
@@ -1158,8 +1173,8 @@
     }
 
     .wf-drawer-close:hover {
-      background: #ede9fe;
-      border-color: #8b5cf6;
+      background: #6d28d9;
+      border-color: #4c1d95;
     }
 
     .wf-drawer-close:active {
@@ -1279,10 +1294,10 @@
       border: 1.5px solid #dcd1ff;
       background: rgba(255, 255, 255, 0.92);
       border-radius: 10px;
-      padding: 6px 9px;
+      padding: 7px 9px;
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: 3.5px;
       cursor: pointer;
       transition: border-color 0.15s, background 0.15s, box-shadow 0.15s, scale 0.12s ease-out;
     }
@@ -1351,22 +1366,23 @@
     .wf-card-check {
       width: 16px;
       height: 16px;
-      border-radius: 50%;
-      border: 1.5px solid #c4b5fd;
+      border-radius: 5px;
+      border: 1.5px solid #7e68c4;
       background: #ffffff;
       color: transparent;
-      font-size: 10px;
+      font-size: 10.5px;
       font-weight: 900;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       line-height: 1;
       flex-shrink: 0;
+      transition: background 0.14s, border-color 0.14s, color 0.14s;
     }
 
     .wf-card.active .wf-card-check {
       background: #7c3aed;
-      border-color: #6d28d9;
+      border-color: #5b21b6;
       color: #ffffff;
     }
 
@@ -1468,12 +1484,12 @@
       border: 1.5px solid #d4c8fc;
       background: #ffffff;
       border-radius: 10px;
-      padding: 5px 3px;
+      padding: 6.5px 3px;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 2px;
+      gap: 2.5px;
       cursor: pointer;
       transition: border-color 0.16s, background 0.18s, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease;
     }
@@ -1551,11 +1567,11 @@
     }
 
     .boot-spec-hint {
-      min-height: 27px;
+      min-height: 29px;
       background: rgba(255, 255, 255, 0.86);
       border: 1px solid #dcd1ff;
       border-radius: 9px;
-      padding: 4px 7px;
+      padding: 5px 8px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -1625,7 +1641,7 @@
       background: linear-gradient(135deg, #7c3aed, #6366f1);
       color: #ffffff;
       border-radius: 11px;
-      padding: 8px 10px;
+      padding: 9px 10px;
       font-size: 12.5px;
       font-weight: 800;
       cursor: pointer;
@@ -1769,7 +1785,7 @@
       background: #ffffff;
       color: #3b0764;
       border-radius: 11px;
-      padding: 8px 8px;
+      padding: 8.5px 8px;
       font-size: 12px;
       font-weight: 700;
       cursor: pointer;
@@ -1832,6 +1848,34 @@
       border-style: dashed;
     }
 
+    .act-btn.dual-only {
+      display: none;
+    }
+
+    .action-grid.dual-mode .act-btn {
+      padding: 8px 6px;
+      font-size: 11.5px;
+    }
+
+    .action-grid.dual-mode .act-btn.dual-only {
+      display: flex;
+    }
+
+    .action-grid.dual-mode #act-colab {
+      display: none;
+    }
+
+    .action-grid.dual-mode .act-btn.upload-bar {
+      grid-column: span 1;
+      padding: 8px 6px;
+      font-size: 11.5px;
+      order: 5;
+    }
+
+    .action-grid.dual-mode #act-stop {
+      order: 6;
+    }
+
     .act-hint {
       font-size: 10.5px;
       color: var(--ink-muted);
@@ -1844,7 +1888,7 @@
 
     /* 第 4 页：设置 */
     .page-body[data-page="3"] {
-      gap: 3px;
+      gap: 4.5px;
       padding-top: 3px;
       justify-content: center;
     }
@@ -1859,7 +1903,7 @@
       background: rgba(255, 255, 255, 0.58);
       border: 1px solid #e4dcff;
       border-radius: 8px;
-      padding: 2px 9px;
+      padding: 3.5px 9px;
     }
 
     .seg-group {
@@ -1894,31 +1938,482 @@
       color: #ffffff;
     }
 
-    /* 思维气泡小尾巴 ○ o */
-    .thought-dots {
+    /* 第 5 页：账号与环境（多 Google Ultra 秒切保险箱 + 云盘与环境配置） */
+    .page-body[data-page="4"] {
+      gap: 6px;
+      padding-top: 2px;
+      justify-content: space-between;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .acct-pane {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      gap: 6px;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .acct-pane.active {
+      display: flex;
+    }
+
+    .acct-vault-list {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      padding-right: 2px;
+    }
+
+    .acct-vault-list::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .acct-vault-list::-webkit-scrollbar-thumb {
+      background: rgba(139, 92, 246, 0.35);
+      border-radius: 999px;
+    }
+
+    .acct-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 6.5px 9px;
+      border-radius: 10px;
+      border: 1.5px solid #ddd6fe;
+      background: rgba(255, 255, 255, 0.9);
+      transition: border-color 0.16s, background 0.16s, box-shadow 0.16s;
+      flex-shrink: 0;
+    }
+
+    .acct-card.active {
+      border-color: #7c3aed;
+      background: linear-gradient(135deg, #ffffff 0%, #f5f0ff 100%);
+      box-shadow: 0 2px 7px rgba(124, 58, 237, 0.13);
+    }
+
+    .acct-card-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .acct-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #cbd5e1;
+      flex-shrink: 0;
+    }
+
+    .acct-card.active .acct-dot {
+      background: #7c3aed;
+      box-shadow: 0 0 0 2.5px rgba(124, 58, 237, 0.22);
+    }
+
+    .acct-card.running .acct-dot {
+      background: #10b981;
+      box-shadow: 0 0 0 2.5px rgba(16, 185, 129, 0.22);
+    }
+
+    .acct-info {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .acct-name-row {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .acct-label {
+      font-size: 11.5px;
+      font-weight: 800;
+      color: #2e1065;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .acct-edit-btn {
+      border: none;
+      background: transparent;
+      color: #7c6ca8;
+      font-size: 10.5px;
+      line-height: 1;
+      padding: 1px 3px;
+      border-radius: 4px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .acct-edit-btn:hover {
+      background: #ede9fe;
+      color: #5b21b6;
+    }
+
+    .acct-email {
+      font-size: 9.5px;
+      color: var(--ink-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .acct-card-right {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .acct-bal {
+      font-size: 10.5px;
+      font-weight: 800;
+      color: #4c1d95;
+      background: #f3e8ff;
+      border: 1px solid #d8ccff;
+      padding: 1.5px 6px;
+      border-radius: 999px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .acct-cur-tag {
+      font-size: 10px;
+      font-weight: 800;
+      color: #166534;
+      background: #dcfce7;
+      border: 1px solid #86efac;
+      padding: 2px 7px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+
+    .acct-switch-btn,
+    .env-btn {
+      border: 1px solid #c4b5fd;
+      background: #f5f3ff;
+      color: #4c1d95;
+      font-size: 10.5px;
+      font-weight: 800;
+      padding: 2.5px 8px;
+      border-radius: 7px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.14s, border-color 0.14s, transform 0.1s;
+    }
+
+    .acct-switch-btn:hover,
+    .env-btn:hover {
+      background: #ede9fe;
+      border-color: #8b5cf6;
+    }
+
+    .acct-switch-btn:active,
+    .env-btn:active {
+      transform: scale(0.95);
+    }
+
+    .env-btn.primary {
+      background: linear-gradient(135deg, #7c3aed, #6366f1);
+      border-color: #6d28d9;
+      color: #ffffff;
+    }
+
+    .env-btn.primary:hover {
+      background: linear-gradient(135deg, #6d28d9, #4f46e5);
+    }
+
+    .env-btn.warn {
+      background: #fffbeb;
+      border-color: #fcd34d;
+      color: #b45309;
+    }
+
+    .acct-del-btn {
+      border: 1px solid #fecdd3;
+      background: #fff1f2;
+      color: #9f1239;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 5.5px;
+      border-radius: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .acct-del-btn.armed {
+      background: #e11d48;
+      border-color: #be123c;
+      color: #ffffff;
+    }
+
+    .acct-empty-card {
+      flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 5px;
+      padding: 14px 12px;
+      border-radius: 12px;
+      border: 1.5px dashed #c4b5fd;
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .acct-empty-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: #3b0764;
+    }
+
+    .acct-empty-sub {
+      font-size: 10.5px;
+      line-height: 15px;
+      color: var(--ink-muted);
+    }
+
+    .acct-vault-foot {
+      flex-shrink: 0;
+    }
+
+    .acct-vault-foot .boot-start-btn {
+      padding: 7.5px 10px;
+      font-size: 11.5px;
+    }
+
+    .env-cards-stack {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .env-card {
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid #d8ccff;
+      border-radius: 10px;
+      padding: 7.5px 9.5px;
+      display: flex;
+      flex-direction: column;
+      gap: 4.5px;
+    }
+
+    .env-card.warn {
+      background: #fffbeb;
+      border-color: #fcd34d;
+    }
+
+    .env-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .env-card-title {
+      font-size: 11.5px;
+      font-weight: 800;
+      color: #2e1065;
+      white-space: nowrap;
+    }
+
+    .env-badge {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 1.5px 6.5px;
+      border-radius: 999px;
+      border: 1px solid #86efac;
+      background: #dcfce7;
+      color: #166534;
+      white-space: nowrap;
+    }
+
+    .env-badge.warn {
+      border-color: #fcd34d;
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .env-badge.neutral {
+      border-color: #c4b5fd;
+      background: #ede9fe;
+      color: #5b21b6;
+    }
+
+    .env-card-sub {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      font-size: 10px;
+      color: var(--ink-muted);
+    }
+
+    .env-card-actions {
+      display: inline-flex;
+      align-items: center;
       gap: 4px;
-      margin-top: 4px;
+      flex-shrink: 0;
+    }
+
+    /* 账号与环境专用毛玻璃配置抽屉 */
+    .acct-drawer-layer {
+      z-index: 26;
+    }
+
+    .acct-drawer-head {
+      padding: 5px 9px;
+    }
+
+    .acct-drawer-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: #3b0764;
+    }
+
+    .acct-drawer-body {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 6px 10px 7px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .acct-drawer-tip {
+      font-size: 10.5px;
+      line-height: 14px;
+      color: var(--ink-sub);
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid #e4dcff;
+      border-radius: 8px;
+      padding: 4.5px 7px;
+    }
+
+    .acct-field {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .acct-field label {
+      font-size: 10px;
+      font-weight: 800;
+      color: #4c1d95;
+    }
+
+    .acct-input {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1.5px solid #c4b5fd;
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 4.5px 8px;
+      font-size: 11px;
+      color: #1e1b4b;
+      font-family: inherit;
+    }
+
+    .acct-input:focus {
+      outline: none;
+      border-color: #7c3aed;
+      box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.16);
+    }
+
+    .acct-btn-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .acct-btn-row > button {
+      flex: 1;
+    }
+
+    .tool-path-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 5px 8px;
+      border-radius: 8px;
+      border: 1px solid #ddd6fe;
+      background: rgba(255, 255, 255, 0.85);
+      font-size: 10px;
+    }
+
+    .tool-path-meta {
+      min-width: 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .tool-path-name {
+      font-weight: 800;
+      color: #3b0764;
+    }
+
+    .tool-path-val {
+      color: var(--ink-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* 思维气泡小尾巴 ○ o（压缩为精致 21px 常驻连接区，直接衔接 312px 主面板与呆毛尖） */
+    .thought-dots {
+      height: 21px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 2.5px;
+      gap: 2.5px;
+      margin-top: 0;
+    }
+
+    .stage.toast-showing .mini-pill.show {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
     }
 
     .thought-dot-1 {
       position: relative;
       isolation: isolate;
-      width: 14px;
-      height: 14px;
+      width: 10px;
+      height: 10px;
       border-radius: 0;
       background: var(--bubble-border);
       border: none;
-      box-shadow: 0 0 0 3px var(--bubble-border);
+      box-shadow: 0 0 0 2.5px var(--bubble-border);
       transform: translateX(-18px);
     }
 
     .thought-dot-1::before {
       content: "";
       position: absolute;
-      inset: 2px;
+      inset: 1.5px;
       border-radius: 50%;
       background: #efeaff;
       z-index: -1;
@@ -1928,12 +2423,12 @@
     .thought-dot-2 {
       position: relative;
       isolation: isolate;
-      width: 10px;
-      height: 10px;
+      width: 7px;
+      height: 7px;
       border-radius: 0;
       background: var(--bubble-border);
       border: none;
-      box-shadow: 0 0 0 3px var(--bubble-border);
+      box-shadow: 0 0 0 2.5px var(--bubble-border);
       transform: translateX(-7px);
     }
 
@@ -1950,51 +2445,59 @@
     /* ========== 角色舞台与 Q 弹交互 ========== */
     .pet-zone {
       position: relative;
+      flex-shrink: 0;
       width: 356px;
-      height: 236px;
+      height: 203px;
       display: flex;
       align-items: flex-end;
       justify-content: center;
-      margin-top: 2px;
+      margin-top: 0;
     }
 
-    /* 临时互动台词小气泡（严格单行<=28px，外层纯色护边 + ::before 内嵌圆角避免 Skia 接缝渗色） */
+    /* 展开态主面板内嵌深紫晶毛玻璃灵动岛（位于 #bubble-box 底部内侧 y=285..312px，完全不占外部衔接空间） */
+    @keyframes islandSpringIn {
+      0% { opacity: 0; transform: translateX(-50%) translateY(6px) scale(0.93); }
+      100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+    }
+
     .speech-toast {
       position: absolute;
       isolation: isolate;
-      top: 0px;
+      top: 285px;
       left: 50%;
       transform: translateX(-50%);
-      max-width: 352px;
-      height: 28px;
-      background: #8b5cf6;
-      border: none;
-      box-shadow: 0 0 0 4px #8b5cf6;
-      border-radius: 0;
-      padding: 0 15px;
-      font-size: 12px;
+      max-width: 336px;
+      height: 27px;
+      background: rgba(34, 18, 72, 0.91);
+      backdrop-filter: blur(10px) saturate(145%);
+      border: 1px solid rgba(196, 181, 253, 0.44);
+      box-shadow: 0 6px 18px rgba(30, 12, 68, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+      border-radius: 999px;
+      padding: 0 13px;
+      font-size: 11.5px;
       font-weight: 700;
-      color: #3b0764;
+      color: #f8f5ff;
       white-space: nowrap;
       display: none;
       align-items: center;
       gap: 6px;
       pointer-events: none;
-      z-index: 20;
+      z-index: 38;
     }
 
     .speech-toast::before {
-      content: "";
-      position: absolute;
-      inset: 2px;
-      border-radius: 999px;
-      background: #ffffff;
-      z-index: -1;
-      pointer-events: none;
+      display: none;
     }
 
     .speech-toast.show {
       display: inline-flex;
+      animation: islandSpringIn 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .speech-toast.show {
+        animation: none;
+      }
     }
 
     .speech-toast.clickable {
@@ -2003,9 +2506,17 @@
     }
 
     .speech-toast.error {
-      background: #e11d48;
-      box-shadow: 0 0 0 4px #e11d48;
-      color: #9f1239;
+      background: rgba(136, 19, 55, 0.93);
+      border-color: rgba(253, 164, 175, 0.52);
+      box-shadow: 0 6px 18px rgba(136, 19, 55, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+      color: #fff1f2;
+    }
+
+    .stage.edge-peeking .speech-toast,
+    .stage.bubble-animating .speech-toast {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
     }
 
     .toast-text {
@@ -2016,20 +2527,70 @@
     }
 
     .toast-choice-btn {
-      height: 20px;
-      padding: 0 9px;
+      height: 19px;
+      padding: 0 8.5px;
       border-radius: 999px;
-      border: 1px solid #8b5cf6;
-      background: #ede9fe;
-      color: #4c1d95;
-      font-size: 11px;
+      border: 1px solid rgba(221, 214, 254, 0.45);
+      background: rgba(255, 255, 255, 0.16);
+      color: #f5f3ff;
+      font-size: 10.5px;
       font-weight: 700;
-      line-height: 18px;
+      line-height: 17px;
       cursor: pointer;
       flex-shrink: 0;
     }
 
     .toast-choice-btn.primary {
+      background: linear-gradient(135deg, #8b5cf6, #6366f1);
+      border-color: #a78bfa;
+      color: #ffffff;
+    }
+
+    /* 主气泡收起时自动回退头顶独立白底胶囊（严格贴合 Form.Region 外环纯色护边） */
+    .stage:has(#bubble-area.collapsed) .speech-toast {
+      top: auto;
+      bottom: 212px;
+      max-width: 352px;
+      height: 28px;
+      padding: 0 15px;
+      border-radius: 0;
+      border: none;
+      backdrop-filter: none;
+      background: #8b5cf6;
+      box-shadow: 0 0 0 4px #8b5cf6;
+      color: #3b0764;
+      font-size: 12px;
+      animation: none;
+    }
+
+    .stage:has(#bubble-area.collapsed) .speech-toast::before {
+      content: "";
+      display: block;
+      position: absolute;
+      inset: 2px;
+      border-radius: 999px;
+      background: #ffffff;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    .stage:has(#bubble-area.collapsed) .speech-toast.error {
+      background: #e11d48;
+      box-shadow: 0 0 0 4px #e11d48;
+      color: #9f1239;
+    }
+
+    .stage:has(#bubble-area.collapsed) .toast-choice-btn {
+      height: 20px;
+      padding: 0 9px;
+      border: 1px solid #8b5cf6;
+      background: #ede9fe;
+      color: #4c1d95;
+      font-size: 11px;
+      line-height: 18px;
+    }
+
+    .stage:has(#bubble-area.collapsed) .toast-choice-btn.primary {
       background: #7c3aed;
       border-color: #6d28d9;
       color: #ffffff;
@@ -2174,12 +2735,13 @@
             <div class="pager">
               <button class="icon-btn" id="btn-prev" title="上一页">‹</button>
               <div class="pager-dots" id="pager-dots" aria-label="快捷切换分页">
-                <button class="page-dot active" data-page="0" title="积分看板 (1/4)"></button>
-                <button class="page-dot" data-page="1" title="今日小账本 (2/4)"></button>
-                <button class="page-dot" data-page="2" title="快捷控制台 (3/4)"></button>
-                <button class="page-dot" data-page="3" title="偏好设置 (4/4)"></button>
+                <button class="page-dot active" data-page="0" title="积分看板 (1/5)"></button>
+                <button class="page-dot" data-page="1" title="今日小账本 (2/5)"></button>
+                <button class="page-dot" data-page="2" title="快捷控制台 (3/5)"></button>
+                <button class="page-dot" data-page="3" title="偏好设置 (4/5)"></button>
+                <button class="page-dot" data-page="4" title="账号与环境 (5/5)"></button>
               </div>
-              <span id="page-ind" class="page-ind-hidden">1/4</span>
+              <span id="page-ind" class="page-ind-hidden">1/5</span>
               <button class="icon-btn" id="btn-next" title="下一页">›</button>
             </div>
             <button class="icon-btn" id="btn-refresh" title="立即刷新">↻</button>
@@ -2347,9 +2909,11 @@
 
           <!-- 子视图 B: 运维控制 -->
           <div class="console-pane" id="ops-pane">
-            <div class="action-grid">
+            <div class="action-grid" id="ops-action-grid">
               <button class="act-btn primary" id="act-comfy" type="button">🚀 打开 ComfyUI</button>
               <button class="act-btn" id="act-sync" type="button">📥 拉回成图</button>
+              <button class="act-btn dual-only" id="act-llm-open" type="button">💬 打开对话页</button>
+              <button class="act-btn dual-only" id="act-llm-copy" type="button">📋 复制 API</button>
               <button class="act-btn" id="act-colab" type="button">🔗 Colab 网页</button>
               <button class="act-btn stop" id="act-stop" type="button">🛑 一键停卡</button>
               <button class="act-btn upload-bar" id="act-upload" type="button">📤 传图到云端</button>
@@ -2414,6 +2978,69 @@
             </div>
           </div>
         </div>
+
+        <!-- Page 5: Google Ultra 多账号管理与云盘/隧道/环境接入 -->
+        <div class="page-body" data-page="4">
+          <div class="console-top-bar">
+            <div class="console-tabs" id="acct-tabs">
+              <button class="console-tab-btn active" data-tab="vault" type="button">👥 多账号</button>
+              <button class="console-tab-btn" data-tab="env" type="button">☁️ 云盘与环境</button>
+            </div>
+            <button class="stock-pill" id="env-health-pill" type="button" title="点击深度体检 Google 账号与云盘可用空间">⚪ 检测中 ↻</button>
+          </div>
+
+          <div class="acct-pane active" id="acct-vault-pane">
+            <div class="acct-vault-list" id="acct-vault-list"></div>
+            <div class="acct-vault-foot">
+              <button class="boot-start-btn" id="btn-acct-add" type="button">➕ 新增 Google 账号（多 Ultra 秒切）</button>
+            </div>
+          </div>
+
+          <div class="acct-pane" id="acct-env-pane">
+            <div class="env-cards-stack">
+              <div class="env-card" id="env-card-gdrive">
+                <div class="env-card-top">
+                  <span class="env-card-title">☁️ Google 云盘 (gdrive_save)</span>
+                  <span class="env-badge warn" id="env-gdrive-badge">待检测</span>
+                </div>
+                <div class="env-card-sub">
+                  <span id="env-gdrive-desc">用于存放 LoRA 缓存与成品归档</span>
+                  <div class="env-card-actions">
+                    <button class="env-btn primary" id="btn-gdrive-bind" type="button">一键绑定</button>
+                    <button class="env-btn" id="btn-gdrive-import" type="button">导入.conf</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="env-card" id="env-card-cf">
+                <div class="env-card-top">
+                  <span class="env-card-title">🌐 公网访问隧道</span>
+                  <span class="env-badge neutral" id="env-cf-badge">免费临时域名</span>
+                </div>
+                <div class="env-card-sub">
+                  <span id="env-cf-desc">自动生成 trycloudflare · 免配置即用</span>
+                  <div class="env-card-actions">
+                    <button class="env-btn" id="btn-cf-config" type="button">配置域名 ›</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="env-card" id="env-card-tools">
+                <div class="env-card-top">
+                  <span class="env-card-title">🧰 本地运行组件</span>
+                  <span class="env-badge" id="env-tools-badge">自动探测中</span>
+                </div>
+                <div class="env-card-sub">
+                  <span id="env-tools-desc">colab-cli · rclone</span>
+                  <div class="env-card-actions">
+                    <button class="env-btn warn hidden" id="btn-copy-install" type="button">复制安装命令</button>
+                    <button class="env-btn" id="btn-tools-config" type="button">路径管理 ›</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
           </div>
         </div>
 
@@ -2435,6 +3062,18 @@
             <div class="wf-drawer-list" id="wf-drawer-list" role="tabpanel" aria-label="可选工作流列表"></div>
           </div>
         </div>
+
+        <!-- 气泡内账号与环境配置抽屉（共用毛玻璃滑出层，不破坏圆角裁剪边界） -->
+        <div class="wf-drawer-layer acct-drawer-layer" id="acct-drawer-layer" role="dialog" aria-modal="true" aria-label="账号与环境配置" aria-hidden="true" inert>
+          <div class="wf-drawer-scrim" id="acct-drawer-scrim"></div>
+          <div class="wf-drawer-sheet" id="acct-drawer-sheet">
+            <div class="wf-drawer-head acct-drawer-head">
+              <span class="acct-drawer-title" id="acct-drawer-title">账号接入</span>
+              <button class="wf-drawer-close" id="acct-drawer-close" type="button">返回 ✕</button>
+            </div>
+            <div class="acct-drawer-body" id="acct-drawer-body"></div>
+          </div>
+        </div>
       </div>
 
       <div class="thought-dots" id="thought-dots">
@@ -2443,10 +3082,11 @@
       </div>
     </div>
 
+    <!-- 灵动岛内嵌通知条（展开态浮于主面板底缘内侧；面板收起时自动回退为头顶独立胶囊） -->
+    <div class="speech-toast" id="speech-toast">随时为你盯着 Colab 积分哟～</div>
+
     <!-- 下方人物立绘与常驻操作胶囊 -->
     <div class="pet-zone">
-      <div class="speech-toast" id="speech-toast">随时为你盯着 Colab 积分哟～</div>
-
       <div class="side-tools" id="side-tools">
         <button class="tool-pill" id="tool-bubble" title="展开/收起信息气泡">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -2470,7 +3110,8 @@
       "Colab · 积分看板",
       "Colab · 今日小账本",
       "Colab · 快捷控制台",
-      "Colab · 偏好设置"
+      "Colab · 偏好设置",
+      "Colab · 账号与环境"
     ];
 
     const LINES_RUNNING = [
@@ -2513,15 +3154,26 @@
     let cancelResetTimer = null;
     let activeConsoleTab = "boot";
     let consoleTabPinned = false;
+    let activeAcctTab = "vault";
+    let acctDrawerOpen = false;
+    let acctDrawerMode = "oauth";
+    let acctRenameTarget = null;
+    let acctDelArmedId = "";
+    let acctDelResetTimer = null;
+    let cfClearArmedUntil = 0;
+    let cfClearResetTimer = null;
     let wfDrawerOpen = false;
+    let wfDraftProfiles = null;
     let wfActiveCategory = "all";
     let wfWheelLockUntil = 0;
     let wfBumpTimer = null;
     let copyResetTimer = null;
+    let dualCopyResetTimer = null;
     let lastAnnouncedStatus = "";
     let statusNbspToggle = false;
     const bootState = {
       profile: "anima",
+      profiles: ["anima"],
       gpu: "L4",
       high_mem: false,
       minimax_r2v: true,
@@ -2529,6 +3181,9 @@
       llm_quant: "UD-Q4_K_XL",
       llm_ctx: 32768,
       llm_mmproj: true,
+      llm27_quant: "UD-Q4_K_XL",
+      llm27_ctx: 65536,
+      llm27_mmproj: true,
       gpuManual: false,
       prefsSynced: false
     };
@@ -2591,9 +3246,60 @@
         modules: []
       },
       {
+        id: "qwen_27b",
+        name: "Qwen27B",
+        title: "Qwen3.8-27B 无审查对话",
+        shortSub: "27B破限识图",
+        icon: "💬",
+        category: "llm",
+        recGpu: "L4",
+        gpuPriority: ["L4", "A100", "G4", "H100", "T4"],
+        autoHmOnA100: false,
+        desc: "27B稠密多模态 · L4甜点约16G · 可与视频同驻G4",
+        specTail: (st) => {
+          const qMap = { "UD-Q4_K_XL": 16, "UD-IQ4_XS": 13, "IQ3_XXS": 10 };
+          const baseGb = qMap[String(st && st.llm27_quant)] || 16;
+          const totalGb = baseGb + (st && st.llm27_mmproj ? 1 : 0);
+          const ctxNum = Number(st && st.llm27_ctx) || 65536;
+          const ctxTag = ctxNum >= 262144 ? "256K" : (ctxNum >= 131072 ? "128K" : "64K");
+          return `约${totalGb}G·${ctxTag}`;
+        },
+        modules: [
+          {
+            key: "llm27_quant",
+            prefKey: "boot_llm27_quant",
+            type: "choice",
+            options: [
+              { val: "UD-Q4_K_XL", label: "Q4旗舰", shortTag: "Q4", sizeHint: "16G" },
+              { val: "UD-IQ4_XS", label: "IQ4省显", shortTag: "IQ4", sizeHint: "13G" },
+              { val: "IQ3_XXS", label: "IQ3轻量", shortTag: "IQ3", sizeHint: "10G" }
+            ]
+          },
+          {
+            key: "llm27_ctx",
+            prefKey: "boot_llm27_ctx",
+            type: "choice",
+            options: [
+              { val: 65536, label: "64K推荐", shortTag: "64K", sizeHint: "" },
+              { val: 131072, label: "128K长文", shortTag: "128K", sizeHint: "" },
+              { val: 262144, label: "256K满血", shortTag: "256K", sizeHint: "" }
+            ]
+          },
+          {
+            key: "llm27_mmproj",
+            prefKey: "boot_llm27_mmproj",
+            type: "toggle",
+            label: "视觉识图",
+            shortTag: "识图",
+            defaultVal: true,
+            sizeHint: "+0.9G"
+          }
+        ]
+      },
+      {
         id: "qwen_llm",
-        name: "Qwen3.8",
-        title: "Qwen3.8-Flash 无审查对话",
+        name: "Qwen180B",
+        title: "Qwen3.8-180B 旗舰无审查",
         shortSub: "180B无审查",
         icon: "🧠",
         category: "llm",
@@ -2646,6 +3352,43 @@
     function getWorkflowMeta(profileId) {
       const target = String(profileId || "anima").toLowerCase();
       return WORKFLOW_CATALOG.find((item) => item.id === target) || WORKFLOW_CATALOG[0];
+    }
+
+    function normalizeWorkflowProfiles(rawList, fallbackId = "anima") {
+      const validIds = WORKFLOW_CATALOG.map((item) => item.id);
+      const cand = Array.isArray(rawList)
+        ? rawList.map((x) => String(x || "").trim().toLowerCase()).filter((x) => validIds.includes(x))
+        : [];
+      const uniq = [];
+      cand.forEach((p) => {
+        if (!uniq.includes(p)) uniq.push(p);
+      });
+      if (uniq.length === 0) {
+        const fb = String(fallbackId || "anima").trim().toLowerCase();
+        uniq.push(validIds.includes(fb) ? fb : "anima");
+      }
+      if (uniq.includes("qwen_27b") && uniq.includes("qwen_llm")) {
+        const idx27 = uniq.indexOf("qwen_27b");
+        const idx180 = uniq.indexOf("qwen_llm");
+        const drop = idx27 < idx180 ? "qwen_27b" : "qwen_llm";
+        const pos = uniq.indexOf(drop);
+        if (pos >= 0) uniq.splice(pos, 1);
+      }
+      return validIds.filter((id) => uniq.includes(id));
+    }
+
+    function getActiveLlmProfile(profiles) {
+      const list = Array.isArray(profiles) ? profiles : [];
+      if (list.includes("qwen_llm")) return "qwen_llm";
+      if (list.includes("qwen_27b")) return "qwen_27b";
+      return null;
+    }
+
+    function isDualProfileSet(profiles) {
+      const list = Array.isArray(profiles) ? profiles : [];
+      const hasLlm = Boolean(getActiveLlmProfile(list));
+      const hasComfy = list.some((p) => ["anima", "minimax", "drama3"].includes(p));
+      return hasLlm && hasComfy;
     }
 
     // 拼接工作流选择舱角标：支持枚举短标（如 Q4·32K·识图）与布尔开关角标，严守 30px 单行不换行
@@ -2775,9 +3518,9 @@
         left_flipped: petImg.classList.contains("flipped"),
         bubble: bubbleBox,
         dots: (!edgePeekHidden && bubbleOpen) ? [toRectObj(el("dot-1")), toRectObj(el("dot-2"))].filter(Boolean) : [],
-        miniPill: (!edgePeekHidden && !bubbleOpen) ? toRectObj(el("mini-pill")) : null,
+        miniPill: (!edgePeekHidden && !bubbleOpen && !toastOpen) ? toRectObj(el("mini-pill")) : null,
         tools: !edgePeekHidden ? toRectObj(el("side-tools")) : null,
-        toast: toastOpen ? toRectObj(el("speech-toast")) : null,
+        toast: (!edgePeekHidden && !bubbleOpen && toastOpen) ? toRectObj(el("speech-toast")) : null,
         pet: petBox
       };
     }
@@ -2906,6 +3649,7 @@
       const toast = el("speech-toast");
       toastAction = null;
       toastHasChoices = false;
+      el("stage").classList.remove("toast-showing");
       toast.classList.remove("show", "clickable", "error");
       toast.innerHTML = "";
       scheduleSyncRegion();
@@ -2950,6 +3694,7 @@
 
       toast.classList.toggle("clickable", Boolean(toastAction || toastHasChoices));
       toast.classList.toggle("error", Boolean(cfg.isError));
+      el("stage").classList.add("toast-showing");
       toast.classList.add("show");
       scheduleSyncRegion();
       _armToastTimer(toastDuration);
@@ -2997,7 +3742,10 @@
       const dir = delta >= 0 ? 1 : -1;
 
       currentPage = next;
-      if (next !== prev) closeWorkflowDrawer();
+      if (next !== prev) {
+        closeWorkflowDrawer();
+        closeAccountDrawer();
+      }
       const titleEl = el("page-title");
       titleEl.textContent = PAGE_TITLES[currentPage];
       titleEl.classList.remove("slide-next", "slide-prev");
@@ -3154,23 +3902,41 @@
       statusNode.textContent = statusNbspToggle ? `${clean}\u00A0` : clean;
     }
 
-    function pickBestGpuForProfile(profile, snap) {
+    function pickBestGpuForProfiles(profiles, snap) {
+      const list = normalizeWorkflowProfiles(profiles, bootState.profile);
       const eligible = snap && Array.isArray(snap.eligible_gpus) ? snap.eligible_gpus : null;
       const scarce = (snap && snap.scarce_gpus) || {};
-      const wf = getWorkflowMeta(profile);
-      const rawOrder = Array.isArray(wf.gpuPriority) && wf.gpuPriority.length > 0
-        ? wf.gpuPriority
-        : ["L4", "A100", "T4", "G4", "H100"];
-      // 180B 大语言模型严禁自动降级推荐至显存不足的 T4/L4
-      const order = wf.id === "qwen_llm"
-        ? rawOrder.filter((g) => g !== "T4" && g !== "L4")
-        : rawOrder;
+      let order;
+      let recFallback = "L4";
+      if (list.length <= 1) {
+        const wf = getWorkflowMeta(list[0]);
+        const rawOrder = Array.isArray(wf.gpuPriority) && wf.gpuPriority.length > 0
+          ? wf.gpuPriority
+          : ["L4", "A100", "T4", "G4", "H100"];
+        order = wf.id === "qwen_llm"
+          ? rawOrder.filter((g) => g !== "T4" && g !== "L4")
+          : rawOrder;
+        recFallback = wf.recGpu || "L4";
+      } else if (isDualProfileSet(list) || list.includes("qwen_llm")) {
+        // 双栖同驻与 180B 模型均需要高显存池，屏蔽 L4/T4
+        order = ["G4", "A100", "H100"];
+        recFallback = "G4";
+      } else if (list.includes("minimax") || list.includes("drama3")) {
+        order = ["G4", "A100", "H100", "L4", "T4"];
+        recFallback = "G4";
+      } else {
+        order = ["L4", "A100", "T4", "G4", "H100"];
+      }
       for (const g of order) {
         if (scarce[g]) continue;
         if (eligible && eligible.length > 0 && !eligible.includes(g)) continue;
         return g;
       }
-      return wf.recGpu || "L4";
+      return recFallback;
+    }
+
+    function pickBestGpuForProfile(profile, snap) {
+      return pickBestGpuForProfiles([profile], snap);
     }
 
     function ensureSegGlider(container) {
@@ -3208,9 +3974,215 @@
 
     function syncAllSegGliders(immediate = false) {
       syncSegGlider("console-tabs", ".console-tab-btn", immediate);
+      syncSegGlider("acct-tabs", ".console-tab-btn", immediate);
       ["seg-top", "seg-poll", "seg-scale", "seg-long", "seg-autopull", "seg-keepalive", "seg-edge"].forEach((id) => {
         syncSegGlider(id, ".seg-btn", immediate);
       });
+    }
+
+    function setAcctTab(tab, manual = false) {
+      activeAcctTab = tab === "env" ? "env" : "vault";
+      const tabsEl = el("acct-tabs");
+      if (tabsEl) {
+        tabsEl.querySelectorAll(".console-tab-btn").forEach((b) => {
+          b.classList.toggle("active", b.dataset.tab === activeAcctTab);
+        });
+      }
+      if (el("acct-vault-pane")) el("acct-vault-pane").classList.toggle("active", activeAcctTab === "vault");
+      if (el("acct-env-pane")) el("acct-env-pane").classList.toggle("active", activeAcctTab === "env");
+      syncSegGlider("acct-tabs", ".console-tab-btn", false);
+      if (manual) scheduleSyncRegion();
+    }
+
+    function formatToolShortName(rawPath) {
+      const s = String(rawPath || "").trim();
+      if (!s) return "未检测到";
+      const parts = s.split(/[\\/]/).filter(Boolean);
+      return parts.length >= 2 ? `…/${parts.slice(-2).join("/")}` : s;
+    }
+
+    // 渲染第 5 页：Google Ultra 多账号保险箱 + 云盘/隧道/组件状态卡片
+    function renderAccountEnvPage(snap) {
+      const s = snap || latestSnap || {};
+      const ob = s.onboarding || {};
+      const healthPill = el("env-health-pill");
+      if (healthPill) {
+        healthPill.className = "stock-pill";
+        if (ob.needs_attention) {
+          healthPill.classList.add("warn");
+          healthPill.textContent = "🟠 待配置 ↻";
+        } else {
+          healthPill.textContent = "🟢 全部就绪 ↻";
+        }
+      }
+
+      const setupDot = document.querySelector('#pager-dots .page-dot[data-page="4"]');
+      if (setupDot) {
+        setupDot.classList.toggle("needs-setup", Boolean(ob.needs_attention));
+      }
+
+      const listEl = el("acct-vault-list");
+      const addBtn = el("btn-acct-add");
+      if (listEl) {
+        const accounts = Array.isArray(ob.accounts) ? ob.accounts : [];
+        const activeId = String(ob.active_account_id || "");
+        listEl.innerHTML = "";
+        if (accounts.length === 0) {
+          const empty = document.createElement("div");
+          empty.className = "acct-empty-card";
+          const t = document.createElement("div");
+          t.className = "acct-empty-title";
+          t.textContent = ob.auth_expired ? "🔑 Google 登录已失效，请重新授权" : "🔑 尚未绑定 Google Colab 账号";
+          const sub = document.createElement("div");
+          sub.className = "acct-empty-sub";
+          sub.textContent = "支持绑定多个 Google Ultra 账号，一键秒切并隔离各自账本与会话";
+          empty.appendChild(t);
+          empty.appendChild(sub);
+          listEl.appendChild(empty);
+        } else {
+          accounts.forEach((acct) => {
+            const aid = String(acct.id || "");
+            const isCur = aid && aid === activeId && !ob.auth_missing;
+            const liveRunning = isCur ? Boolean(s.is_running) : Boolean(acct.last_is_running);
+            const card = document.createElement("div");
+            card.className = `acct-card${isCur ? " active" : ""}${liveRunning ? " running" : ""}`;
+            card.dataset.id = aid;
+
+            const left = document.createElement("div");
+            left.className = "acct-card-left";
+            const dot = document.createElement("span");
+            dot.className = "acct-dot";
+            const info = document.createElement("div");
+            info.className = "acct-info";
+            const nameRow = document.createElement("div");
+            nameRow.className = "acct-name-row";
+            const lbl = document.createElement("span");
+            lbl.className = "acct-label";
+            lbl.textContent = acct.label || "Ultra 账号";
+            const editBtn = document.createElement("button");
+            editBtn.type = "button";
+            editBtn.className = "acct-edit-btn";
+            editBtn.dataset.action = "rename";
+            editBtn.dataset.id = aid;
+            editBtn.title = "修改备注名";
+            editBtn.textContent = "✎";
+            nameRow.appendChild(lbl);
+            nameRow.appendChild(editBtn);
+
+            const em = document.createElement("div");
+            em.className = "acct-email";
+            em.textContent = acct.email_masked || "***";
+            info.appendChild(nameRow);
+            info.appendChild(em);
+            left.appendChild(dot);
+            left.appendChild(info);
+
+            const right = document.createElement("div");
+            right.className = "acct-card-right";
+            const balNum = isCur && typeof s.balance === "number" ? s.balance : acct.last_balance;
+            const balEl = document.createElement("span");
+            balEl.className = "acct-bal";
+            const runMark = !isCur && liveRunning ? "⚡" : "";
+            balEl.textContent = (typeof balNum === "number" && !Number.isNaN(balNum))
+              ? `${runMark}${balNum.toFixed(1)} CU`
+              : "-- CU";
+            right.appendChild(balEl);
+
+            if (isCur) {
+              const curTag = document.createElement("span");
+              curTag.className = "acct-cur-tag";
+              curTag.textContent = "当前";
+              right.appendChild(curTag);
+            } else {
+              const swBtn = document.createElement("button");
+              swBtn.type = "button";
+              swBtn.className = "acct-switch-btn";
+              swBtn.dataset.action = "switch";
+              swBtn.dataset.id = aid;
+              swBtn.textContent = "秒切";
+              right.appendChild(swBtn);
+            }
+
+            const delBtn = document.createElement("button");
+            delBtn.type = "button";
+            delBtn.className = `acct-del-btn${acctDelArmedId === aid ? " armed" : ""}`;
+            delBtn.dataset.action = "remove";
+            delBtn.dataset.id = aid;
+            delBtn.title = isCur ? "解绑当前账号" : "移除该账号";
+            delBtn.textContent = acctDelArmedId === aid ? "移除?" : "×";
+            right.appendChild(delBtn);
+
+            card.appendChild(left);
+            card.appendChild(right);
+            listEl.appendChild(card);
+          });
+        }
+      }
+      if (addBtn) {
+        addBtn.textContent = ob.oauth_awaiting_code
+          ? "📋 粘贴 Google 授权码完成绑定 ›"
+          : "➕ 新增 Google 账号（多 Ultra 秒切）";
+      }
+
+      // 渲染子视图 B：云盘 / 隧道 / 组件
+      const gCard = el("env-card-gdrive");
+      const gBadge = el("env-gdrive-badge");
+      const gDesc = el("env-gdrive-desc");
+      const gBindBtn = el("btn-gdrive-bind");
+      if (gCard && gBadge && gDesc && gBindBtn) {
+        const gOk = Boolean(ob.gdrive_ok);
+        const gBinding = Boolean(ob.gdrive_binding);
+        gCard.classList.toggle("warn", !gOk);
+        gBadge.className = `env-badge${gOk ? "" : " warn"}`;
+        if (gBinding) {
+          gBadge.textContent = "授权等待中…";
+          gDesc.textContent = "请在弹出的浏览器窗口点击「允许」";
+          gBindBtn.textContent = "取消等待";
+          gBindBtn.className = "env-btn warn";
+        } else if (gOk) {
+          const freeGb = ob.gdrive_free_gb;
+          gBadge.textContent = typeof freeGb === "number" ? `已连通 · 余${freeGb.toFixed(1)}G` : "已配置就绪";
+          gDesc.textContent = "rclone [gdrive_save] · 云盘同步正常";
+          gBindBtn.textContent = "重绑云盘";
+          gBindBtn.className = "env-btn";
+        } else {
+          gBadge.textContent = "待绑定";
+          gDesc.textContent = "点一键绑定在浏览器完成 Google 云盘授权";
+          gBindBtn.textContent = "一键绑定";
+          gBindBtn.className = "env-btn primary";
+        }
+      }
+
+      const cfBadge = el("env-cf-badge");
+      const cfDesc = el("env-cf-desc");
+      if (cfBadge && cfDesc) {
+        const cf = ob.cf_tunnel || {};
+        if (cf.mode === "named") {
+          cfBadge.className = "env-badge";
+          cfBadge.textContent = "固定域名已启用";
+          const domTxt = [cf.comfy_url, cf.llm_url].filter(Boolean).map((u) => u.replace(/^https:\/\//i, "")).join(" / ");
+          cfDesc.textContent = domTxt || "Cloudflare 命名隧道已配置";
+        } else {
+          cfBadge.className = "env-badge neutral";
+          cfBadge.textContent = "免费临时隧道";
+          cfDesc.textContent = "自动分配 trycloudflare · 免配置即用";
+        }
+      }
+
+      const tCard = el("env-card-tools");
+      const tBadge = el("env-tools-badge");
+      const tDesc = el("env-tools-desc");
+      const copyInstallBtn = el("btn-copy-install");
+      if (tCard && tBadge && tDesc && copyInstallBtn) {
+        const cliOk = Boolean(ob.colab_cli_ok);
+        const rcOk = Boolean(ob.rclone_exe_ok);
+        const bothOk = cliOk && rcOk;
+        tCard.classList.toggle("warn", !bothOk);
+        tBadge.className = `env-badge${bothOk ? "" : " warn"}`;
+        tBadge.textContent = bothOk ? "2/2 齐全" : `缺 ${[!cliOk ? "colab-cli" : "", !rcOk ? "rclone" : ""].filter(Boolean).join("/")}`;
+        tDesc.textContent = `colab-cli ${cliOk ? "✓" : "✕"} · rclone ${rcOk ? "✓" : "✕"}`;
+        copyInstallBtn.classList.toggle("hidden", bothOk);
+      }
     }
 
     function setConsoleTab(tab, manual = false) {
@@ -3269,18 +4241,37 @@
         return;
       }
 
-      // 同步外层工作流选择舱图标、名称、精简子模块角标与推荐卡徽章
-      const wf = getWorkflowMeta(bootState.profile);
-      bootState.profile = wf.id;
-      el("wf-trig-icon").textContent = wf.icon;
-      el("wf-trig-name").textContent = wf.name;
-      el("wf-trig-sub").textContent = wf.shortSub;
-      el("wf-trig-rec").textContent = `${wf.recGpu}★`;
-      const modBadge = formatTriggerModBadge(wf, bootState);
+      // 同步外层工作流选择舱图标、名称（兼容多选双栖）、子模块角标与推荐卡徽章
+      const profs = normalizeWorkflowProfiles(bootState.profiles, bootState.profile);
+      bootState.profiles = profs;
+      bootState.profile = profs[0];
+      const wf = getWorkflowMeta(profs[0]);
+      const llmProf = getActiveLlmProfile(profs);
+      const dualStack = isDualProfileSet(profs);
+      const recGpu = dualStack || profs.includes("qwen_llm") || profs.includes("minimax") || profs.includes("drama3")
+        ? (profs.length === 1 && wf.recGpu ? wf.recGpu : "G4")
+        : (wf.recGpu || "L4");
+
       const badgeEl = el("wf-trig-mod-badge");
-      badgeEl.classList.toggle("hidden", modBadge.hidden);
-      badgeEl.classList.toggle("muted", Boolean(modBadge.muted));
-      badgeEl.textContent = modBadge.text;
+      if (profs.length >= 2) {
+        el("wf-trig-icon").textContent = dualStack ? "⚡" : wf.icon;
+        el("wf-trig-name").textContent = profs.length === 2
+          ? profs.map((p) => getWorkflowMeta(p).name).join("+")
+          : `${wf.name}+等${profs.length}项`;
+        el("wf-trig-sub").textContent = "";
+        el("wf-trig-rec").textContent = `${recGpu}★`;
+        badgeEl.classList.remove("hidden", "muted");
+        badgeEl.textContent = `共${profs.length}项`;
+      } else {
+        el("wf-trig-icon").textContent = wf.icon;
+        el("wf-trig-name").textContent = wf.name;
+        el("wf-trig-sub").textContent = wf.shortSub;
+        el("wf-trig-rec").textContent = `${recGpu}★`;
+        const modBadge = formatTriggerModBadge(wf, bootState);
+        badgeEl.classList.toggle("hidden", modBadge.hidden);
+        badgeEl.classList.toggle("muted", Boolean(modBadge.muted));
+        badgeEl.textContent = modBadge.text;
+      }
 
       const spec = GPU_SPECS[bootState.gpu] || GPU_SPECS.L4;
       const hmChip = el("chip-hm");
@@ -3296,7 +4287,6 @@
 
       // 5 卡实时状态矩阵（高内存开关与实测/预估单价实时联动）
       const hmOn = Boolean(bootState.high_mem);
-      const recGpu = wf.recGpu || "L4";
       el("gpu-grid").querySelectorAll(".gpu-card").forEach((card) => {
         const g = card.dataset.gpu;
         const gs = GPU_SPECS[g] || {};
@@ -3325,19 +4315,22 @@
         }
       });
 
-      // 结构化规格摘要与显存门槛/高内存/实测费率提示
+      // 结构化规格摘要与显存门槛/高内存/双栖磁盘/实测费率提示
       const hintEl = el("boot-spec-hint");
       hintEl.className = "boot-spec-hint";
       hintEl.innerHTML = "";
       const curScarce = scarce[bootState.gpu];
       const curRestricted = eligible !== null && !eligible.includes(bootState.gpu);
-      const fallback = pickBestGpuForProfile(bootState.profile, s);
+      const fallback = pickBestGpuForProfiles(profs, s);
       const selHm = !spec.hmLock && hmOn;
       const selRate = resolveGpuRate(bootState.gpu, selHm, s);
 
-      if (bootState.profile === "qwen_llm" && (bootState.gpu === "T4" || bootState.gpu === "L4")) {
+      if (llmProf === "qwen_llm" && (bootState.gpu === "T4" || bootState.gpu === "L4")) {
         hintEl.classList.add("danger");
         hintEl.textContent = "显存不足：180B 模型无法在 T4/L4 运行，请选 G4★";
+      } else if (dualStack && (bootState.gpu === "T4" || bootState.gpu === "L4")) {
+        hintEl.classList.add("danger");
+        hintEl.textContent = "显存不足：双栖组合无法在 T4/L4 同驻，请选 G4★";
       } else if (curRestricted) {
         hintEl.classList.add("danger");
         const altTip = fallback !== bootState.gpu ? `，建议改选 ${fallback}` : "";
@@ -3346,8 +4339,14 @@
         hintEl.classList.add("warn");
         const altTip = fallback !== bootState.gpu ? `，建议改选 ${fallback}` : "";
         hintEl.textContent = `⚠️ ${bootState.gpu} ${curScarce.reason || "高峰期紧缺"}${altTip}`;
+      } else if (profs.includes("minimax") && llmProf === "qwen_llm") {
+        hintEl.classList.add("warn");
+        hintEl.textContent = "⚠️ 180B+MiniMax 磁盘超200G极高风险，建议改选 Qwen27B";
+      } else if (llmProf === "qwen_27b" && bootState.gpu === "T4" && bootState.llm27_quant === "UD-Q4_K_XL") {
+        hintEl.classList.add("warn");
+        hintEl.textContent = "⚠️ T4 16G 跑 Q4 将自动降级至 IQ3，建议选 L4★ 甜点卡";
       } else if (
-        bootState.profile === "qwen_llm"
+        llmProf === "qwen_llm"
         && bootState.gpu === "A100"
         && !selHm
         && bootState.llm_quant !== "IQ3_XXS"
@@ -3355,7 +4354,7 @@
         hintEl.classList.add("warn");
         hintEl.textContent = "⚠️ 标准40G A100跑Q4/IQ4易超限，建议开高内存或切IQ3";
       } else if (
-        bootState.profile === "qwen_llm"
+        llmProf === "qwen_llm"
         && (bootState.gpu === "H100" || (bootState.gpu === "A100" && selHm))
         && bootState.llm_quant === "UD-Q4_K_XL"
         && Number(bootState.llm_ctx || 32768) >= 262144
@@ -3366,7 +4365,9 @@
       } else {
         const vramTxt = (selHm ? spec.vramHm : spec.vram).replace(/高$/, "");
         const ramTxt = selHm ? spec.ramHm : spec.ram;
-        const tailTxt = typeof wf.specTail === "function" ? wf.specTail(bootState) : "约2.5m";
+        const tailTxt = profs.length >= 2
+          ? `${dualStack ? "双栖" : "合并"}共${profs.length}套`
+          : (typeof wf.specTail === "function" ? wf.specTail(bootState) : "约2.5m");
         const mainSpan = document.createElement("span");
         mainSpan.className = "spec-main";
         mainSpan.textContent = `${bootState.gpu} · ${vramTxt}显存 · ${ramTxt} · ${tailTxt}`;
@@ -3388,7 +4389,9 @@
       const runShape = targetSess ? String(targetSess.machine_shape || "STANDARD").toUpperCase() : "";
       const sameGpu = running && runGpu === bootState.gpu;
       const needUpgradeHm = sameGpu && !spec.hmLock && bootState.high_mem && runShape !== "HIGH_RAM";
-      const profLabel = wf.name || "Anima";
+      const profLabel = profs.length >= 2
+        ? profs.map((p) => getWorkflowMeta(p).name).join("+")
+        : (wf.name || "Anima");
       const hmBtnTag = selHm ? (bootState.gpu === "A100" ? "(80G高存)" : "(高存)") : "";
 
       if (Date.now() <= bootArmedUntil) {
@@ -3424,28 +4427,48 @@
         else if (stepIdx === idx) dot.classList.add("current");
       });
 
-      const profTxt = getWorkflowMeta(d.profile).name;
+      const dProfs = Array.isArray(d.profiles) && d.profiles.length > 0
+        ? normalizeWorkflowProfiles(d.profiles, d.profile || "anima")
+        : [String(d.profile || "anima")];
+      const profTxt = dProfs.map((p) => getWorkflowMeta(p).name).join("+");
       el("deploy-foot-hint").textContent = `${profTxt} · ${d.gpu || "L4"} 部署直播中`;
     }
 
-    // 判定运维面板当前是否处于大语言模型双模视图
+    function isDualOpsMode(snap) {
+      const s = snap || latestSnap;
+      return Boolean(
+        s && s.is_running
+          ? (s.comfy && s.comfy.service_kind === "dual")
+          : isDualProfileSet(bootState.profiles)
+      );
+    }
+
+    // 判定运维面板当前是否处于纯大语言模型单模视图（双栖模式优先走 3×2 矩阵）
     function isLlmOpsMode(snap) {
+      if (isDualOpsMode(snap)) return false;
       const s = snap || latestSnap;
       return Boolean(
         s && s.is_running
           ? (s.comfy && s.comfy.service_kind === "llm")
-          : (bootState.profile === "qwen_llm")
+          : Boolean(getActiveLlmProfile(bootState.profiles))
       );
     }
 
-    // 第 3 页运维控制面板动态双模渲染（严格保持复制反馈态与按钮尺寸零抖动）
+    // 第 3 页运维控制面板动态双/三模渲染（严格保持复制反馈态与按钮尺寸零抖动）
     function renderOpsPanel(snap) {
-      const isLlmOps = isLlmOpsMode(snap);
+      const isDualOps = isDualOpsMode(snap);
+      const isLlmOps = !isDualOps && isLlmOpsMode(snap);
+      const gridEl = el("ops-action-grid");
       const btnComfy = el("act-comfy");
       const btnSync = el("act-sync");
+      const btnLlmOpen = el("act-llm-open");
+      const btnLlmCopy = el("act-llm-copy");
       const btnUpload = el("act-upload");
       const statusEl = el("action-status");
 
+      if (gridEl) {
+        gridEl.classList.toggle("dual-mode", isDualOps);
+      }
       if (btnComfy) {
         btnComfy.textContent = isLlmOps ? "💬 打开对话页" : "🚀 打开 ComfyUI";
       }
@@ -3463,15 +4486,40 @@
           btnSync.textContent = "📋 复制 API 配置";
         }
       }
+      if (!isLlmOps && btnSync) {
+        const isOnline = Boolean(snap && snap.is_running);
+        btnSync.textContent = isOnline ? "📥 拉回成图" : "📂 本地成图夹";
+        btnSync.title = isOnline ? "从云端拉回最新成图（右键随时打开本地目录）" : "直接打开本机历史收图文件夹";
+      }
+      if (btnLlmOpen) {
+        btnLlmOpen.textContent = "💬 打开对话页";
+      }
+      if (btnLlmCopy) {
+        if (!isDualOps) {
+          if (dualCopyResetTimer) {
+            clearTimeout(dualCopyResetTimer);
+            dualCopyResetTimer = null;
+          }
+          btnLlmCopy.removeAttribute("data-copied");
+          btnLlmCopy.textContent = "📋 复制 API";
+        } else if (btnLlmCopy.hasAttribute("data-copied")) {
+          btnLlmCopy.textContent = "✓ 已复制 API";
+        } else {
+          btnLlmCopy.textContent = "📋 复制 API";
+        }
+      }
       if (btnUpload) {
-        btnUpload.textContent = isLlmOps ? "📄 提取文本/识图" : "📤 传图到云端";
+        btnUpload.textContent = isDualOps
+          ? "📤 投递素材/词"
+          : (isLlmOps ? "📄 提取文本/识图" : "📤 传图到云端");
       }
       if (statusEl) {
         const defaultComfyHint = "支持拖入参考图 · PNG/JSON直铺画布 · LoRA模型";
         const defaultLlmHint = "支持拖入代码/TXT提取 · 拖入图片发视觉对话 · 一键复制API";
+        const defaultDualHint = "双栖就绪: 拖入文本复制词库 · 图片可选参考图或27B识图 · JSON直铺";
         const curTxt = statusEl.textContent.replace(/\u00A0+$/g, "");
-        if (curTxt === defaultComfyHint || curTxt === defaultLlmHint) {
-          statusEl.textContent = isLlmOps ? defaultLlmHint : defaultComfyHint;
+        if (curTxt === defaultComfyHint || curTxt === defaultLlmHint || curTxt === defaultDualHint) {
+          statusEl.textContent = isDualOps ? defaultDualHint : (isLlmOps ? defaultLlmHint : defaultComfyHint);
         }
       }
     }
@@ -3482,20 +4530,30 @@
       const vramEl = el("comfy-vram");
       const barEl = el("comfy-bar");
       const miniStateEl = el("mini-state");
+      const obState = latestSnap && latestSnap.onboarding;
       const running = Boolean(latestSnap && latestSnap.is_running);
       const deploy = latestSnap && latestSnap.deploy;
       const isDeploying = Boolean(deploy && deploy.active);
-      const isLlmOnline = Boolean(comfy && comfy.service_kind === "llm" && comfy.online);
+      const sk = String((comfy && comfy.service_kind) || "comfy");
+      const isDualMode = sk === "dual";
+      const isLlmOnline = Boolean(comfy && sk === "llm" && comfy.online);
+      const comfyOn = Boolean(comfy && (comfy.comfy_online !== undefined ? comfy.comfy_online : (comfy.online && sk !== "llm")));
+      const llmOn = Boolean(comfy && (comfy.llm_online !== undefined ? comfy.llm_online : (comfy.online && sk === "llm")));
+      const anyDualOn = isDualMode && Boolean(comfy && (comfy.online || comfyOn || llmOn));
       const hasDeployErr = Boolean(!isDeploying && running && !(comfy && comfy.online) && deploy && deploy.error_msg);
+      const prefHasLlm = Boolean(getActiveLlmProfile(bootState.profiles));
+      const deployHasLlm = Boolean(
+        deploy && (
+          deploy.profile === "qwen_llm"
+          || deploy.profile === "qwen_27b"
+          || (Array.isArray(deploy.profiles) && Boolean(getActiveLlmProfile(deploy.profiles)))
+        )
+      );
       const isLlmOfflineBoot = Boolean(
         running
         && !(comfy && comfy.online)
         && !hasDeployErr
-        && (
-          (comfy && comfy.service_kind === "llm")
-          || (deploy && deploy.profile === "qwen_llm")
-          || (!comfy?.tunnel_url && bootState.profile === "qwen_llm")
-        )
+        && (sk === "llm" || sk === "dual" || deployHasLlm || (!comfy?.tunnel_url && prefHasLlm && !isDualProfileSet(bootState.profiles)))
       );
 
       strip.classList.remove("error");
@@ -3510,6 +4568,16 @@
         barEl.classList.add("sampling");
         barEl.style.width = `${Math.max(6, dpct)}%`;
         miniText = `· 🚀 部署 ${dpct}%`;
+      } else if (!running && obState && (!obState.colab_cli_ok || obState.auth_missing)) {
+        if (!obState.colab_cli_ok) {
+          leftEl.textContent = "🧰 未检测到 colab-cli · 点此配置";
+          vramEl.textContent = "去接入 ›";
+        } else {
+          leftEl.textContent = "🔑 尚未绑定 Google 账号 · 点此接入";
+          vramEl.textContent = "去绑定 ›";
+        }
+        barEl.classList.add("offline");
+        barEl.style.width = "100%";
       } else if (!running) {
         leftEl.textContent = "💤 未开机 · 点此选卡开机/拖入预传";
         vramEl.textContent = "去开机 ›";
@@ -3536,6 +4604,7 @@
         const runCnt = Number(comfy.running_cnt ?? comfy.running_count ?? 0);
         const tps = Number(comfy.tps || 0);
         const tpsTxt = Number.isFinite(tps) && tps > 0 ? ` · ${tps.toFixed(1)}t/s` : "";
+        const mShort = String(comfy.model_name || "").includes("27B") ? "Qwen27B" : "Qwen3.8";
         if (runCnt > 0) {
           leftEl.textContent = `⚡ 对话生成中 · 并发 ${runCnt}${tpsTxt}`;
           vramEl.textContent = comfy.vram_total_gb > 0
@@ -3546,7 +4615,7 @@
           miniText = `· ⚡ 对话中 · 并发 ${runCnt}${tpsTxt}`;
         } else {
           const quantLabel = comfy.quant || "Q4";
-          leftEl.textContent = `🟢 Qwen3.8 在线 (${quantLabel}) · 点此对话`;
+          leftEl.textContent = `🟢 ${mShort} 在线 (${quantLabel}) · 点此对话`;
           vramEl.textContent = comfy.vram_total_gb > 0
             ? `VRAM ${Number(comfy.vram_used_gb).toFixed(1)}/${Number(comfy.vram_total_gb).toFixed(1)}G (${Math.round(comfy.vram_pct)}%)`
             : "已连通";
@@ -3554,7 +4623,62 @@
           if (vp >= 93) barEl.classList.add("danger");
           else if (vp >= 85) barEl.classList.add("warn");
           barEl.style.width = `${Math.max(8, Math.min(100, vp || 100))}%`;
-          miniText = "· 🟢 Qwen3.8 在线";
+          miniText = `· 🟢 ${mShort} 在线`;
+        }
+      } else if (anyDualOn) {
+        const runCnt = Number(comfy.running_count || 0);
+        const pendingCnt = Number(comfy.pending_count || 0);
+        const llmRun = Number(comfy.llm_running_count || 0);
+        const pendPull = Number(comfy.pending_pull_count || 0);
+        const llmShort = String(comfy.model_name || "").includes("27B") ? "27B" : "LLM";
+        const tps = Number(comfy.tps || 0);
+        const tpsTxt = Number.isFinite(tps) && tps > 0 ? ` · ${tps.toFixed(1)}t/s` : "";
+        const vramTxt = comfy.vram_total_gb > 0
+          ? `VRAM ${Number(comfy.vram_used_gb).toFixed(1)}/${Number(comfy.vram_total_gb).toFixed(1)}G (${Math.round(comfy.vram_pct)}%)`
+          : (comfyOn && llmOn ? "双端已通" : "在线");
+        const vp = Number(comfy.vram_pct || 0);
+
+        if (runCnt > 0 || pendingCnt > 0) {
+          const hasStep = Number(comfy.step_max || 0) > 0;
+          const pct = Math.round(Number(comfy.step_pct || 0));
+          const stepLabel = hasStep ? `⚡ 采样 ${pct}%` : "⚡ 出图准备中";
+          leftEl.textContent = `${stepLabel} ${runCnt}/${runCnt + pendingCnt}${llmOn ? ` · ${llmShort}待命` : ""}`;
+          vramEl.textContent = comfy.vram_total_gb > 0
+            ? `VRAM ${Number(comfy.vram_used_gb).toFixed(1)}/${Number(comfy.vram_total_gb).toFixed(1)}G`
+            : "双栖采样中";
+          barEl.classList.add("sampling");
+          barEl.style.width = `${hasStep ? Math.max(8, pct) : 24}%`;
+          miniText = hasStep ? `· ⚡ 采样 ${pct}%` : "· ⚡ 出图中";
+        } else if (llmRun > 0) {
+          leftEl.textContent = `⚡ ${llmShort}对话中(${llmRun}${tpsTxt})${comfyOn ? " · Comfy闲" : ""}`;
+          vramEl.textContent = comfy.vram_total_gb > 0
+            ? `VRAM ${Number(comfy.vram_used_gb).toFixed(1)}/${Number(comfy.vram_total_gb).toFixed(1)}G`
+            : "对话中";
+          barEl.classList.add("sampling");
+          barEl.style.width = "100%";
+          miniText = `· ⚡ ${llmShort}对话中${tpsTxt}`;
+        } else if (pendPull > 0) {
+          leftEl.textContent = `📥 待拉回成图 ${pendPull} 份${llmOn ? ` · ${llmShort}在线` : ""}`;
+          vramEl.textContent = vramTxt;
+          if (vp >= 93) barEl.classList.add("danger");
+          else if (vp >= 85) barEl.classList.add("warn");
+          barEl.style.width = `${Math.max(8, Math.min(100, vp || 100))}%`;
+          miniText = `· 📥 待拉图 ${pendPull} 份`;
+        } else {
+          if (comfyOn && llmOn) {
+            leftEl.textContent = `🟢 ComfyUI + ${llmShort} 双在线`;
+            miniText = "· 🟢 双栖双在线";
+          } else if (comfyOn) {
+            leftEl.textContent = `🟡 Comfy就绪 · ${llmShort}重连中`;
+            miniText = "· 🟡 Comfy在线";
+          } else {
+            leftEl.textContent = `🟡 ${llmShort}就绪 · Comfy未通`;
+            miniText = `· 🟡 ${llmShort}在线`;
+          }
+          vramEl.textContent = vramTxt;
+          if (vp >= 93) barEl.classList.add("danger");
+          else if (vp >= 85) barEl.classList.add("warn");
+          barEl.style.width = `${Math.max(8, Math.min(100, vp || 100))}%`;
         }
       } else if (comfy && comfy.online && ((comfy.running_count || 0) > 0 || (comfy.pending_count || 0) > 0)) {
         const runCnt = Number(comfy.running_count || 0);
@@ -3601,9 +4725,11 @@
         isDeploying
         || hasDeployErr
         || !running
+        || (obState && (!obState.colab_cli_ok || obState.auth_missing))
         || (running && comfy && (
           comfy.has_error
           || isLlmOnline
+          || anyDualOn
           || (comfy.pending_pull_count || 0) > 0
         ))
       );
@@ -3642,9 +4768,14 @@
 
       if (!bootState.prefsSynced) {
         bootState.prefsSynced = true;
-        if (prefs.boot_profile && WORKFLOW_CATALOG.some((item) => item.id === String(prefs.boot_profile).toLowerCase())) {
-          bootState.profile = String(prefs.boot_profile).toLowerCase();
-        }
+        const fbProf = prefs.boot_profile && WORKFLOW_CATALOG.some((item) => item.id === String(prefs.boot_profile).toLowerCase())
+          ? String(prefs.boot_profile).toLowerCase()
+          : "anima";
+        const initProfs = Array.isArray(prefs.boot_profiles) && prefs.boot_profiles.length > 0
+          ? normalizeWorkflowProfiles(prefs.boot_profiles, fbProf)
+          : [fbProf];
+        bootState.profiles = initProfs;
+        bootState.profile = initProfs[0];
         if (GPU_ORDER.includes(String(prefs.boot_gpu || "").toUpperCase())) {
           bootState.gpu = String(prefs.boot_gpu).toUpperCase();
         }
@@ -3659,6 +4790,13 @@
           bootState.llm_ctx = Number(prefs.boot_llm_ctx);
         }
         bootState.llm_mmproj = prefs.boot_llm_mmproj !== false;
+        if (["UD-Q4_K_XL", "UD-IQ4_XS", "IQ3_XXS"].includes(String(prefs.boot_llm27_quant || ""))) {
+          bootState.llm27_quant = String(prefs.boot_llm27_quant);
+        }
+        if ([65536, 131072, 262144].includes(Number(prefs.boot_llm27_ctx))) {
+          bootState.llm27_ctx = Number(prefs.boot_llm27_ctx);
+        }
+        bootState.llm27_mmproj = prefs.boot_llm27_mmproj !== false;
         requestAnimationFrame(() => syncAllSegGliders(true));
       }
     }
@@ -3792,7 +4930,10 @@
 
       const d = Number(snap.last_delta || 0);
       el("ledger-delta").textContent = `${d > 0 ? "+" : ""}${d.toFixed(3)} CU`;
-      el("ledger-date").textContent = `账本日: ${snap.date || "--"} · 同步 ${syncTimeTxt} · 约5m结算`;
+      const acctLbl = snap.onboarding && snap.onboarding.active_account_label
+        ? `${snap.onboarding.active_account_label} · `
+        : "";
+      el("ledger-date").textContent = `${acctLbl}账本日: ${snap.date || "--"} · 同步 ${syncTimeTxt} · 约5m结算`;
 
       if (snap.error_msg && snap.stale) {
         el("action-status").textContent = snap.error_msg;
@@ -3807,6 +4948,10 @@
       renderBootPanel(snap);
       renderOpsPanel(snap);
       renderComfyState(snap.comfy || null);
+      renderAccountEnvPage(snap);
+      if (acctDrawerOpen && acctDrawerMode === "tools") {
+        renderAccountDrawerContent();
+      }
       updateSpriteFrame();
       scheduleSyncRegion();
     };
@@ -3832,7 +4977,9 @@
     };
 
     window.canEdgeAutoHide = function () {
-      if (wfDrawerOpen) return false;
+      if (wfDrawerOpen || acctDrawerOpen) return false;
+      const ob = latestSnap && latestSnap.onboarding;
+      if (ob && (ob.oauth_awaiting_code || ob.gdrive_binding)) return false;
       if (el("stage").classList.contains("drag-over")) return false;
       const toastEl = el("speech-toast");
       if (toastEl && toastEl.classList.contains("show") && toastEl.querySelector(".toast-choice-btn")) {
@@ -3891,7 +5038,7 @@
       }
     });
     el("bubble-box").addEventListener("wheel", (e) => {
-      if (el("bubble-area").classList.contains("collapsed") || wfDrawerOpen) return;
+      if (el("bubble-area").classList.contains("collapsed") || wfDrawerOpen || acctDrawerOpen) return;
       const dx = Math.abs(e.deltaX || 0);
       const dy = Math.abs(e.deltaY || 0);
       if (dx < 4 && dy < 4) return;
@@ -3906,13 +5053,14 @@
       if (el("bubble-area").classList.contains("collapsed")) return;
       const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : "";
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      if (wfDrawerOpen) {
+      if (wfDrawerOpen || acctDrawerOpen) {
         if (e.key === "Escape") {
           e.preventDefault();
-          closeWorkflowDrawer();
+          if (acctDrawerOpen) closeAccountDrawer();
+          if (wfDrawerOpen) closeWorkflowDrawer();
           return;
         }
-        if (e.key === "Tab") {
+        if (e.key === "Tab" && wfDrawerOpen) {
           const layer = el("wf-drawer-layer");
           const focusables = layer
             ? Array.from(layer.querySelectorAll('button:not([disabled]):not([tabindex="-1"]), [tabindex="0"]'))
@@ -3949,7 +5097,10 @@
       const open = forceState !== undefined ? Boolean(forceState) : area.classList.contains("collapsed");
       const skipSave = Boolean(opts && opts.skipSave);
       const immediate = Boolean(opts && opts.immediate);
-      if (!open) closeWorkflowDrawer();
+      if (!open) {
+        closeWorkflowDrawer();
+        closeAccountDrawer();
+      }
 
       if (!skipSave) {
         if (latestSnap && latestSnap.prefs) {
@@ -3962,8 +5113,10 @@
 
       cancelAnimationFrame(bubbleAnimFrame);
       bubbleAnimFrame = null;
+      const stageEl = el("stage");
 
       if (immediate) {
+        stageEl.classList.remove("bubble-animating");
         bubbleAnimScale = 1.0;
         bubbleAnimOpacity = 1.0;
         box.style.transform = "";
@@ -3975,6 +5128,7 @@
         return;
       }
 
+      stageEl.classList.add("bubble-animating");
       const startTime = performance.now();
       const duration = Number(opts && opts.duration) > 0 ? Number(opts.duration) : (open ? 175 : 145);
       const wasCollapsed = area.classList.contains("collapsed");
@@ -4025,6 +5179,7 @@
           bubbleAnimFrame = requestAnimationFrame(step);
         } else {
           bubbleAnimFrame = null;
+          stageEl.classList.remove("bubble-animating");
           bubbleAnimScale = 1.0;
           bubbleAnimOpacity = 1.0;
           box.style.transform = "";
@@ -4058,34 +5213,54 @@
       showToast(msg, { duration: 2800, isError: Boolean(res && res.ok === false) });
     });
 
-    // 同步/复制按钮：LLM 模式下严格执行幂等复制（严禁设置 disabled，clearTimeout 防抖，2000ms 复原）
+    // 统一幂等 LLM API 复制动作（严禁设置 disabled，2000ms 自动恢复默认按钮文案）
+    async function performLlmApiCopy(btn, timerKey, copiedLabel) {
+      if (!window.pywebview || !window.pywebview.api || !btn) return;
+      const res = typeof window.pywebview.api.copy_llm_api_config === "function"
+        ? await window.pywebview.api.copy_llm_api_config()
+        : await window.pywebview.api.sync_outputs();
+      if (res && res.ok) {
+        if (res.clipboard_text && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+          navigator.clipboard.writeText(res.clipboard_text).catch(() => {});
+        }
+        if (timerKey === "dual") clearTimeout(dualCopyResetTimer);
+        else clearTimeout(copyResetTimer);
+        btn.setAttribute("data-copied", "true");
+        btn.textContent = copiedLabel;
+        announceActionStatus(res.message || copiedLabel);
+        showToast(res.message || "📋 已复制 API 配置", 2400);
+        const tid = setTimeout(() => {
+          if (timerKey === "dual") dualCopyResetTimer = null;
+          else copyResetTimer = null;
+          btn.removeAttribute("data-copied");
+          renderOpsPanel(latestSnap);
+        }, 2000);
+        if (timerKey === "dual") dualCopyResetTimer = tid;
+        else copyResetTimer = tid;
+      } else {
+        const errMsg = (res && res.message) || "暂未获取到在线 API 配置";
+        announceActionStatus(errMsg);
+        showToast(errMsg, { duration: 2800, isError: true });
+      }
+    }
+
+    // 同步/复制按钮：纯 LLM 模式下执行幂等复制；Comfy 停机态直开本地目录，运行态执行成图拉回
     el("act-sync").addEventListener("click", async () => {
       if (!window.pywebview || !window.pywebview.api) return;
       const btn = el("act-sync");
       if (isLlmOpsMode(latestSnap)) {
-        const res = typeof window.pywebview.api.copy_llm_api_config === "function"
-          ? await window.pywebview.api.copy_llm_api_config()
-          : await window.pywebview.api.sync_outputs();
-        if (res && res.ok) {
-          if (res.clipboard_text && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
-            navigator.clipboard.writeText(res.clipboard_text).catch(() => {});
-          }
-          clearTimeout(copyResetTimer);
-          btn.setAttribute("data-copied", "true");
-          btn.textContent = "✓ 已复制 API 配置";
-          announceActionStatus(res.message || "✓ 已复制 API 配置");
-          showToast(res.message || "📋 已复制 API 配置", 2400);
-          copyResetTimer = setTimeout(() => {
-            copyResetTimer = null;
-            btn.removeAttribute("data-copied");
-            renderOpsPanel(latestSnap);
-          }, 2000);
-        } else {
-          const errMsg = (res && res.message) || "暂未获取到在线 API 配置";
-          announceActionStatus(errMsg);
-          showToast(errMsg, { duration: 2800, isError: true });
-        }
+        await performLlmApiCopy(btn, "single", "✓ 已复制 API 配置");
         return;
+      }
+
+      if (!isLlmOpsMode(latestSnap) && !(latestSnap && latestSnap.is_running)) {
+        if (typeof window.pywebview.api.open_local_outputs_dir === "function") {
+          const res = await window.pywebview.api.open_local_outputs_dir();
+          const msg = (res && res.message) || "已打开本地成图夹";
+          announceActionStatus(msg);
+          showToast(msg, 2200);
+          return;
+        }
       }
 
       announceActionStatus("正在拉回云端最新成图到本地...");
@@ -4094,6 +5269,33 @@
       const msg = (res && res.message) || "同步结束";
       announceActionStatus(msg);
       showToast(msg);
+    });
+
+    el("act-sync").addEventListener("contextmenu", async (e) => {
+      if (isLlmOpsMode(latestSnap)) return;
+      if (!window.pywebview || !window.pywebview.api || typeof window.pywebview.api.open_local_outputs_dir !== "function") return;
+      e.preventDefault();
+      const res = await window.pywebview.api.open_local_outputs_dir();
+      const msg = (res && res.message) || "已打开本地成图夹";
+      announceActionStatus(msg);
+      showToast(msg, 2200);
+    });
+
+    el("act-llm-open").addEventListener("click", async () => {
+      if (!window.pywebview || !window.pywebview.api) return;
+      announceActionStatus("正在探测/开启云端 Qwen3.8 对话页...");
+      showToast("正在打开 Qwen3.8 对话页...");
+      const fn = typeof window.pywebview.api.open_llm_tunnel === "function"
+        ? window.pywebview.api.open_llm_tunnel
+        : window.pywebview.api.open_comfy_tunnel;
+      const res = await fn.call(window.pywebview.api);
+      const msg = (res && res.message) || "操作完成";
+      announceActionStatus(msg);
+      showToast(msg, { duration: 2800, isError: Boolean(res && res.ok === false) });
+    });
+
+    el("act-llm-copy").addEventListener("click", async () => {
+      await performLlmApiCopy(el("act-llm-copy"), "dual", "✓ 已复制 API");
     });
 
     el("act-colab").addEventListener("click", async () => {
@@ -4149,11 +5351,12 @@
     function applyBootSuggestion(gpuName) {
       const g = String(gpuName || "").toUpperCase();
       if (!GPU_ORDER.includes(g)) return;
-      const wf = getWorkflowMeta(bootState.profile);
+      const profs = normalizeWorkflowProfiles(bootState.profiles, bootState.profile);
+      const anyAutoHm = profs.some((p) => getWorkflowMeta(p).autoHmOnA100);
       bootState.gpu = g;
       bootState.gpuManual = true;
       if (GPU_SPECS[g] && GPU_SPECS[g].hmLock) bootState.high_mem = false;
-      else if (wf.autoHmOnA100 && g === "A100") bootState.high_mem = true;
+      else if (anyAutoHm && g === "A100") bootState.high_mem = true;
       clearBootArm();
       closeWorkflowDrawer();
       setConsoleTab("boot", true);
@@ -4192,31 +5395,46 @@
       }
     });
 
-    function selectWorkflowProfile(profId, opts = {}) {
-      const targetWf = WORKFLOW_CATALOG.find((item) => item.id === String(profId || "").toLowerCase());
-      if (!targetWf) return false;
-      const changed = bootState.profile !== targetWf.id;
+    function selectWorkflowProfiles(profList, opts = {}) {
+      const nextProfs = normalizeWorkflowProfiles(profList, bootState.profile);
+      const prevStr = normalizeWorkflowProfiles(bootState.profiles, bootState.profile).join(",");
+      const nextStr = nextProfs.join(",");
+      const changed = prevStr !== nextStr;
       if (changed || opts.forceGpuReset) {
-        bootState.profile = targetWf.id;
+        bootState.profiles = nextProfs;
+        bootState.profile = nextProfs[0];
         bootState.gpuManual = false;
-        const rec = pickBestGpuForProfile(targetWf.id, latestSnap);
+        const rec = pickBestGpuForProfiles(nextProfs, latestSnap);
         bootState.gpu = rec;
+        const anyAutoHm = nextProfs.some((p) => getWorkflowMeta(p).autoHmOnA100);
+        const recHeavy = isDualProfileSet(nextProfs) || nextProfs.includes("qwen_llm") || nextProfs.includes("minimax");
         if (GPU_SPECS[rec] && GPU_SPECS[rec].hmLock) bootState.high_mem = false;
-        else if (targetWf.autoHmOnA100 && rec === "A100") bootState.high_mem = true;
-        else if (targetWf.recGpu === "G4") bootState.high_mem = false;
+        else if (anyAutoHm && rec === "A100") bootState.high_mem = true;
+        else if (recHeavy && rec === "G4") bootState.high_mem = false;
+        else bootState.high_mem = false;
         clearBootArm();
         if (window.pywebview && window.pywebview.api) {
           window.pywebview.api.save_prefs({
+            boot_profiles: bootState.profiles,
             boot_profile: bootState.profile,
             boot_gpu: bootState.gpu,
             boot_high_mem: bootState.high_mem
           });
         }
       }
+      if (wfDrawerOpen) {
+        wfDraftProfiles = [...bootState.profiles];
+        renderWorkflowDrawer();
+      }
       renderBootPanel(latestSnap);
       renderOpsPanel(latestSnap);
-      if (wfDrawerOpen) renderWorkflowDrawer();
       return true;
+    }
+
+    function selectWorkflowProfile(profId, opts = {}) {
+      const targetWf = WORKFLOW_CATALOG.find((item) => item.id === String(profId || "").toLowerCase());
+      if (!targetWf) return false;
+      return selectWorkflowProfiles([targetWf.id], opts);
     }
 
     function cycleWorkflowProfile(step = 1) {
@@ -4237,7 +5455,35 @@
       return true;
     }
 
-    // 渲染工作流选择抽屉列表：默认保留当前纵向滚动位置，仅在切换分类 Tab 时传 resetScroll 归零
+    function toggleDraftWorkflowProfile(profId) {
+      const targetWf = WORKFLOW_CATALOG.find((item) => item.id === String(profId || "").toLowerCase());
+      if (!targetWf) return false;
+      const baseList = Array.isArray(wfDraftProfiles)
+        ? [...wfDraftProfiles]
+        : [...normalizeWorkflowProfiles(bootState.profiles, bootState.profile)];
+      const existsIdx = baseList.indexOf(targetWf.id);
+      if (existsIdx >= 0) {
+        if (baseList.length <= 1) {
+          showToast("至少保留 1 项工作流", 1800);
+          return false;
+        }
+        baseList.splice(existsIdx, 1);
+      } else {
+        if (targetWf.id === "qwen_27b") {
+          const i180 = baseList.indexOf("qwen_llm");
+          if (i180 >= 0) baseList.splice(i180, 1);
+        } else if (targetWf.id === "qwen_llm") {
+          const i27 = baseList.indexOf("qwen_27b");
+          if (i27 >= 0) baseList.splice(i27, 1);
+        }
+        baseList.push(targetWf.id);
+      }
+      wfDraftProfiles = normalizeWorkflowProfiles(baseList, bootState.profile);
+      renderWorkflowDrawer();
+      return true;
+    }
+
+    // 渲染工作流选择抽屉列表（多选复选框 + 完成按钮计件；默认保留当前纵向滚动位置）
     function renderWorkflowDrawer(opts = {}) {
       const tabsEl = el("wf-cat-bar") || el("wf-cat-tabs");
       if (tabsEl) {
@@ -4248,6 +5494,14 @@
           btn.tabIndex = sel ? 0 : -1;
         });
       }
+      const selectedSet = wfDrawerOpen && Array.isArray(wfDraftProfiles)
+        ? wfDraftProfiles
+        : normalizeWorkflowProfiles(bootState.profiles, bootState.profile);
+      const closeBtn = el("wf-drawer-close");
+      if (closeBtn) {
+        closeBtn.textContent = selectedSet.length > 1 ? `完成(${selectedSet.length})✓` : "完成 ✓";
+      }
+
       const listEl = el("wf-drawer-list");
       if (!listEl) return;
       const prevScroll = listEl.scrollTop;
@@ -4266,11 +5520,12 @@
       }
 
       items.forEach((wf) => {
-        const isActive = wf.id === bootState.profile;
+        const isActive = selectedSet.includes(wf.id);
         const card = document.createElement("div");
         card.className = `wf-card${isActive ? " active" : ""}`;
         card.dataset.wf = wf.id;
-        card.setAttribute("role", "button");
+        card.setAttribute("role", "checkbox");
+        card.setAttribute("aria-checked", isActive ? "true" : "false");
         card.tabIndex = 0;
 
         const top = document.createElement("div");
@@ -4343,20 +5598,21 @@
 
       const extNote = document.createElement("div");
       extNote.className = "wf-ext-note";
-      extNote.textContent = "✨ 已预留多工作流滚动槽位 · 支持自由扩充预设或拖入自定义 JSON";
+      extNote.textContent = "✨ 支持多选混搭同驻（如 MiniMax + Qwen27B）· 勾选后点右上角「完成」生效";
       listEl.appendChild(extNote);
       listEl.scrollTop = (opts && opts.resetScroll) ? 0 : prevScroll;
     }
 
-    // 打开工作流抽屉：解除抽屉 inert、移入键盘焦点并对背景 #boot-pane 挂载 inert 隔离
+    // 打开工作流抽屉：快照当前已选组合作为多选草稿，解除抽屉 inert 并移入键盘焦点
     function openWorkflowDrawer() {
       const layer = el("wf-drawer-layer");
       const trig = el("wf-trigger-btn");
       const bootPane = el("boot-pane");
       const topBar = document.querySelector('.page-body[data-page="2"] .console-top-bar');
       if (!layer || !trig) return;
-      renderWorkflowDrawer();
+      wfDraftProfiles = [...normalizeWorkflowProfiles(bootState.profiles, bootState.profile)];
       wfDrawerOpen = true;
+      renderWorkflowDrawer();
       layer.removeAttribute("inert");
       layer.inert = false;
       layer.classList.add("open");
@@ -4388,13 +5644,14 @@
       });
     }
 
-    // 关闭工作流抽屉：先解除背景 inert 并将焦点归还 #wf-trigger-btn，再恢复抽屉 inert 与 aria-hidden
+    // 关闭工作流抽屉：默认丢弃未点「完成」的草稿，解除背景 inert 并归还焦点
     function closeWorkflowDrawer() {
       const layer = el("wf-drawer-layer");
       const trig = el("wf-trigger-btn");
       const bootPane = el("boot-pane");
       const topBar = document.querySelector('.page-body[data-page="2"] .console-top-bar');
       const wasOpen = Boolean(wfDrawerOpen || (layer && layer.classList.contains("open")));
+      wfDraftProfiles = null;
       if (bootPane) {
         bootPane.removeAttribute("inert");
         bootPane.inert = false;
@@ -4421,6 +5678,16 @@
       }
     }
 
+    function commitWorkflowDrawer() {
+      const committed = Array.isArray(wfDraftProfiles) && wfDraftProfiles.length > 0
+        ? [...wfDraftProfiles]
+        : [...normalizeWorkflowProfiles(bootState.profiles, bootState.profile)];
+      wfDraftProfiles = null;
+      selectWorkflowProfiles(committed, { forceGpuReset: true });
+      closeWorkflowDrawer();
+      return committed;
+    }
+
     function toggleWorkflowDrawer() {
       if (wfDrawerOpen) closeWorkflowDrawer();
       else openWorkflowDrawer();
@@ -4428,8 +5695,11 @@
 
     window.openWorkflowDrawer = openWorkflowDrawer;
     window.closeWorkflowDrawer = closeWorkflowDrawer;
+    window.commitWorkflowDrawer = commitWorkflowDrawer;
     window.selectWorkflowProfile = selectWorkflowProfile;
+    window.selectWorkflowProfiles = selectWorkflowProfiles;
     window.cycleWorkflowProfile = cycleWorkflowProfile;
+    window.getBootProfiles = () => [...bootState.profiles];
 
     el("wf-trigger-btn").addEventListener("click", () => {
       toggleWorkflowDrawer();
@@ -4462,7 +5732,7 @@
     }, { passive: false });
 
     el("wf-drawer-scrim").addEventListener("click", () => closeWorkflowDrawer());
-    el("wf-drawer-close").addEventListener("click", () => closeWorkflowDrawer());
+    el("wf-drawer-close").addEventListener("click", () => commitWorkflowDrawer());
 
     const wfCatBarEl = el("wf-cat-bar") || el("wf-cat-tabs");
     if (wfCatBarEl) {
@@ -4576,7 +5846,22 @@
         e.stopPropagation();
         const wfId = modBtn.dataset.wf;
         const modKey = modBtn.dataset.mod;
-        if (wfId && bootState.profile !== wfId) {
+        if (wfDrawerOpen && wfId) {
+          const curDraft = Array.isArray(wfDraftProfiles)
+            ? [...wfDraftProfiles]
+            : [...normalizeWorkflowProfiles(bootState.profiles, bootState.profile)];
+          if (!curDraft.includes(wfId)) {
+            if (wfId === "qwen_27b") {
+              const i180 = curDraft.indexOf("qwen_llm");
+              if (i180 >= 0) curDraft.splice(i180, 1);
+            } else if (wfId === "qwen_llm") {
+              const i27 = curDraft.indexOf("qwen_27b");
+              if (i27 >= 0) curDraft.splice(i27, 1);
+            }
+            curDraft.push(wfId);
+            wfDraftProfiles = normalizeWorkflowProfiles(curDraft, bootState.profile);
+          }
+        } else if (wfId && !bootState.profiles.includes(wfId)) {
           selectWorkflowProfile(wfId);
         }
         const wf = getWorkflowMeta(wfId || bootState.profile);
@@ -4609,8 +5894,7 @@
 
       const card = e.target.closest(".wf-card");
       if (!card || !card.dataset.wf) return;
-      selectWorkflowProfile(card.dataset.wf);
-      closeWorkflowDrawer();
+      toggleDraftWorkflowProfile(card.dataset.wf);
     });
 
     el("wf-drawer-list").addEventListener("keydown", (e) => {
@@ -4626,11 +5910,12 @@
       if (!card) return;
       const g = card.dataset.gpu;
       if (!GPU_ORDER.includes(g)) return;
-      const wf = getWorkflowMeta(bootState.profile);
+      const profs = normalizeWorkflowProfiles(bootState.profiles, bootState.profile);
+      const anyAutoHm = profs.some((p) => getWorkflowMeta(p).autoHmOnA100);
       bootState.gpu = g;
       bootState.gpuManual = true;
       if (GPU_SPECS[g] && GPU_SPECS[g].hmLock) bootState.high_mem = false;
-      else if (wf.autoHmOnA100 && g === "A100") bootState.high_mem = true;
+      else if (anyAutoHm && g === "A100") bootState.high_mem = true;
       clearBootArm();
       renderBootPanel(latestSnap);
       if (window.pywebview && window.pywebview.api) {
@@ -4689,8 +5974,10 @@
       }
       clearBootArm();
 
+      const profs = normalizeWorkflowProfiles(bootState.profiles, bootState.profile);
       const payload = {
-        profile: bootState.profile,
+        profile: profs[0],
+        profiles: profs,
         gpu: bootState.gpu,
         high_mem: curSpec.hmLock ? false : Boolean(bootState.high_mem),
         minimax_r2v: Boolean(bootState.minimax_r2v),
@@ -4698,6 +5985,9 @@
         llm_quant: String(bootState.llm_quant || "UD-Q4_K_XL"),
         llm_ctx: Number(bootState.llm_ctx || 32768),
         llm_mmproj: Boolean(bootState.llm_mmproj),
+        llm27_quant: String(bootState.llm27_quant || "UD-Q4_K_XL"),
+        llm27_ctx: Number(bootState.llm27_ctx || 65536),
+        llm27_mmproj: Boolean(bootState.llm27_mmproj),
         recreate: recreate
       };
       const res = await window.pywebview.api.start_instance(payload);
@@ -4707,6 +5997,25 @@
         renderBootPanel(latestSnap);
         renderOpsPanel(latestSnap);
         renderComfyState(latestSnap ? latestSnap.comfy : null);
+      }
+      if (res && res.needs_onboarding) {
+        const targetTab = res.target_tab || "vault";
+        showToast(res.message || "需先完成账号或云盘接入", {
+          duration: 6000,
+          isError: true,
+          choices: [
+            {
+              label: "去绑定",
+              primary: true,
+              onClick: () => {
+                hideToast();
+                setAcctTab(targetTab, true);
+                setPage(4);
+              }
+            }
+          ]
+        });
+        return;
       }
       if (res && res.message) {
         showToast(res.message, { duration: 2800, isError: !res.ok });
@@ -4739,7 +6048,21 @@
       btn.textContent = "✕ 中止";
     });
 
+    el("status-pill").addEventListener("click", () => {
+      const ob = latestSnap && latestSnap.onboarding;
+      if (ob && ob.auth_missing) {
+        setAcctTab("vault", true);
+        setPage(4);
+      }
+    });
+
     el("comfy-strip").addEventListener("click", async () => {
+      const ob = latestSnap && latestSnap.onboarding;
+      if ((!latestSnap || !latestSnap.is_running) && ob && (!ob.colab_cli_ok || ob.auth_missing)) {
+        setAcctTab(!ob.colab_cli_ok ? "env" : "vault", true);
+        setPage(4);
+        return;
+      }
       const deploy = latestSnap && latestSnap.deploy;
       if (deploy && deploy.active) {
         setConsoleTab("boot", true);
@@ -4758,9 +6081,13 @@
       }
       const comfy = latestSnap.comfy;
       if (!comfy || !window.pywebview || !window.pywebview.api) return;
-      if (!comfy.has_error && comfy.service_kind === "llm" && comfy.online) {
+      const sk = String(comfy.service_kind || "comfy");
+      if (!comfy.has_error && (sk === "llm" || (sk === "dual" && !comfy.comfy_online && comfy.llm_online)) && comfy.online) {
         showToast("正在打开 Qwen3.8 对话页...");
-        const res = await window.pywebview.api.open_comfy_tunnel();
+        const fn = typeof window.pywebview.api.open_llm_tunnel === "function"
+          ? window.pywebview.api.open_llm_tunnel
+          : window.pywebview.api.open_comfy_tunnel;
+        const res = await fn.call(window.pywebview.api);
         if (res && res.message) {
           announceActionStatus(res.message);
           showToast(res.message, { duration: 2800, isError: !res.ok });
@@ -4770,6 +6097,7 @@
       let action = null;
       if (comfy.has_error) action = "error";
       else if ((comfy.pending_pull_count || 0) > 0) action = "outputs";
+      else if (sk === "dual" && (comfy.comfy_online || comfy.online)) action = "open_comfy";
       if (!action) return;
       const res = await window.pywebview.api.handle_toast_action(action);
       if (res && res.message) {
@@ -4959,6 +6287,36 @@
         return;
       }
 
+      if (evt.type === "dual_image_choice") {
+        const paths = Array.isArray(evt.paths) ? evt.paths : [];
+        showToast("🖼️ 图片投递:", {
+          duration: 12000,
+          choices: [
+            {
+              label: "传参考图",
+              primary: true,
+              onClick: () => {
+                showToast("📤 正在投递到 ComfyUI...", 5000);
+                if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.confirm_dual_image_drop === "function") {
+                  window.pywebview.api.confirm_dual_image_drop(paths, "comfy");
+                }
+              }
+            },
+            {
+              label: "27B识图",
+              primary: false,
+              onClick: () => {
+                showToast("💬 正在打开 Qwen3.8 对话页...", 4000);
+                if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.confirm_dual_image_drop === "function") {
+                  window.pywebview.api.confirm_dual_image_drop(paths, "llm");
+                }
+              }
+            }
+          ]
+        });
+        return;
+      }
+
       if (evt.type === "png_workflow_choice") {
         showToast("🔍 含工作流:", {
           duration: 12000,
@@ -5102,8 +6460,512 @@
           duration: 6000,
           isError: true
         });
+        return;
+      }
+
+      if (evt.type === "onboarding_event") {
+        if (evt.snapshot) {
+          window.renderState(evt.snapshot);
+        }
+        if (evt.summary) {
+          showToast(evt.summary, {
+            duration: 3800,
+            isError: evt.ok === false
+          });
+        }
       }
     };
+
+    /* 第 5 页：账号保险箱、云盘与环境配置交互 & 毛玻璃抽屉 */
+    function clearCfResetArm() {
+      clearTimeout(cfClearResetTimer);
+      cfClearArmedUntil = 0;
+    }
+
+    function openAccountDrawer(mode, opts = {}) {
+      const layer = el("acct-drawer-layer");
+      if (!layer) return;
+      acctDrawerMode = mode || "oauth";
+      if (mode === "rename" && opts.account) {
+        acctRenameTarget = { ...opts.account };
+      } else if (mode !== "rename") {
+        acctRenameTarget = null;
+      }
+      clearCfResetArm();
+      renderAccountDrawerContent();
+      acctDrawerOpen = true;
+      layer.removeAttribute("inert");
+      layer.inert = false;
+      layer.classList.add("open");
+      layer.setAttribute("aria-hidden", "false");
+      const firstInput = layer.querySelector("input, button:not(#acct-drawer-close)");
+      if (firstInput && typeof firstInput.focus === "function") {
+        setTimeout(() => firstInput.focus({ preventScroll: true }), 40);
+      }
+      scheduleSyncRegion();
+    }
+
+    function closeAccountDrawer() {
+      const layer = el("acct-drawer-layer");
+      acctDrawerOpen = false;
+      clearCfResetArm();
+      if (!layer) return;
+      if (layer.contains(document.activeElement) && document.activeElement.blur) {
+        document.activeElement.blur();
+      }
+      layer.classList.remove("open");
+      layer.setAttribute("aria-hidden", "true");
+      layer.setAttribute("inert", "");
+      layer.inert = true;
+      scheduleSyncRegion();
+    }
+
+    function renderAccountDrawerContent() {
+      const titleEl = el("acct-drawer-title");
+      const bodyEl = el("acct-drawer-body");
+      if (!bodyEl || !titleEl) return;
+      const ob = (latestSnap && latestSnap.onboarding) || {};
+      bodyEl.innerHTML = "";
+
+      if (acctDrawerMode === "oauth") {
+        titleEl.textContent = "🔑 绑定 Google Colab 账号";
+        const tip = document.createElement("div");
+        tip.className = "acct-drawer-tip";
+        tip.textContent = "在浏览器选择 Google Ultra 账号并点「继续」后，点击页面里的复制授权码，再回来点下方粘贴绑定。";
+        bodyEl.appendChild(tip);
+
+        const f1 = document.createElement("div");
+        f1.className = "acct-field";
+        const l1 = document.createElement("label");
+        l1.setAttribute("for", "inp-oauth-label");
+        l1.textContent = "账号备注名（选填）";
+        const i1 = document.createElement("input");
+        i1.id = "inp-oauth-label";
+        i1.className = "acct-input";
+        i1.type = "text";
+        i1.maxLength = 16;
+        i1.placeholder = "如: Ultra 主号 / 2号生图";
+        f1.appendChild(l1);
+        f1.appendChild(i1);
+        bodyEl.appendChild(f1);
+
+        const f2 = document.createElement("div");
+        f2.className = "acct-field";
+        const l2 = document.createElement("label");
+        l2.setAttribute("for", "inp-oauth-code");
+        l2.textContent = "Google 授权码（留空时点下方可自动从剪贴板读取）";
+        const i2 = document.createElement("input");
+        i2.id = "inp-oauth-code";
+        i2.className = "acct-input";
+        i2.type = "text";
+        i2.placeholder = "4/0A... 或包含 code= 的整串地址";
+        f2.appendChild(l2);
+        f2.appendChild(i2);
+        bodyEl.appendChild(f2);
+
+        const submitBtn = document.createElement("button");
+        submitBtn.id = "btn-oauth-paste-submit";
+        submitBtn.type = "button";
+        submitBtn.className = "boot-start-btn";
+        submitBtn.textContent = "📋 一键读取剪贴板并绑定";
+        submitBtn.addEventListener("click", async () => {
+          if (!window.pywebview || !window.pywebview.api) return;
+          let rawCode = String(i2.value || "").trim();
+          if (!rawCode && typeof window.pywebview.api.read_clipboard_text === "function") {
+            const clip = await window.pywebview.api.read_clipboard_text();
+            if (clip) {
+              rawCode = String(clip).trim();
+              i2.value = rawCode;
+            }
+          }
+          if (!rawCode) {
+            showToast("剪贴板为空，请先在浏览器复制 Google 授权码", { duration: 2400, isError: true });
+            return;
+          }
+          submitBtn.textContent = "⏳ 正在验证授权并同步余额...";
+          const res = await window.pywebview.api.complete_colab_oauth(rawCode, String(i1.value || "").trim());
+          submitBtn.textContent = "📋 一键读取剪贴板并绑定";
+          if (res && res.snapshot) window.renderState(res.snapshot);
+          if (res && res.ok) {
+            closeAccountDrawer();
+            showToast(res.message || "✅ 账号绑定成功", 3000);
+          } else {
+            showToast((res && res.message) || "授权绑定失败", { duration: 3200, isError: true });
+          }
+        });
+        bodyEl.appendChild(submitBtn);
+
+        const row = document.createElement("div");
+        row.className = "acct-btn-row";
+        const reopenBtn = document.createElement("button");
+        reopenBtn.type = "button";
+        reopenBtn.className = "env-btn";
+        reopenBtn.textContent = "🌐 重开授权网页";
+        reopenBtn.addEventListener("click", async () => {
+          if (!window.pywebview || !window.pywebview.api) return;
+          const res = await window.pywebview.api.start_colab_oauth();
+          if (res && res.snapshot) window.renderState(res.snapshot);
+          if (res && res.message) showToast(res.message, { duration: 2400, isError: !res.ok });
+        });
+        const cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.className = "env-btn warn";
+        cancelBtn.textContent = "取消本次绑定";
+        cancelBtn.addEventListener("click", async () => {
+          if (window.pywebview && window.pywebview.api) {
+            const res = await window.pywebview.api.cancel_colab_oauth();
+            if (res && res.snapshot) window.renderState(res.snapshot);
+          }
+          closeAccountDrawer();
+        });
+        row.appendChild(reopenBtn);
+        row.appendChild(cancelBtn);
+        bodyEl.appendChild(row);
+        return;
+      }
+
+      if (acctDrawerMode === "rename" && acctRenameTarget) {
+        titleEl.textContent = "✎ 修改账号备注";
+        const tip = document.createElement("div");
+        tip.className = "acct-drawer-tip";
+        tip.textContent = `当前账号: ${acctRenameTarget.email_masked || acctRenameTarget.id}`;
+        bodyEl.appendChild(tip);
+
+        const f = document.createElement("div");
+        f.className = "acct-field";
+        const l = document.createElement("label");
+        l.setAttribute("for", "inp-rename-label");
+        l.textContent = "新备注名（最多 16 字）";
+        const inp = document.createElement("input");
+        inp.id = "inp-rename-label";
+        inp.className = "acct-input";
+        inp.type = "text";
+        inp.maxLength = 16;
+        inp.value = String(acctRenameTarget.label || "");
+        f.appendChild(l);
+        f.appendChild(inp);
+        bodyEl.appendChild(f);
+
+        const saveBtn = document.createElement("button");
+        saveBtn.id = "btn-rename-save";
+        saveBtn.type = "button";
+        saveBtn.className = "boot-start-btn";
+        saveBtn.textContent = "✓ 保存备注";
+        saveBtn.addEventListener("click", async () => {
+          if (!window.pywebview || !window.pywebview.api) return;
+          const res = await window.pywebview.api.rename_colab_account(acctRenameTarget.id, inp.value);
+          if (res && res.snapshot) window.renderState(res.snapshot);
+          if (res && res.ok) {
+            closeAccountDrawer();
+            showToast(res.message || "已更新备注", 2200);
+          } else {
+            showToast((res && res.message) || "修改失败", { duration: 2400, isError: true });
+          }
+        });
+        bodyEl.appendChild(saveBtn);
+        return;
+      }
+
+      if (acctDrawerMode === "tunnel") {
+        titleEl.textContent = "🌐 Cloudflare 固定域名配置";
+        const cf = ob.cf_tunnel || {};
+        const tip = document.createElement("div");
+        tip.className = "acct-drawer-tip";
+        tip.textContent = "普通用户推荐直接用免费临时隧道；仅当你自有 Cloudflare 域名时需要填写（密钥单向加密存储，不回显旧值）。";
+        bodyEl.appendChild(tip);
+
+        const mkField = (id, labelTxt, type, val, ph) => {
+          const wrap = document.createElement("div");
+          wrap.className = "acct-field";
+          const lb = document.createElement("label");
+          lb.setAttribute("for", id);
+          lb.textContent = labelTxt;
+          const inp = document.createElement("input");
+          inp.id = id;
+          inp.className = "acct-input";
+          inp.type = type;
+          inp.value = val || "";
+          inp.placeholder = ph || "";
+          wrap.appendChild(lb);
+          wrap.appendChild(inp);
+          return { wrap, inp };
+        };
+
+        const fTok = mkField("inp-cf-token", "Tunnel Token（命名隧道令牌）", "password", "", cf.has_token ? "已保存密钥（留空则保持不变）" : "粘贴 Cloudflare Tunnel Token");
+        const fComfy = mkField("inp-cf-comfy", "ComfyUI 固定域名", "url", cf.comfy_url || "", "https://comfy.example.com");
+        const fLlm = mkField("inp-cf-llm", "LLM 对话固定域名（选填）", "url", cf.llm_url || "", "https://llm.example.com");
+        const fKey = mkField("inp-cf-llmkey", "固定 LLM API Key（选填≥16位）", "password", "", cf.has_fixed_llm_key ? "已配置固定 Key（留空不变）" : "留空则每次开机随机生成");
+        bodyEl.appendChild(fTok.wrap);
+        bodyEl.appendChild(fComfy.wrap);
+        bodyEl.appendChild(fLlm.wrap);
+        bodyEl.appendChild(fKey.wrap);
+
+        const btnRow = document.createElement("div");
+        btnRow.className = "acct-btn-row";
+        const saveCfBtn = document.createElement("button");
+        saveCfBtn.id = "btn-cf-save";
+        saveCfBtn.type = "button";
+        saveCfBtn.className = "env-btn primary";
+        saveCfBtn.textContent = "✓ 保存启用";
+        saveCfBtn.addEventListener("click", async () => {
+          if (!window.pywebview || !window.pywebview.api) return;
+          const res = await window.pywebview.api.save_cf_tunnel_config({
+            tunnel_token: fTok.inp.value,
+            comfy_url: fComfy.inp.value,
+            llm_url: fLlm.inp.value,
+            llm_api_key: fKey.inp.value
+          });
+          if (res && res.snapshot) window.renderState(res.snapshot);
+          if (res && res.ok) {
+            closeAccountDrawer();
+            showToast(res.message || "已保存固定隧道", 2600);
+          } else {
+            showToast((res && res.message) || "保存失败", { duration: 2800, isError: true });
+          }
+        });
+
+        const clearCfBtn = document.createElement("button");
+        clearCfBtn.id = "btn-cf-clear";
+        clearCfBtn.type = "button";
+        clearCfBtn.className = "env-btn";
+        clearCfBtn.textContent = "切回免费隧道";
+        clearCfBtn.addEventListener("click", async () => {
+          const now = Date.now();
+          if (now > cfClearArmedUntil) {
+            cfClearArmedUntil = now + 4000;
+            clearCfBtn.className = "env-btn warn";
+            clearCfBtn.textContent = "⚠️ 再点确认";
+            clearTimeout(cfClearResetTimer);
+            cfClearResetTimer = setTimeout(() => {
+              cfClearArmedUntil = 0;
+              clearCfBtn.className = "env-btn";
+              clearCfBtn.textContent = "切回免费隧道";
+            }, 4000);
+            return;
+          }
+          clearCfResetArm();
+          if (window.pywebview && window.pywebview.api) {
+            const res = await window.pywebview.api.clear_cf_tunnel_config();
+            if (res && res.snapshot) window.renderState(res.snapshot);
+            if (res && res.ok) {
+              closeAccountDrawer();
+              showToast(res.message || "已切回免费隧道", 2400);
+            }
+          }
+        });
+        btnRow.appendChild(saveCfBtn);
+        btnRow.appendChild(clearCfBtn);
+        bodyEl.appendChild(btnRow);
+        return;
+      }
+
+      // mode === "tools"
+      titleEl.textContent = "🧰 运行组件安装与路径管理";
+      const tp = ob.tool_paths || {};
+      const cmdTip = document.createElement("div");
+      cmdTip.className = "acct-drawer-tip";
+      cmdTip.textContent = "新电脑未装命令行工具时可先复制下方命令在终端安装，或直接手动选择本地程序路径：";
+      bodyEl.appendChild(cmdTip);
+
+      const cmdRow = document.createElement("div");
+      cmdRow.className = "acct-btn-row";
+      const cpColab = document.createElement("button");
+      cpColab.type = "button";
+      cpColab.className = "env-btn";
+      cpColab.textContent = "📋 复制装 colab-cli";
+      cpColab.addEventListener("click", async () => {
+        const cmdTxt = "uv tool install google-colab-cli";
+        if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.copy_text === "function") {
+          await window.pywebview.api.copy_text(cmdTxt);
+        }
+        showToast("已复制: uv tool install google-colab-cli", 2400);
+      });
+      const cpRclone = document.createElement("button");
+      cpRclone.type = "button";
+      cpRclone.className = "env-btn";
+      cpRclone.textContent = "📋 复制装 rclone";
+      cpRclone.addEventListener("click", async () => {
+        const cmdTxt = "winget install Rclone.Rclone";
+        if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.copy_text === "function") {
+          await window.pywebview.api.copy_text(cmdTxt);
+        }
+        showToast("已复制: winget install Rclone.Rclone", 2400);
+      });
+      cmdRow.appendChild(cpColab);
+      cmdRow.appendChild(cpRclone);
+      bodyEl.appendChild(cmdRow);
+
+      [
+        { kind: "colab_py", label: "colab-cli Python", val: tp.colab_py },
+        { kind: "colab_exe", label: "colab.exe", val: tp.colab_exe },
+        { kind: "rclone_exe", label: "rclone.exe", val: tp.rclone_exe },
+        { kind: "rclone_conf", label: "rclone.conf", val: tp.rclone_conf }
+      ].forEach((item) => {
+        const row = document.createElement("div");
+        row.className = "tool-path-row";
+        const meta = document.createElement("div");
+        meta.className = "tool-path-meta";
+        const nm = document.createElement("span");
+        nm.className = "tool-path-name";
+        nm.textContent = item.label;
+        const vl = document.createElement("span");
+        vl.className = "tool-path-val";
+        vl.title = item.val || "";
+        vl.textContent = formatToolShortName(item.val);
+        meta.appendChild(nm);
+        meta.appendChild(vl);
+        const pickBtn = document.createElement("button");
+        pickBtn.type = "button";
+        pickBtn.className = "env-btn";
+        pickBtn.textContent = "定位";
+        pickBtn.addEventListener("click", async () => {
+          if (!window.pywebview || !window.pywebview.api) return;
+          const res = await window.pywebview.api.pick_tool_binary(item.kind);
+          if (res && res.snapshot) window.renderState(res.snapshot);
+          if (res && !res.cancelled && res.message) {
+            renderAccountDrawerContent();
+            showToast(res.message, { duration: 2400, isError: !res.ok });
+          }
+        });
+        row.appendChild(meta);
+        row.appendChild(pickBtn);
+        bodyEl.appendChild(row);
+      });
+
+      const resetBtn = document.createElement("button");
+      resetBtn.type = "button";
+      resetBtn.className = "env-btn";
+      resetBtn.textContent = "↻ 全部恢复自动探测路径";
+      resetBtn.addEventListener("click", async () => {
+        if (!window.pywebview || !window.pywebview.api) return;
+        const res = await window.pywebview.api.reset_tool_paths();
+        if (res && res.snapshot) window.renderState(res.snapshot);
+        renderAccountDrawerContent();
+        if (res && res.message) showToast(res.message, 2200);
+      });
+      bodyEl.appendChild(resetBtn);
+    }
+
+    el("acct-tabs").addEventListener("click", (e) => {
+      const btn = e.target.closest(".console-tab-btn");
+      if (!btn) return;
+      setAcctTab(btn.dataset.tab, true);
+    });
+
+    el("env-health-pill").addEventListener("click", async () => {
+      if (!window.pywebview || !window.pywebview.api) return;
+      const btn = el("btn-refresh");
+      btn.classList.add("spin");
+      try {
+        const res = await window.pywebview.api.probe_environment_deep();
+        if (res && res.snapshot) window.renderState(res.snapshot);
+        if (res && res.message) showToast(res.message, 2800);
+      } finally {
+        btn.classList.remove("spin");
+      }
+    });
+
+    el("acct-vault-list").addEventListener("click", async (e) => {
+      const btn = e.target.closest("button[data-action]");
+      if (!btn || !window.pywebview || !window.pywebview.api) return;
+      const act = btn.dataset.action;
+      const aid = btn.dataset.id;
+      if (!aid) return;
+      const accounts = (latestSnap && latestSnap.onboarding && latestSnap.onboarding.accounts) || [];
+      const acctObj = accounts.find((a) => String(a.id) === String(aid)) || null;
+
+      if (act === "rename" && acctObj) {
+        openAccountDrawer("rename", { account: acctObj });
+        return;
+      }
+
+      if (act === "switch") {
+        btn.textContent = "切换中…";
+        showToast(`⏳ 正在秒切至 ${(acctObj && acctObj.label) || "目标账号"}...`, 4000);
+        const res = await window.pywebview.api.switch_colab_account(aid);
+        if (res && res.snapshot) window.renderState(res.snapshot);
+        showToast((res && res.message) || "切换完成", { duration: 2800, isError: !(res && res.ok) });
+        return;
+      }
+
+      if (act === "remove") {
+        if (acctDelArmedId !== aid) {
+          acctDelArmedId = aid;
+          renderAccountEnvPage(latestSnap);
+          clearTimeout(acctDelResetTimer);
+          acctDelResetTimer = setTimeout(() => {
+            acctDelArmedId = "";
+            renderAccountEnvPage(latestSnap);
+          }, 4000);
+          return;
+        }
+        clearTimeout(acctDelResetTimer);
+        acctDelArmedId = "";
+        const res = await window.pywebview.api.remove_colab_account(aid);
+        if (res && res.snapshot) window.renderState(res.snapshot);
+        showToast((res && res.message) || "已移除账号", { duration: 2600, isError: !(res && res.ok) });
+      }
+    });
+
+    el("btn-acct-add").addEventListener("click", async () => {
+      if (!window.pywebview || !window.pywebview.api) return;
+      const ob = (latestSnap && latestSnap.onboarding) || {};
+      if (ob.oauth_awaiting_code) {
+        openAccountDrawer("oauth");
+        return;
+      }
+      const res = await window.pywebview.api.start_colab_oauth();
+      if (res && res.snapshot) window.renderState(res.snapshot);
+      if (res && res.ok) {
+        openAccountDrawer("oauth");
+        showToast(res.message || "已打开浏览器授权页", 3200);
+      } else {
+        showToast((res && res.message) || "拉起授权失败", { duration: 3000, isError: true });
+      }
+    });
+
+    el("btn-gdrive-bind").addEventListener("click", async () => {
+      if (!window.pywebview || !window.pywebview.api) return;
+      const ob = (latestSnap && latestSnap.onboarding) || {};
+      if (ob.gdrive_binding) {
+        const res = await window.pywebview.api.cancel_gdrive_bind();
+        if (res && res.snapshot) window.renderState(res.snapshot);
+        if (res && res.message) showToast(res.message, 2200);
+        return;
+      }
+      const res = await window.pywebview.api.start_gdrive_bind();
+      if (res && res.snapshot) window.renderState(res.snapshot);
+      if (res && res.message) showToast(res.message, { duration: 3500, isError: !res.ok });
+    });
+
+    el("btn-gdrive-import").addEventListener("click", async () => {
+      if (!window.pywebview || !window.pywebview.api) return;
+      const res = await window.pywebview.api.pick_rclone_conf();
+      if (!res || res.cancelled) return;
+      if (res.snapshot) window.renderState(res.snapshot);
+      if (res.message) showToast(res.message, { duration: 2800, isError: !res.ok });
+    });
+
+    el("btn-cf-config").addEventListener("click", () => openAccountDrawer("tunnel"));
+    el("btn-tools-config").addEventListener("click", () => openAccountDrawer("tools"));
+    el("btn-copy-install").addEventListener("click", async () => {
+      const ob = (latestSnap && latestSnap.onboarding) || {};
+      const cmds = [];
+      if (!ob.colab_cli_ok) cmds.push("uv tool install google-colab-cli");
+      if (!ob.rclone_exe_ok) cmds.push("winget install Rclone.Rclone");
+      const cmdTxt = cmds.join(" && ") || "uv tool install google-colab-cli";
+      if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.copy_text === "function") {
+        await window.pywebview.api.copy_text(cmdTxt);
+      }
+      showToast(`已复制安装命令: ${cmdTxt}`, 2800);
+    });
+
+    el("acct-drawer-scrim").addEventListener("click", () => closeAccountDrawer());
+    el("acct-drawer-close").addEventListener("click", () => closeAccountDrawer());
+    el("acct-drawer-layer").addEventListener("wheel", (e) => e.stopPropagation(), { passive: true });
+    window.setAcctTab = setAcctTab;
+    window.openAccountDrawer = openAccountDrawer;
+    window.closeAccountDrawer = closeAccountDrawer;
 
     /* 原生 Win32 拖拽接管 + 轻量单击互动 */
     function bindDragAndTap(targetEl, isPet) {

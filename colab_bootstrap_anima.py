@@ -826,8 +826,44 @@ def start_comfyui_and_wait():
     COMFY_OUT.mkdir(parents=True, exist_ok=True)
     COMFY_DB.mkdir(parents=True, exist_ok=True)
 
+    reserve_vram_raw = (os.environ.get("COMFY_RESERVE_VRAM") or "").strip()
+    ensure_reserve = (os.environ.get("COMFY_ENSURE_RESERVE_VRAM") or "").strip() == "1"
+    reserve_val: str | None = None
+    if reserve_vram_raw:
+        try:
+            if float(reserve_vram_raw) > 0:
+                reserve_val = reserve_vram_raw
+        except ValueError:
+            reserve_val = None
+
     existing = _probe_comfy_ready()
-    if existing:
+    need_restart = False
+    if existing and ensure_reserve and reserve_val:
+        pg = subprocess.run(
+            ["pgrep", "-af", "main.py.*8188"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+        )
+        if "--reserve-vram" not in (pg.stdout or ""):
+            need_restart = True
+            print(
+                f"检测到存量 ComfyUI 未启用 --reserve-vram {reserve_val}（双栖显存保护），正在平滑重启...",
+                flush=True,
+            )
+            subprocess.run(
+                ["pkill", "-f", "main.py.*8188"],
+                check=False,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            for _ in range(15):
+                if _probe_comfy_ready() is None:
+                    break
+                time.sleep(1)
+
+    if existing and not need_restart:
         print("ComfyUI 已在运行中，无需重复启动。", flush=True)
         print(f"system_stats: {existing[:300]}", flush=True)
     else:
@@ -844,6 +880,8 @@ def start_comfyui_and_wait():
             "--output-directory", str(COMFY_OUT),
             "--database-url", db_url,
         ]
+        if reserve_val:
+            cmd.extend(["--reserve-vram", reserve_val])
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
 
@@ -891,6 +929,7 @@ def start_cloudflared_tunnel(force_restart: bool = False) -> str:
     cf_token = (os.environ.get("CF_TUNNEL_TOKEN") or "").strip()
     cf_url = (os.environ.get("CF_TUNNEL_URL") or "").strip().rstrip("/")
     use_named = bool(cf_token and cf_url)
+    cohost_llm = (os.environ.get("COMFY_COHOST_LLM") or "").strip() == "1"
 
     pgrep_res = subprocess.run(
         ["pgrep", "-af" if use_named else "-f", "cloudflared tunnel"],
@@ -899,13 +938,17 @@ def start_cloudflared_tunnel(force_restart: bool = False) -> str:
         text=True,
     )
     if use_named:
+        log_ok = CLOUDFLARED_LOG.is_file() and "Registered tunnel connection" in CLOUDFLARED_LOG.read_text(encoding="utf-8", errors="ignore")
         if (
             not force_restart
             and pgrep_res.returncode == 0
             and " run" in (pgrep_res.stdout or "")
-            and TUNNEL_URL_FILE.is_file()
-            and TUNNEL_URL_FILE.read_text(encoding="utf-8", errors="ignore").strip().rstrip("/") == cf_url
+            and (
+                (TUNNEL_URL_FILE.is_file() and TUNNEL_URL_FILE.read_text(encoding="utf-8", errors="ignore").strip().rstrip("/") == cf_url)
+                or (cohost_llm and log_ok)
+            )
         ):
+            TUNNEL_URL_FILE.write_text(cf_url + "\n", encoding="utf-8")
             print("========================================", flush=True)
             print(f"COMFYUI_TUNNEL_URL: {cf_url}", flush=True)
             print("========================================", flush=True)
@@ -920,8 +963,9 @@ def start_cloudflared_tunnel(force_restart: bool = False) -> str:
             print("========================================", flush=True)
             return url
 
+    kill_pat = f"cloudflared tunnel.*8188" if (cohost_llm and not use_named) else "cloudflared tunnel"
     subprocess.run(
-        ["pkill", "-f", "cloudflared tunnel"],
+        ["pkill", "-f", kill_pat],
         check=False,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,

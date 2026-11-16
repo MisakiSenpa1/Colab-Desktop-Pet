@@ -197,6 +197,7 @@ def _render_fallback_sprite(mood: str) -> tuple[Image.Image, bytes]:
     return res
 
 
+
 def _current_desktop_tag() -> str:
     """获取当前线程所属 Win32 桌面名称并清洗为互斥量后缀，避免跨桌面误锁。"""
     user32 = ctypes.windll.user32
@@ -778,6 +779,10 @@ class PetBridgeApi:
     def open_comfy_tunnel(self) -> dict[str, Any]:
         return self._apply_clipboard_and_redact(self._backend.open_comfy_tunnel())
 
+    def open_llm_tunnel(self) -> dict[str, Any]:
+        """打开 Qwen3.8 对话网页并将密钥写入剪贴板（双栖或纯 LLM 模式均适用）。"""
+        return self._apply_clipboard_and_redact(self._backend.open_llm_tunnel())
+
     def open_comfy_workflow(self, workflow_name: str) -> dict[str, Any]:
         """按文件名直铺指定工作流到云端 ComfyUI 画布。"""
         return self._apply_clipboard_and_redact(
@@ -815,6 +820,134 @@ class PetBridgeApi:
         except Exception:
             pass
 
+    def _get_clipboard_text(self) -> str:
+        """在 WinForms UI 线程安全读取系统剪贴板文本。"""
+        if not self._window or not self._window.native:
+            return ""
+        form = self._window.native
+        holder = [""]
+
+        def _read() -> None:
+            try:
+                if Clipboard.ContainsText():
+                    holder[0] = str(Clipboard.GetText() or "")
+            except Exception:
+                holder[0] = ""
+
+        try:
+            form.Invoke(DotNetAction(_read))
+        except Exception:
+            return ""
+        return holder[0]
+
+    def read_clipboard_text(self) -> str:
+        """提供给前端用于一键粘贴 Google OAuth 授权码。"""
+        return self._get_clipboard_text()
+
+    def copy_text(self, text: str) -> dict[str, Any]:
+        """将命令或文本写入系统剪贴板。"""
+        raw = str(text or "")
+        if not raw:
+            return {"ok": False, "message": "内容为空"}
+        self._set_clipboard(raw)
+        return {"ok": True}
+
+    def start_colab_oauth(self) -> dict[str, Any]:
+        """生成带账号选择器的 Google OAuth2 授权链接并打开浏览器。"""
+        self._peek_wake_until = max(self._peek_wake_until, time.monotonic() + 30.0)
+        return self._backend.start_colab_oauth()
+
+    def cancel_colab_oauth(self) -> dict[str, Any]:
+        """取消等待中的 Google 账号授权流程。"""
+        return self._backend.cancel_colab_oauth()
+
+    def complete_colab_oauth(self, code: str, label: str = "") -> dict[str, Any]:
+        """提交 Google 授权码完成绑定或新增 Ultra 账号。"""
+        return self._backend.complete_colab_oauth(code, label=label)
+
+    def switch_colab_account(self, acct_id: str) -> dict[str, Any]:
+        """秒切到凭据保险箱中的另一组 Google Ultra 账号。"""
+        return self._backend.switch_colab_account(acct_id)
+
+    def rename_colab_account(self, acct_id: str, label: str) -> dict[str, Any]:
+        """修改指定已绑定账号的备注名称。"""
+        return self._backend.rename_colab_account(acct_id, label)
+
+    def remove_colab_account(self, acct_id: str) -> dict[str, Any]:
+        """从保险箱与本地凭据中移除指定 Google 账号。"""
+        return self._backend.remove_colab_account(acct_id)
+
+    def start_gdrive_bind(self) -> dict[str, Any]:
+        """拉起 rclone 浏览器一键授权绑定 [gdrive_save] 云盘。"""
+        self._peek_wake_until = max(self._peek_wake_until, time.monotonic() + 30.0)
+        return self._backend.start_gdrive_bind()
+
+    def cancel_gdrive_bind(self) -> dict[str, Any]:
+        """中止等待中的 Google Drive 浏览器授权。"""
+        return self._backend.cancel_gdrive_bind()
+
+    def probe_environment_deep(self) -> dict[str, Any]:
+        """执行本地工具、云盘空间与账号连通性深度检测。"""
+        return self._backend.probe_environment_deep()
+
+    def save_cf_tunnel_config(self, config: dict[str, Any] | None = None) -> dict[str, Any]:
+        """单向安全写入 Cloudflare 固定域名隧道配置。"""
+        return self._backend.save_cf_tunnel_config(config or {})
+
+    def clear_cf_tunnel_config(self) -> dict[str, Any]:
+        """清除固定域名配置，切回免费临时隧道。"""
+        return self._backend.clear_cf_tunnel_config()
+
+    def reset_tool_paths(self) -> dict[str, Any]:
+        """清除自定义工具路径，恢复跨设备自动探测。"""
+        return self._backend.reset_tool_paths()
+
+    def open_local_outputs_dir(self) -> dict[str, Any]:
+        """一键打开本机历史成图产出目录。"""
+        return self._backend.open_local_outputs_dir()
+
+    def pick_rclone_conf(self) -> dict[str, Any]:
+        """打开本地文件选择器导入现有 rclone.conf 配置文件。"""
+        if not self._window:
+            return {"ok": False, "message": "窗口未就绪"}
+        self._in_dialog = True
+        self._peek_wake_until = max(self._peek_wake_until, time.monotonic() + 4.0)
+        try:
+            selected = self._window.create_file_dialog(
+                webview.FileDialog.OPEN,
+                allow_multiple=False,
+                file_types=("rclone 配置文件 (*.conf)", "所有文件 (*.*)"),
+            )
+        finally:
+            self._in_dialog = False
+            self._peek_wake_until = max(self._peek_wake_until, time.monotonic() + 2.0)
+            self._wake_event.set()
+        if not selected:
+            return {"ok": False, "cancelled": True, "message": "已取消选择"}
+        return self._backend.import_rclone_conf(str(selected[0]))
+
+    def pick_tool_binary(self, kind: str) -> dict[str, Any]:
+        """打开本地文件选择器手动定位 colab.exe / python.exe / rclone.exe / rclone.conf。"""
+        if str(kind or "").strip().lower() == "rclone_conf":
+            return self.pick_rclone_conf()
+        if not self._window:
+            return {"ok": False, "message": "窗口未就绪"}
+        self._in_dialog = True
+        self._peek_wake_until = max(self._peek_wake_until, time.monotonic() + 4.0)
+        try:
+            selected = self._window.create_file_dialog(
+                webview.FileDialog.OPEN,
+                allow_multiple=False,
+                file_types=("可执行程序 (*.exe)", "所有文件 (*.*)"),
+            )
+        finally:
+            self._in_dialog = False
+            self._peek_wake_until = max(self._peek_wake_until, time.monotonic() + 2.0)
+            self._wake_event.set()
+        if not selected:
+            return {"ok": False, "cancelled": True, "message": "已取消选择"}
+        return self._backend.set_tool_path(kind, str(selected[0]))
+
     def _on_dom_drop(self, event: Any) -> None:
         """响应 Edge WebView2 DOM 原生 drop 事件，提取真实磁盘路径并投递后端。"""
         if not isinstance(event, dict):
@@ -849,12 +982,23 @@ class PetBridgeApi:
         if not self._window:
             return {"ok": False, "message": "窗口未就绪"}
         snap = self._backend.get_cached_snapshot()
-        is_llm = (
-            str((snap.get("comfy") or {}).get("service_kind") or "") == "llm"
+        sk = (
+            str((snap.get("comfy") or {}).get("service_kind") or "")
             if snap.get("is_running")
-            else self._backend.is_llm_mode_active()
+            else (
+                "llm"
+                if self._backend.is_llm_mode_active()
+                else ("dual" if self._backend.is_dual_mode_active() else "comfy")
+            )
         )
-        if is_llm:
+        if sk == "dual":
+            dialog_file_types = (
+                "全能投递 (*.png;*.jpg;*.jpeg;*.webp;*.mp4;*.json;*.safetensors;*.txt;*.md;*.py)",
+                "图片与视频素材 (*.png;*.jpg;*.jpeg;*.webp;*.mp4;*.json;*.safetensors)",
+                "对话文本与脚本 (*.txt;*.md;*.py;*.yaml;*.yml;*.csv)",
+                "所有文件 (*.*)",
+            )
+        elif sk == "llm":
             dialog_file_types = (
                 "文本与识图文件 (*.txt;*.md;*.json;*.py;*.yaml;*.yml;*.csv;*.png;*.jpg;*.jpeg;*.webp)",
                 "纯文本与代码 (*.txt;*.md;*.json;*.py;*.yaml;*.yml;*.csv)",
@@ -889,6 +1033,17 @@ class PetBridgeApi:
             self._backend.submit_dropped_files([path], png_mode=mode)
         )
 
+    def confirm_dual_image_drop(self, paths: list[str], target: str) -> dict[str, Any]:
+        """确认双栖模式下纯图片的投递目标（comfy 传参考图 / llm 打开识图对话页）。"""
+        path_list = [str(p) for p in (paths or []) if p]
+        if target == "llm":
+            return self._apply_clipboard_and_redact(self._backend.open_llm_tunnel())
+        if not path_list:
+            return {"ok": False, "message": "未提供有效图片路径"}
+        return self._apply_clipboard_and_redact(
+            self._backend.submit_dropped_files(path_list, png_mode="image")
+        )
+
     def handle_toast_action(self, action: str) -> dict[str, Any]:
         """响应顶部互动提醒气泡点击动作（查看成图 / 排错 / 续期 / 打开隧道或对话页 / 复制配置）。"""
         self._backend.touch_activity()
@@ -901,8 +1056,10 @@ class PetBridgeApi:
         if action == "error":
             self._backend.acknowledge_comfy_error()
             return self._apply_clipboard_and_redact(self._backend.open_comfy_tunnel())
-        if action in ("open_comfy", "open_llm_webui"):
+        if action == "open_comfy":
             return self._apply_clipboard_and_redact(self._backend.open_comfy_tunnel())
+        if action == "open_llm_webui":
+            return self._apply_clipboard_and_redact(self._backend.open_llm_tunnel())
         if action == "copy_llm_api":
             return self._apply_clipboard_and_redact(self._backend.get_llm_api_bundle("comfy"))
         if isinstance(action, str) and action.startswith("open_comfy_wf:"):
@@ -1667,8 +1824,10 @@ def _push_event_to_ui(
         "deploy_done",
         "deploy_error",
         "png_workflow_choice",
+        "dual_image_choice",
         "idle_warning",
         "idle_stopped",
+        "onboarding_event",
     }:
         api.wake_from_edge_peek(hold_sec=8.5)
     safe_evt = {k: v for k, v in evt.items() if k != "clipboard_text"}

@@ -27,8 +27,8 @@ def load_service_meta() -> dict:
             f"未找到服务契约文件 {SERVICE_META_FILE}，请先运行 colab_bootstrap_qwen_llm.py 完成部署。"
         )
     data = json.loads(SERVICE_META_FILE.read_text(encoding="utf-8"))
-    if not isinstance(data, dict) or data.get("kind") != "llm":
-        raise RuntimeError(f"当前服务契约类型不是 llm: {data.get('kind')!r}")
+    if not isinstance(data, dict) or data.get("kind") not in ("llm", "dual"):
+        raise RuntimeError(f"当前服务契约类型不是 llm/dual: {data.get('kind')!r}")
     return data
 
 
@@ -155,7 +155,7 @@ def main():
     parser.parse_known_args()
 
     meta = load_service_meta()
-    port = int(meta.get("port") or 18080)
+    port = int(meta.get("llm_port") or meta.get("port") or 18080)
     api_key = str(meta.get("api_key") or "").strip()
     model_name = str(meta.get("model") or "Qwen3.8-Flash-Next-abliterated")
     if not api_key:
