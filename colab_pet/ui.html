@@ -78,9 +78,7 @@
       pointer-events: none;
     }
 
-    .mini-pill.show {
-      display: inline-flex;
-    }
+    .mini-pill.show { display: inline-flex; }
 
     /* ========== 顶部云朵思维气泡 (Star-Suite 风格) ========== */
     .bubble-area {
@@ -93,9 +91,7 @@
       margin-bottom: 0;
     }
 
-    .bubble-area.collapsed {
-      display: none;
-    }
+    .bubble-area.collapsed { display: none; }
 
     .bubble {
       width: 100%;
@@ -126,17 +122,10 @@
     }
 
     .stage.drag-over .bubble,
-    .stage.drag-over .mini-pill {
-      background: #6d28d9;
-      box-shadow: 0 0 0 5px #6d28d9;
-    }
+    .stage.drag-over .mini-pill { background: #6d28d9; box-shadow: 0 0 0 5px #6d28d9; }
 
     .stage.edge-peeking .mini-pill,
-    .stage.edge-peeking .side-tools {
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-    }
+    .stage.edge-peeking .side-tools { opacity: 0; visibility: hidden; pointer-events: none; }
 
     .bubble-header {
       display: flex;
@@ -160,17 +149,11 @@
       overflow: hidden;
     }
 
-    #page-title {
-      display: inline-block;
-    }
+    #page-title { display: inline-block; }
 
-    #page-title.slide-next {
-      animation: titleSlideFromRight 0.22s cubic-bezier(0.22, 1, 0.36, 1);
-    }
+    #page-title.slide-next { animation: titleSlideFromRight 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
 
-    #page-title.slide-prev {
-      animation: titleSlideFromLeft 0.22s cubic-bezier(0.22, 1, 0.36, 1);
-    }
+    #page-title.slide-prev { animation: titleSlideFromLeft 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
 
     @keyframes titleSlideFromRight {
       from { opacity: 0; transform: translateX(10px); }
@@ -182,11 +165,7 @@
       to { opacity: 1; transform: translateX(0); }
     }
 
-    .header-controls {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
+    .header-controls { display: flex; align-items: center; gap: 5px; }
 
     .pager {
       display: flex;
@@ -201,12 +180,7 @@
       font-weight: 700;
     }
 
-    .pager-dots {
-      display: inline-flex;
-      align-items: center;
-      gap: 3.5px;
-      padding: 0 2px;
-    }
+    .pager-dots { display: inline-flex; align-items: center; gap: 3.5px; padding: 0 2px; }
 
     .page-dot {
       border: none;
@@ -219,24 +193,13 @@
       transition: width 0.24s cubic-bezier(0.22, 1, 0.36, 1), background 0.2s ease, transform 0.16s ease;
     }
 
-    .page-dot:hover {
-      background: rgba(109, 40, 217, 0.55);
-      transform: scale(1.12);
-    }
+    .page-dot:hover { background: rgba(109, 40, 217, 0.55); transform: scale(1.12); }
 
-    .page-dot.active {
-      width: 14px;
-      background: #7c3aed;
-    }
+    .page-dot.active { width: 14px; background: #7c3aed; }
 
-    .page-dot.needs-setup {
-      background: #f59e0b;
-      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.28);
-    }
+    .page-dot.needs-setup { background: #f59e0b; box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.28); }
 
-    .page-dot.active.needs-setup {
-      background: #d97706;
-    }
+    .page-dot.active.needs-setup { background: #d97706; }
 
     .page-ind-hidden {
       position: absolute;
@@ -262,13 +225,9 @@
       transition: background 0.15s, transform 0.15s;
     }
 
-    .icon-btn:hover {
-      background: #d8cbff;
-    }
+    .icon-btn:hover { background: #d8cbff; }
 
-    .icon-btn:active {
-      transform: scale(0.9);
-    }
+    .icon-btn:active { transform: scale(0.9); }
 
     .pager .icon-btn {
       width: 18px;
@@ -278,13 +237,9 @@
       font-size: 12.5px;
     }
 
-    .pager .icon-btn:hover {
-      background: #d8cbff;
-    }
+    .pager .icon-btn:hover { background: #d8cbff; }
 
-    .spin {
-      animation: spin360 0.8s linear infinite;
-    }
+    .spin { animation: spin360 0.8s linear infinite; }
 
     @keyframes spin360 {
       from { transform: rotate(0deg); }
@@ -310,9 +265,7 @@
       transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1);
     }
 
-    .pages-track.no-anim {
-      transition: none !important;
-    }
+    .pages-track.no-anim { transition: none !important; }
 
     .page-body {
       flex: 0 0 100%;
@@ -329,14 +282,9 @@
       transition: opacity 0.24s ease, transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
     }
 
-    .page-body.active {
-      opacity: 1;
-      transform: scale(1);
-    }
+    .page-body.active { opacity: 1; transform: scale(1); }
 
-    .page-body[data-page="1"].entering .stat-card {
-      animation: statRise 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
-    }
+    .page-body[data-page="1"].entering .stat-card { animation: statRise 0.26s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
     .page-body[data-page="1"].entering .stat-card:nth-child(2) { animation-delay: 0.03s; }
     .page-body[data-page="1"].entering .stat-card:nth-child(3) { animation-delay: 0.06s; }
@@ -359,10 +307,7 @@
       gap: 6px;
     }
 
-    .comfy-strip.error {
-      background: #fff1f2;
-      border-color: #fda4af;
-    }
+    .comfy-strip.error { background: #fff1f2; border-color: #fda4af; }
 
     .comfy-row {
       display: flex;
@@ -374,9 +319,7 @@
       color: #4c1d95;
     }
 
-    .comfy-strip.error #comfy-left {
-      color: #be123c;
-    }
+    .comfy-strip.error #comfy-left { color: #be123c; }
 
     #comfy-left {
       flex: 1;
@@ -427,31 +370,16 @@
       to { background-position: 17px 0; }
     }
 
-    .comfy-fill.warn {
-      background: linear-gradient(90deg, #f59e0b, #fb923c);
-    }
+    .comfy-fill.warn { background: linear-gradient(90deg, #f59e0b, #fb923c); }
 
-    .comfy-fill.danger {
-      background: linear-gradient(90deg, #f43f5e, #e11d48);
-    }
+    .comfy-fill.danger { background: linear-gradient(90deg, #f43f5e, #e11d48); }
 
-    .comfy-fill.offline {
-      background: #cbd5e1;
-    }
+    .comfy-fill.offline { background: #cbd5e1; }
 
     /* 第 1 页：总览 */
-    .hero-row {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 8px;
-    }
+    .hero-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 
-    .cu-number-wrap {
-      display: flex;
-      align-items: baseline;
-      gap: 5px;
-    }
+    .cu-number-wrap { display: flex; align-items: baseline; gap: 5px; }
 
     .cu-number {
       font-size: 30px;
@@ -461,11 +389,7 @@
       font-variant-numeric: tabular-nums;
     }
 
-    .cu-unit {
-      font-size: 12.5px;
-      font-weight: 700;
-      color: #6d28d9;
-    }
+    .cu-unit { font-size: 12.5px; font-weight: 700; color: #6d28d9; }
 
     .status-pill {
       display: inline-flex;
@@ -479,51 +403,24 @@
       white-space: nowrap;
     }
 
-    .status-pill.running {
-      background: #ede9fe;
-      color: #5b21b6;
-      border-color: #c4b5fd;
-    }
+    .status-pill.running { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
 
-    .status-pill.idle {
-      background: #dcfce7;
-      color: #166534;
-      border-color: #86efac;
-    }
+    .status-pill.idle { background: #dcfce7; color: #166534; border-color: #86efac; }
 
-    .status-pill.warn {
-      background: #fef3c7;
-      color: #92400e;
-      border-color: #fcd34d;
-    }
+    .status-pill.warn { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
 
-    .status-pill.danger, .status-pill.error {
-      background: #ffe4e6;
-      color: #9f1239;
-      border-color: #fda4af;
-    }
+    .status-pill.danger, .status-pill.error { background: #ffe4e6; color: #9f1239; border-color: #fda4af; }
 
-    .dot-pulse {
-      width: 6.5px;
-      height: 6.5px;
-      border-radius: 50%;
-      background: currentColor;
-    }
+    .dot-pulse { width: 6.5px; height: 6.5px; border-radius: 50%; background: currentColor; }
 
-    .status-pill.running .dot-pulse {
-      animation: pulseDot 1.3s ease-in-out infinite;
-    }
+    .status-pill.running .dot-pulse { animation: pulseDot 1.3s ease-in-out infinite; }
 
     @keyframes pulseDot {
       0%, 100% { transform: scale(1); opacity: 1; }
       50% { transform: scale(1.45); opacity: 0.45; }
     }
 
-    .bar-group {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
+    .bar-group { display: flex; flex-direction: column; gap: 4px; }
 
     .bar-label {
       display: flex;
@@ -549,17 +446,11 @@
       transition: width 0.55s cubic-bezier(0.22, 1, 0.36, 1), background 0.3s;
     }
 
-    .bar-fill.warn {
-      background: linear-gradient(90deg, #f59e0b, #fb923c);
-    }
+    .bar-fill.warn { background: linear-gradient(90deg, #f59e0b, #fb923c); }
 
-    .bar-fill.danger {
-      background: linear-gradient(90deg, #f43f5e, #e11d48);
-    }
+    .bar-fill.danger { background: linear-gradient(90deg, #f43f5e, #e11d48); }
 
-    .bar-fill.idle {
-      background: linear-gradient(90deg, #10b981, #34d399);
-    }
+    .bar-fill.idle { background: linear-gradient(90deg, #10b981, #34d399); }
 
     .meta-footer {
       display: flex;
@@ -589,17 +480,10 @@
       white-space: nowrap;
     }
 
-    .session-tag.orphan {
-      background: #fef3c7;
-      color: #92400e;
-    }
+    .session-tag.orphan { background: #fef3c7; color: #92400e; }
 
     /* 第 2 页：今日小账本 */
-    .ledger-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 9px;
-    }
+    .ledger-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 
     .stat-card {
       background: rgba(255, 255, 255, 0.92);
@@ -670,18 +554,11 @@
       font-variant-numeric: tabular-nums;
     }
 
-    .stat-v.warn {
-      color: #b45309;
-    }
+    .stat-v.warn { color: #b45309; }
 
-    .stat-card.primary-bal .stat-v {
-      font-size: 16.5px;
-      color: #2e1065;
-    }
+    .stat-card.primary-bal .stat-v { font-size: 16.5px; color: #2e1065; }
 
-    .stat-card.primary-bal .stat-v.warn {
-      color: #b45309;
-    }
+    .stat-card.primary-bal .stat-v.warn { color: #b45309; }
 
     .ledger-note {
       background: rgba(255, 255, 255, 0.62);
@@ -697,18 +574,9 @@
     }
 
     /* 第 3 页：快捷控制台（选卡开机舱 / 7步直播 / 运维控制） */
-    .page-body[data-page="2"] {
-      justify-content: space-between;
-      gap: 6px;
-      padding-top: 6px;
-    }
+    .page-body[data-page="2"] { justify-content: space-between; gap: 6px; padding-top: 6px; }
 
-    .console-top-bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 6px;
-    }
+    .console-top-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 
     .console-tabs {
       position: relative;
@@ -734,9 +602,7 @@
       transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), width 0.24s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.14s ease;
     }
 
-    .seg-glider.no-anim {
-      transition: none !important;
-    }
+    .seg-glider.no-anim { transition: none !important; }
 
     .console-tab-btn {
       position: relative;
@@ -753,15 +619,10 @@
       transition: background 0.14s, color 0.16s;
     }
 
-    .console-tab-btn.active {
-      background: #7c3aed;
-      color: #ffffff;
-    }
+    .console-tab-btn.active { background: #7c3aed; color: #ffffff; }
 
     .console-tabs[data-glider-ready="1"] .console-tab-btn.active,
-    .seg-group[data-glider-ready="1"] .seg-btn.active {
-      background: transparent;
-    }
+    .seg-group[data-glider-ready="1"] .seg-btn.active { background: transparent; }
 
     @keyframes subPaneIn {
       from { opacity: 0; transform: translateY(5px); }
@@ -783,17 +644,92 @@
       text-overflow: ellipsis;
     }
 
-    .stock-pill.warn {
-      background: #fffbeb;
-      border-color: #fcd34d;
-      color: #b45309;
+    .stock-pill.warn { background: #fffbeb; border-color: #fcd34d; color: #b45309; }
+
+    .stock-pill.danger { background: #fff1f2; border-color: #fda4af; color: #be123c; }
+
+    .stock-pill.hidden { display: none; }
+
+    .stock-pill.llm-cfg-pill { background: #f5f0ff; border-color: #a78bfa; color: #5b21b6; }
+
+    .stock-pill.llm-cfg-pill:hover { background: #ede9fe; border-color: #7c3aed; }
+
+    .stock-pill.llm-cfg-pill.active { background: #7c3aed; border-color: #5b21b6; color: #ffffff; }
+
+    .ops-llm-tune-box {
+      display: none;
+      flex-direction: column;
+      gap: 4px;
+      background: rgba(255, 255, 255, 0.9);
+      border: 1.5px solid #cbbcf9;
+      border-radius: 12px;
+      padding: 6px 8px;
     }
 
-    .stock-pill.danger {
-      background: #fff1f2;
-      border-color: #fda4af;
-      color: #be123c;
+    #ops-pane.tune-open .ops-llm-tune-box { display: flex; animation: subPaneIn 0.18s cubic-bezier(0.22, 1, 0.36, 1); }
+
+    #ops-pane.tune-open #ops-action-grid,
+    #ops-pane.tune-open #action-status { display: none; }
+
+    .tune-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 800;
+      color: #3b0764;
     }
+
+    .tune-sub { font-size: 10px; font-weight: 700; color: #6d28d9; white-space: nowrap; }
+
+    .tune-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--ink-sub);
+    }
+
+    .tune-chips { display: inline-flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
+
+    .tune-chip {
+      border: 1px solid #cbbcf9;
+      background: #ffffff;
+      color: #4c1d95;
+      border-radius: 8px;
+      padding: 2.5px 7px;
+      font-size: 10.5px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.14s, border-color 0.14s, color 0.14s, transform 0.1s;
+    }
+
+    .tune-chip:hover { background: #f5f3ff; border-color: #8b5cf6; }
+
+    .tune-chip.active { background: #7c3aed; border-color: #6d28d9; color: #ffffff; }
+
+    .tune-foot { display: flex; align-items: center; gap: 6px; margin-top: 0; }
+
+    .tune-back-btn {
+      border: 1px solid #c4b5fd;
+      background: #ffffff;
+      color: #5b21b6;
+      border-radius: 9px;
+      padding: 5px 10px;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .tune-back-btn:hover { background: #f5f3ff; }
+
+    .tune-apply-btn { padding: 5px 8px; font-size: 11.5px; border-radius: 9px; }
 
     .console-pane {
       display: none;
@@ -803,28 +739,13 @@
       flex: 1;
     }
 
-    .console-pane.active {
-      display: flex;
-      animation: subPaneIn 0.22s cubic-bezier(0.22, 1, 0.36, 1);
-    }
+    .console-pane.active { display: flex; animation: subPaneIn 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
 
-    .boot-subview {
-      display: none;
-      flex-direction: column;
-      gap: 7.5px;
-    }
+    .boot-subview { display: none; flex-direction: column; gap: 7.5px; }
 
-    .boot-subview.active {
-      display: flex;
-      animation: subPaneIn 0.22s cubic-bezier(0.22, 1, 0.36, 1);
-    }
+    .boot-subview.active { display: flex; animation: subPaneIn 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
 
-    .boot-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 6px;
-    }
+    .boot-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 
     /* 外层工作流选择舱 */
     .wf-trigger-btn {
@@ -845,15 +766,9 @@
       transition: border-color 0.16s, background 0.16s, box-shadow 0.16s, scale 0.12s ease-out;
     }
 
-    .wf-trigger-btn:hover {
-      border-color: #8b5cf6;
-      background: #ffffff;
-      box-shadow: 0 3px 9px rgba(109, 40, 217, 0.15);
-    }
+    .wf-trigger-btn:hover { border-color: #8b5cf6; background: #ffffff; box-shadow: 0 3px 9px rgba(109, 40, 217, 0.15); }
 
-    .wf-trigger-btn:active {
-      scale: 0.985;
-    }
+    .wf-trigger-btn:active { scale: 0.985; }
 
     /* 键盘无障碍焦点环：显式突破全局 outline 重置，仅键盘导航时高亮显示 */
     .wf-trigger-btn:focus-visible,
@@ -864,10 +779,7 @@
     .act-btn:focus-visible,
     .gpu-card:focus-visible,
     .mini-chip:focus-visible,
-    .boot-start-btn:focus-visible {
-      outline: 2px solid #5b21b6 !important;
-      outline-offset: 1.5px;
-    }
+    .boot-start-btn:focus-visible { outline: 2px solid #5b21b6 !important; outline-offset: 1.5px; }
 
     .wf-trig-main {
       display: inline-flex;
@@ -877,13 +789,9 @@
       overflow: hidden;
     }
 
-    .wf-trig-main.bump-next {
-      animation: wfBumpNext 180ms cubic-bezier(0.22, 1, 0.36, 1);
-    }
+    .wf-trig-main.bump-next { animation: wfBumpNext 180ms cubic-bezier(0.22, 1, 0.36, 1); }
 
-    .wf-trig-main.bump-prev {
-      animation: wfBumpPrev 180ms cubic-bezier(0.22, 1, 0.36, 1);
-    }
+    .wf-trig-main.bump-prev { animation: wfBumpPrev 180ms cubic-bezier(0.22, 1, 0.36, 1); }
 
     @keyframes wfBumpNext {
       from { opacity: 0.4; transform: translateY(4px); }
@@ -895,11 +803,7 @@
       to { opacity: 1; transform: translateY(0); }
     }
 
-    .wf-trig-icon {
-      font-size: 13px;
-      line-height: 1;
-      flex-shrink: 0;
-    }
+    .wf-trig-icon { font-size: 13px; line-height: 1; flex-shrink: 0; }
 
     .wf-trig-name {
       font-size: 11.5px;
@@ -921,12 +825,7 @@
       text-overflow: ellipsis;
     }
 
-    .wf-trig-badges {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      flex-shrink: 0;
-    }
+    .wf-trig-badges { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
 
     .wf-trig-mod-badge {
       font-size: 9.5px;
@@ -939,15 +838,9 @@
       white-space: nowrap;
     }
 
-    .wf-trig-mod-badge.muted {
-      background: #f5f3ff;
-      border-color: #ddd6fe;
-      color: #7c6ca8;
-    }
+    .wf-trig-mod-badge.muted { background: #f5f3ff; border-color: #ddd6fe; color: #7c6ca8; }
 
-    .wf-trig-mod-badge.hidden {
-      display: none;
-    }
+    .wf-trig-mod-badge.hidden { display: none; }
 
     .wf-trig-rec {
       font-size: 9.5px;
@@ -959,15 +852,9 @@
       white-space: nowrap;
     }
 
-    .wf-trig-arrow {
-      color: #6d28d9;
-      flex-shrink: 0;
-      transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
-    }
+    .wf-trig-arrow { color: #6d28d9; flex-shrink: 0; transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
 
-    .wf-trigger-btn[aria-expanded="true"] .wf-trig-arrow {
-      transform: rotate(180deg);
-    }
+    .wf-trigger-btn[aria-expanded="true"] .wf-trig-arrow { transform: rotate(180deg); }
 
     .mini-chip {
       height: 32px;
@@ -987,20 +874,11 @@
       transition: border-color 0.15s, background 0.15s, color 0.15s, scale 0.12s ease-out;
     }
 
-    .mini-chip:hover {
-      border-color: #8b5cf6;
-      background: #f5f3ff;
-    }
+    .mini-chip:hover { border-color: #8b5cf6; background: #f5f3ff; }
 
-    .mini-chip:active {
-      scale: 0.96;
-    }
+    .mini-chip:active { scale: 0.96; }
 
-    .mini-chip.active {
-      background: #7c3aed;
-      border-color: #6d28d9;
-      color: #ffffff;
-    }
+    .mini-chip.active { background: #7c3aed; border-color: #6d28d9; color: #ffffff; }
 
     .mini-chip.locked {
       background: #ede9fe;
@@ -1010,18 +888,11 @@
       opacity: 0.92;
     }
 
-    .mini-chip.locked:hover {
-      background: #ede9fe;
-      border-color: #c4b5fd;
-    }
+    .mini-chip.locked:hover { background: #ede9fe; border-color: #c4b5fd; }
 
-    .mini-chip.locked:active {
-      scale: 1;
-    }
+    .mini-chip.locked:active { scale: 1; }
 
-    .mini-chip.hidden {
-      display: none;
-    }
+    .mini-chip.hidden { display: none; }
 
     /* 气泡内滑出式毛玻璃工作流抽屉（严格约束于 2.5px 纯色抗磨损边框内侧） */
     .wf-drawer-layer {
@@ -1046,12 +917,7 @@
       transition: opacity 0.16s ease, visibility 0s linear 0s;
     }
 
-    .wf-drawer-scrim {
-      position: absolute;
-      inset: 0;
-      background: rgba(59, 7, 100, 0.16);
-      backdrop-filter: blur(2.5px);
-    }
+    .wf-drawer-scrim { position: absolute; inset: 0; background: rgba(59, 7, 100, 0.16); backdrop-filter: blur(2.5px); }
 
     .wf-drawer-sheet {
       position: relative;
@@ -1063,9 +929,7 @@
       transform-origin: top left;
     }
 
-    .wf-drawer-layer.open .wf-drawer-sheet {
-      animation: wfSheetFade 150ms ease-out both;
-    }
+    .wf-drawer-layer.open .wf-drawer-sheet { animation: wfSheetFade 150ms ease-out both; }
 
     @media (prefers-reduced-motion: no-preference) {
       .wf-drawer-layer.open .wf-drawer-sheet {
@@ -1106,9 +970,7 @@
     }
 
     .wf-cat-tabs::-webkit-scrollbar,
-    #wf-cat-bar::-webkit-scrollbar {
-      display: none;
-    }
+    #wf-cat-bar::-webkit-scrollbar { display: none; }
 
     /* 单个分类 Tab 胶囊：选中态严禁改动 font-weight 与 padding，防止尺寸抖动 */
     .wf-cat-btn {
@@ -1130,21 +992,12 @@
       transition: background 0.14s, color 0.14s, border-color 0.14s, scale 0.12s ease-out;
     }
 
-    .wf-cat-btn:hover {
-      background: #ede9fe;
-      color: #4c1d95;
-    }
+    .wf-cat-btn:hover { background: #ede9fe; color: #4c1d95; }
 
-    .wf-cat-btn:active {
-      scale: 0.96;
-    }
+    .wf-cat-btn:active { scale: 0.96; }
 
     .wf-cat-btn[aria-selected="true"],
-    .wf-cat-btn.active {
-      background: #7c3aed;
-      border-color: #5b21b6;
-      color: #ffffff;
-    }
+    .wf-cat-btn.active { background: #7c3aed; border-color: #5b21b6; color: #ffffff; }
 
     /* 非纯色选中态指示器：附加高对比琥珀底边线，满足色觉无障碍要求且不占布局高度 */
     .wf-cat-btn[aria-selected="true"]::after {
@@ -1172,14 +1025,9 @@
       transition: background 0.14s, border-color 0.14s, scale 0.12s ease-out;
     }
 
-    .wf-drawer-close:hover {
-      background: #6d28d9;
-      border-color: #4c1d95;
-    }
+    .wf-drawer-close:hover { background: #6d28d9; border-color: #4c1d95; }
 
-    .wf-drawer-close:active {
-      scale: 0.96;
-    }
+    .wf-drawer-close:active { scale: 0.96; }
 
     /* 工作流抽屉滚动列表：块级布局 + 高对比细滚动条 + 粘性滚动边缘阴影提示 */
     .wf-drawer-list {
@@ -1197,37 +1045,23 @@
       container-type: scroll-state;
     }
 
-    .wf-drawer-list:hover {
-      --scrollbar-thumb: #6d28d9;
-    }
+    .wf-drawer-list:hover { --scrollbar-thumb: #6d28d9; }
 
     .wf-drawer-list.dragging,
-    .wf-drawer-list.dragging .wf-card {
-      cursor: grabbing;
-    }
+    .wf-drawer-list.dragging .wf-card { cursor: grabbing; }
 
     /* 相邻卡片间距改用兄弟外边距，确保 sticky 滚动阴影伪元素零高度占用 */
     .wf-drawer-list > .wf-card + .wf-card,
     .wf-drawer-list > .wf-card + .wf-ext-note,
     .wf-drawer-list > .wf-empty-card + .wf-ext-note,
-    .wf-drawer-list > .wf-empty-card + .wf-empty-card {
-      margin-top: 5px;
-    }
+    .wf-drawer-list > .wf-empty-card + .wf-empty-card { margin-top: 5px; }
 
     @supports not (scrollbar-color: auto) {
-      .wf-drawer-list::-webkit-scrollbar {
-        width: 8px;
-      }
+      .wf-drawer-list::-webkit-scrollbar { width: 8px; }
 
-      .wf-drawer-list::-webkit-scrollbar-track {
-        background: var(--scrollbar-track);
-        border-radius: 999px;
-      }
+      .wf-drawer-list::-webkit-scrollbar-track { background: var(--scrollbar-track); border-radius: 999px; }
 
-      .wf-drawer-list::-webkit-scrollbar-thumb {
-        background: var(--scrollbar-thumb);
-        border-radius: 999px;
-      }
+      .wf-drawer-list::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 999px; }
     }
 
     /* 上下边缘粘性渐变阴影：仅在对应方向存在可滚动溢出内容时显隐 */
@@ -1256,38 +1090,24 @@
     }
 
     @container scroll-state(scrollable: block-start) {
-      .wf-drawer-list::before {
-        opacity: 1;
-      }
+      .wf-drawer-list::before { opacity: 1; }
     }
 
     @container scroll-state(scrollable: block-end) {
-      .wf-drawer-list::after {
-        opacity: 1;
-      }
+      .wf-drawer-list::after { opacity: 1; }
     }
 
     @supports not (container-type: scroll-state) {
       .wf-drawer-list::before,
-      .wf-drawer-list::after {
-        animation: wfScrollShadow linear both;
-        animation-timeline: scroll();
-      }
+      .wf-drawer-list::after { animation: wfScrollShadow linear both; animation-timeline: scroll(); }
 
-      .wf-drawer-list::before {
-        animation-range: 0 18px;
-      }
+      .wf-drawer-list::before { animation-range: 0 18px; }
 
-      .wf-drawer-list::after {
-        animation-direction: reverse;
-        animation-range: calc(100% - 18px) 100%;
-      }
+      .wf-drawer-list::after { animation-direction: reverse; animation-range: calc(100% - 18px) 100%; }
     }
 
     @keyframes wfScrollShadow {
-      to {
-        opacity: 1;
-      }
+      to { opacity: 1; }
     }
 
     .wf-card {
@@ -1302,14 +1122,9 @@
       transition: border-color 0.15s, background 0.15s, box-shadow 0.15s, scale 0.12s ease-out;
     }
 
-    .wf-card:hover {
-      border-color: #a78bfa;
-      background: #ffffff;
-    }
+    .wf-card:hover { border-color: #a78bfa; background: #ffffff; }
 
-    .wf-card:active {
-      scale: 0.99;
-    }
+    .wf-card:active { scale: 0.99; }
 
     .wf-card.active {
       border-color: #7c3aed;
@@ -1317,25 +1132,11 @@
       box-shadow: 0 2px 8px rgba(124, 58, 237, 0.14);
     }
 
-    .wf-card-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 6px;
-    }
+    .wf-card-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 
-    .wf-card-title-wrap {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      min-width: 0;
-    }
+    .wf-card-title-wrap { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
 
-    .wf-card-icon {
-      font-size: 13px;
-      line-height: 1;
-      flex-shrink: 0;
-    }
+    .wf-card-icon { font-size: 13px; line-height: 1; flex-shrink: 0; }
 
     .wf-card-title {
       font-size: 12px;
@@ -1346,12 +1147,7 @@
       text-overflow: ellipsis;
     }
 
-    .wf-card-meta {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      flex-shrink: 0;
-    }
+    .wf-card-meta { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; }
 
     .wf-card-rec {
       font-size: 9.5px;
@@ -1380,11 +1176,7 @@
       transition: background 0.14s, border-color 0.14s, color 0.14s;
     }
 
-    .wf-card.active .wf-card-check {
-      background: #7c3aed;
-      border-color: #5b21b6;
-      color: #ffffff;
-    }
+    .wf-card.active .wf-card-check { background: #7c3aed; border-color: #5b21b6; color: #ffffff; }
 
     .wf-card-desc {
       font-size: 10.5px;
@@ -1405,11 +1197,7 @@
       gap: 4px;
     }
 
-    .wf-mods-label {
-      font-size: 10px;
-      font-weight: 700;
-      color: #6d5cae;
-    }
+    .wf-mods-label { font-size: 10px; font-weight: 700; color: #6d5cae; }
 
     .wf-mod-chip {
       border: 1px solid #cbbcf9;
@@ -1424,32 +1212,16 @@
       transition: background 0.14s, border-color 0.14s, color 0.14s, scale 0.12s ease-out;
     }
 
-    .wf-mod-chip:hover {
-      border-color: #8b5cf6;
-      background: #f5f3ff;
-    }
+    .wf-mod-chip:hover { border-color: #8b5cf6; background: #f5f3ff; }
 
-    .wf-mod-chip:active {
-      scale: 0.96;
-    }
+    .wf-mod-chip:active { scale: 0.96; }
 
-    .wf-mod-chip.active {
-      background: #7c3aed;
-      border-color: #6d28d9;
-      color: #ffffff;
-    }
+    .wf-mod-chip.active { background: #7c3aed; border-color: #6d28d9; color: #ffffff; }
 
     /* 枚举循环切换子模块胶囊样式（如量化档位、上下文长度） */
-    .wf-mod-chip.choice {
-      background: #f5f0ff;
-      border-color: #a78bfa;
-      color: #4c1d95;
-    }
+    .wf-mod-chip.choice { background: #f5f0ff; border-color: #a78bfa; color: #4c1d95; }
 
-    .wf-mod-chip.choice:hover {
-      background: #ede4ff;
-      border-color: #7c3aed;
-    }
+    .wf-mod-chip.choice:hover { background: #ede4ff; border-color: #7c3aed; }
 
     .wf-ext-note {
       margin-top: 1px;
@@ -1474,11 +1246,7 @@
       text-align: center;
     }
 
-    .gpu-grid {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 5px;
-    }
+    .gpu-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
 
     .gpu-card {
       border: 1.5px solid #d4c8fc;
@@ -1494,15 +1262,9 @@
       transition: border-color 0.16s, background 0.18s, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease;
     }
 
-    .gpu-card:hover {
-      border-color: #8b5cf6;
-      background: #f5f3ff;
-      transform: translateY(-1px);
-    }
+    .gpu-card:hover { border-color: #8b5cf6; background: #f5f3ff; transform: translateY(-1px); }
 
-    .gpu-card:active {
-      transform: scale(0.95);
-    }
+    .gpu-card:active { transform: scale(0.95); }
 
     .gpu-card.active {
       background: linear-gradient(135deg, #7c3aed, #6366f1);
@@ -1512,23 +1274,11 @@
       box-shadow: 0 3px 8px rgba(109, 40, 217, 0.24);
     }
 
-    .gpu-card.scarce {
-      border-color: #fbbf24;
-      background: #fffbeb;
-    }
+    .gpu-card.scarce { border-color: #fbbf24; background: #fffbeb; }
 
-    .gpu-card.scarce.active {
-      background: linear-gradient(135deg, #d97706, #ea580c);
-      border-color: #b45309;
-      color: #ffffff;
-    }
+    .gpu-card.scarce.active { background: linear-gradient(135deg, #d97706, #ea580c); border-color: #b45309; color: #ffffff; }
 
-    .gpu-card.restricted {
-      border-style: dashed;
-      border-color: #fda4af;
-      background: #fff1f2;
-      color: #9f1239;
-    }
+    .gpu-card.restricted { border-style: dashed; border-color: #fda4af; background: #fff1f2; color: #9f1239; }
 
     .gpu-card.restricted.active {
       background: linear-gradient(135deg, #e11d48, #be123c);
@@ -1537,12 +1287,7 @@
       color: #ffffff;
     }
 
-    .gpu-name {
-      font-size: 12px;
-      font-weight: 800;
-      line-height: 1.15;
-      white-space: nowrap;
-    }
+    .gpu-name { font-size: 12px; font-weight: 800; line-height: 1.15; white-space: nowrap; }
 
     .gpu-meta {
       font-size: 10px;
@@ -1561,10 +1306,7 @@
       white-space: nowrap;
     }
 
-    .gpu-card.active .gpu-cu {
-      opacity: 0.96;
-      color: #f3e8ff;
-    }
+    .gpu-card.active .gpu-cu { opacity: 0.96; color: #f3e8ff; }
 
     .boot-spec-hint {
       min-height: 29px;
@@ -1607,17 +1349,9 @@
       white-space: nowrap;
     }
 
-    .spec-rate-badge.measured {
-      background: #dcfce7;
-      border-color: #86efac;
-      color: #166534;
-    }
+    .spec-rate-badge.measured { background: #dcfce7; border-color: #86efac; color: #166534; }
 
-    .spec-rate-badge.hm-hot {
-      background: #fef3c7;
-      border-color: #fcd34d;
-      color: #92400e;
-    }
+    .spec-rate-badge.hm-hot { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
 
     .boot-spec-hint.warn {
       background: #fffbeb;
@@ -1648,18 +1382,11 @@
       transition: transform 0.1s, opacity 0.15s;
     }
 
-    .boot-start-btn:hover {
-      background: linear-gradient(135deg, #6d28d9, #4f46e5);
-    }
+    .boot-start-btn:hover { background: linear-gradient(135deg, #6d28d9, #4f46e5); }
 
-    .boot-start-btn:active {
-      transform: scale(0.97);
-    }
+    .boot-start-btn:active { transform: scale(0.97); }
 
-    .boot-start-btn.armed {
-      background: linear-gradient(135deg, #e11d48, #be123c);
-      border-color: #9f1239;
-    }
+    .boot-start-btn.armed { background: linear-gradient(135deg, #e11d48, #be123c); border-color: #9f1239; }
 
     /* 7 步开机进度直播卡 */
     .deploy-card {
@@ -1708,11 +1435,7 @@
       text-overflow: ellipsis;
     }
 
-    .step-dots-row {
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: 4px;
-    }
+    .step-dots-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 
     .step-dot {
       border-radius: 7px;
@@ -1726,11 +1449,7 @@
       white-space: nowrap;
     }
 
-    .step-dot.done {
-      background: #dcfce7;
-      border-color: #86efac;
-      color: #166534;
-    }
+    .step-dot.done { background: #dcfce7; border-color: #86efac; color: #166534; }
 
     .step-dot.current {
       background: #7c3aed;
@@ -1739,12 +1458,7 @@
       animation: pulseDot 1.4s ease-in-out infinite;
     }
 
-    .deploy-footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
+    .deploy-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 
     .deploy-foot-hint {
       font-size: 10.5px;
@@ -1768,17 +1482,9 @@
       flex-shrink: 0;
     }
 
-    .deploy-cancel-btn.armed {
-      background: #e11d48;
-      color: #ffffff;
-      border-color: #be123c;
-    }
+    .deploy-cancel-btn.armed { background: #e11d48; color: #ffffff; border-color: #be123c; }
 
-    .action-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 7px;
-    }
+    .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 
     .act-btn {
       border: 1.5px solid #c4b5fd;
@@ -1798,47 +1504,21 @@
     }
 
     /* 幂等复制按钮已复制反馈态（严禁设置 disabled，保持盒尺寸零抖动） */
-    .act-btn[data-copied] {
-      background: #dcfce7;
-      border-color: #34d399;
-      color: #166534;
-    }
+    .act-btn[data-copied] { background: #dcfce7; border-color: #34d399; color: #166534; }
 
-    .act-btn[data-copied]:hover {
-      background: #d1fae5;
-      border-color: #10b981;
-    }
+    .act-btn[data-copied]:hover { background: #d1fae5; border-color: #10b981; }
 
-    .act-btn:hover {
-      background: #f5f3ff;
-      border-color: #8b5cf6;
-    }
+    .act-btn:hover { background: #f5f3ff; border-color: #8b5cf6; }
 
-    .act-btn:active {
-      transform: scale(0.95);
-    }
+    .act-btn:active { transform: scale(0.95); }
 
-    .act-btn.primary {
-      background: linear-gradient(135deg, #7c3aed, #6366f1);
-      color: #ffffff;
-      border-color: #6d28d9;
-    }
+    .act-btn.primary { background: linear-gradient(135deg, #7c3aed, #6366f1); color: #ffffff; border-color: #6d28d9; }
 
-    .act-btn.primary:hover {
-      background: linear-gradient(135deg, #6d28d9, #4f46e5);
-    }
+    .act-btn.primary:hover { background: linear-gradient(135deg, #6d28d9, #4f46e5); }
 
-    .act-btn.stop {
-      border-color: #fda4af;
-      background: #fff1f2;
-      color: #9f1239;
-    }
+    .act-btn.stop { border-color: #fda4af; background: #fff1f2; color: #9f1239; }
 
-    .act-btn.stop.armed {
-      background: #e11d48;
-      color: #ffffff;
-      border-color: #be123c;
-    }
+    .act-btn.stop.armed { background: #e11d48; color: #ffffff; border-color: #be123c; }
 
     .act-btn.upload-bar {
       grid-column: span 2;
@@ -1848,33 +1528,17 @@
       border-style: dashed;
     }
 
-    .act-btn.dual-only {
-      display: none;
-    }
+    .act-btn.dual-only { display: none; }
 
-    .action-grid.dual-mode .act-btn {
-      padding: 8px 6px;
-      font-size: 11.5px;
-    }
+    .action-grid.dual-mode .act-btn { padding: 8px 6px; font-size: 11.5px; }
 
-    .action-grid.dual-mode .act-btn.dual-only {
-      display: flex;
-    }
+    .action-grid.dual-mode .act-btn.dual-only { display: flex; }
 
-    .action-grid.dual-mode #act-colab {
-      display: none;
-    }
+    .action-grid.dual-mode #act-colab { display: none; }
 
-    .action-grid.dual-mode .act-btn.upload-bar {
-      grid-column: span 1;
-      padding: 8px 6px;
-      font-size: 11.5px;
-      order: 5;
-    }
+    .action-grid.dual-mode .act-btn.upload-bar { grid-column: span 1; padding: 8px 6px; font-size: 11.5px; order: 5; }
 
-    .action-grid.dual-mode #act-stop {
-      order: 6;
-    }
+    .action-grid.dual-mode #act-stop { order: 6; }
 
     .act-hint {
       font-size: 10.5px;
@@ -1887,11 +1551,11 @@
     }
 
     /* 第 4 页：设置 */
-    .page-body[data-page="3"] {
-      gap: 4.5px;
-      padding-top: 3px;
-      justify-content: center;
-    }
+    .page-body[data-page="3"] { gap: 3px; padding-top: 1px; justify-content: center; }
+
+    .page-body[data-page="3"] .setting-row { padding: 2.5px 8px; font-size: 10.5px; }
+
+    .page-body[data-page="3"] .seg-btn { padding: 1px 6.5px; font-size: 10px; }
 
     .setting-row {
       display: flex;
@@ -1915,9 +1579,7 @@
       gap: 2px;
     }
 
-    .seg-group .seg-glider {
-      border-radius: 5.5px;
-    }
+    .seg-group .seg-glider { border-radius: 5.5px; }
 
     .seg-btn {
       position: relative;
@@ -1933,10 +1595,7 @@
       transition: color 0.16s, background 0.14s;
     }
 
-    .seg-btn.active {
-      background: #7c3aed;
-      color: #ffffff;
-    }
+    .seg-btn.active { background: #7c3aed; color: #ffffff; }
 
     /* 第 5 页：账号与环境（多 Google Ultra 秒切保险箱 + 云盘与环境配置） */
     .page-body[data-page="4"] {
@@ -1956,9 +1615,7 @@
       overflow: hidden;
     }
 
-    .acct-pane.active {
-      display: flex;
-    }
+    .acct-pane.active { display: flex; }
 
     .acct-vault-list {
       flex: 1;
@@ -1970,14 +1627,9 @@
       padding-right: 2px;
     }
 
-    .acct-vault-list::-webkit-scrollbar {
-      width: 4px;
-    }
+    .acct-vault-list::-webkit-scrollbar { width: 4px; }
 
-    .acct-vault-list::-webkit-scrollbar-thumb {
-      background: rgba(139, 92, 246, 0.35);
-      border-radius: 999px;
-    }
+    .acct-vault-list::-webkit-scrollbar-thumb { background: rgba(139, 92, 246, 0.35); border-radius: 999px; }
 
     .acct-card {
       display: flex;
@@ -2014,29 +1666,13 @@
       flex-shrink: 0;
     }
 
-    .acct-card.active .acct-dot {
-      background: #7c3aed;
-      box-shadow: 0 0 0 2.5px rgba(124, 58, 237, 0.22);
-    }
+    .acct-card.active .acct-dot { background: #7c3aed; box-shadow: 0 0 0 2.5px rgba(124, 58, 237, 0.22); }
 
-    .acct-card.running .acct-dot {
-      background: #10b981;
-      box-shadow: 0 0 0 2.5px rgba(16, 185, 129, 0.22);
-    }
+    .acct-card.running .acct-dot { background: #10b981; box-shadow: 0 0 0 2.5px rgba(16, 185, 129, 0.22); }
 
-    .acct-info {
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-    }
+    .acct-info { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 
-    .acct-name-row {
-      display: flex;
-      align-items: center;
-      gap: 3px;
-      min-width: 0;
-    }
+    .acct-name-row { display: flex; align-items: center; gap: 3px; min-width: 0; }
 
     .acct-label {
       font-size: 11.5px;
@@ -2059,10 +1695,7 @@
       flex-shrink: 0;
     }
 
-    .acct-edit-btn:hover {
-      background: #ede9fe;
-      color: #5b21b6;
-    }
+    .acct-edit-btn:hover { background: #ede9fe; color: #5b21b6; }
 
     .acct-email {
       font-size: 9.5px;
@@ -2072,12 +1705,7 @@
       text-overflow: ellipsis;
     }
 
-    .acct-card-right {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      flex-shrink: 0;
-    }
+    .acct-card-right { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
 
     .acct-bal {
       font-size: 10.5px;
@@ -2117,31 +1745,16 @@
     }
 
     .acct-switch-btn:hover,
-    .env-btn:hover {
-      background: #ede9fe;
-      border-color: #8b5cf6;
-    }
+    .env-btn:hover { background: #ede9fe; border-color: #8b5cf6; }
 
     .acct-switch-btn:active,
-    .env-btn:active {
-      transform: scale(0.95);
-    }
+    .env-btn:active { transform: scale(0.95); }
 
-    .env-btn.primary {
-      background: linear-gradient(135deg, #7c3aed, #6366f1);
-      border-color: #6d28d9;
-      color: #ffffff;
-    }
+    .env-btn.primary { background: linear-gradient(135deg, #7c3aed, #6366f1); border-color: #6d28d9; color: #ffffff; }
 
-    .env-btn.primary:hover {
-      background: linear-gradient(135deg, #6d28d9, #4f46e5);
-    }
+    .env-btn.primary:hover { background: linear-gradient(135deg, #6d28d9, #4f46e5); }
 
-    .env-btn.warn {
-      background: #fffbeb;
-      border-color: #fcd34d;
-      color: #b45309;
-    }
+    .env-btn.warn { background: #fffbeb; border-color: #fcd34d; color: #b45309; }
 
     .acct-del-btn {
       border: 1px solid #fecdd3;
@@ -2155,11 +1768,7 @@
       white-space: nowrap;
     }
 
-    .acct-del-btn.armed {
-      background: #e11d48;
-      border-color: #be123c;
-      color: #ffffff;
-    }
+    .acct-del-btn.armed { background: #e11d48; border-color: #be123c; color: #ffffff; }
 
     .acct-empty-card {
       flex: 1;
@@ -2175,26 +1784,13 @@
       background: rgba(255, 255, 255, 0.72);
     }
 
-    .acct-empty-title {
-      font-size: 12px;
-      font-weight: 800;
-      color: #3b0764;
-    }
+    .acct-empty-title { font-size: 12px; font-weight: 800; color: #3b0764; }
 
-    .acct-empty-sub {
-      font-size: 10.5px;
-      line-height: 15px;
-      color: var(--ink-muted);
-    }
+    .acct-empty-sub { font-size: 10.5px; line-height: 15px; color: var(--ink-muted); }
 
-    .acct-vault-foot {
-      flex-shrink: 0;
-    }
+    .acct-vault-foot { flex-shrink: 0; }
 
-    .acct-vault-foot .boot-start-btn {
-      padding: 7.5px 10px;
-      font-size: 11.5px;
-    }
+    .acct-vault-foot .boot-start-btn { padding: 7.5px 10px; font-size: 11.5px; }
 
     .env-cards-stack {
       flex: 1;
@@ -2215,24 +1811,11 @@
       gap: 4.5px;
     }
 
-    .env-card.warn {
-      background: #fffbeb;
-      border-color: #fcd34d;
-    }
+    .env-card.warn { background: #fffbeb; border-color: #fcd34d; }
 
-    .env-card-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 6px;
-    }
+    .env-card-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 
-    .env-card-title {
-      font-size: 11.5px;
-      font-weight: 800;
-      color: #2e1065;
-      white-space: nowrap;
-    }
+    .env-card-title { font-size: 11.5px; font-weight: 800; color: #2e1065; white-space: nowrap; }
 
     .env-badge {
       font-size: 10px;
@@ -2245,17 +1828,9 @@
       white-space: nowrap;
     }
 
-    .env-badge.warn {
-      border-color: #fcd34d;
-      background: #fef3c7;
-      color: #92400e;
-    }
+    .env-badge.warn { border-color: #fcd34d; background: #fef3c7; color: #92400e; }
 
-    .env-badge.neutral {
-      border-color: #c4b5fd;
-      background: #ede9fe;
-      color: #5b21b6;
-    }
+    .env-badge.neutral { border-color: #c4b5fd; background: #ede9fe; color: #5b21b6; }
 
     .env-card-sub {
       display: flex;
@@ -2266,27 +1841,14 @@
       color: var(--ink-muted);
     }
 
-    .env-card-actions {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      flex-shrink: 0;
-    }
+    .env-card-actions { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
 
     /* 账号与环境专用毛玻璃配置抽屉 */
-    .acct-drawer-layer {
-      z-index: 26;
-    }
+    .acct-drawer-layer { z-index: 26; }
 
-    .acct-drawer-head {
-      padding: 5px 9px;
-    }
+    .acct-drawer-head { padding: 5px 9px; }
 
-    .acct-drawer-title {
-      font-size: 12px;
-      font-weight: 800;
-      color: #3b0764;
-    }
+    .acct-drawer-title { font-size: 12px; font-weight: 800; color: #3b0764; }
 
     .acct-drawer-body {
       flex: 1;
@@ -2308,17 +1870,9 @@
       padding: 4.5px 7px;
     }
 
-    .acct-field {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
+    .acct-field { display: flex; flex-direction: column; gap: 2px; }
 
-    .acct-field label {
-      font-size: 10px;
-      font-weight: 800;
-      color: #4c1d95;
-    }
+    .acct-field label { font-size: 10px; font-weight: 800; color: #4c1d95; }
 
     .acct-input {
       width: 100%;
@@ -2332,21 +1886,11 @@
       font-family: inherit;
     }
 
-    .acct-input:focus {
-      outline: none;
-      border-color: #7c3aed;
-      box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.16);
-    }
+    .acct-input:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.16); }
 
-    .acct-btn-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
+    .acct-btn-row { display: flex; align-items: center; gap: 6px; }
 
-    .acct-btn-row > button {
-      flex: 1;
-    }
+    .acct-btn-row > button { flex: 1; }
 
     .tool-path-row {
       display: flex;
@@ -2368,17 +1912,9 @@
       gap: 1px;
     }
 
-    .tool-path-name {
-      font-weight: 800;
-      color: #3b0764;
-    }
+    .tool-path-name { font-weight: 800; color: #3b0764; }
 
-    .tool-path-val {
-      color: var(--ink-muted);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
+    .tool-path-val { color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     /* 思维气泡小尾巴 ○ o（压缩为精致 21px 常驻连接区，直接衔接 312px 主面板与呆毛尖） */
     .thought-dots {
@@ -2392,11 +1928,7 @@
       margin-top: 0;
     }
 
-    .stage.toast-showing .mini-pill.show {
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-    }
+    .stage.toast-showing .mini-pill.show { opacity: 0; visibility: hidden; pointer-events: none; }
 
     .thought-dot-1 {
       position: relative;
@@ -2485,25 +2017,15 @@
       z-index: 38;
     }
 
-    .speech-toast::before {
-      display: none;
-    }
+    .speech-toast::before { display: none; }
 
-    .speech-toast.show {
-      display: inline-flex;
-      animation: islandSpringIn 0.2s cubic-bezier(0.22, 1, 0.36, 1);
-    }
+    .speech-toast.show { display: inline-flex; animation: islandSpringIn 0.2s cubic-bezier(0.22, 1, 0.36, 1); }
 
     @media (prefers-reduced-motion: reduce) {
-      .speech-toast.show {
-        animation: none;
-      }
+      .speech-toast.show { animation: none; }
     }
 
-    .speech-toast.clickable {
-      pointer-events: auto;
-      cursor: pointer;
-    }
+    .speech-toast.clickable { pointer-events: auto; cursor: pointer; }
 
     .speech-toast.error {
       background: rgba(136, 19, 55, 0.93);
@@ -2513,18 +2035,9 @@
     }
 
     .stage.edge-peeking .speech-toast,
-    .stage.bubble-animating .speech-toast {
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-    }
+    .stage.bubble-animating .speech-toast { opacity: 0; visibility: hidden; pointer-events: none; }
 
-    .toast-text {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      min-width: 0;
-    }
+    .toast-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
     .toast-choice-btn {
       height: 19px;
@@ -2540,11 +2053,7 @@
       flex-shrink: 0;
     }
 
-    .toast-choice-btn.primary {
-      background: linear-gradient(135deg, #8b5cf6, #6366f1);
-      border-color: #a78bfa;
-      color: #ffffff;
-    }
+    .toast-choice-btn.primary { background: linear-gradient(135deg, #8b5cf6, #6366f1); border-color: #a78bfa; color: #ffffff; }
 
     /* 主气泡收起时自动回退头顶独立白底胶囊（严格贴合 Form.Region 外环纯色护边） */
     .stage:has(#bubble-area.collapsed) .speech-toast {
@@ -2574,11 +2083,7 @@
       pointer-events: none;
     }
 
-    .stage:has(#bubble-area.collapsed) .speech-toast.error {
-      background: #e11d48;
-      box-shadow: 0 0 0 4px #e11d48;
-      color: #9f1239;
-    }
+    .stage:has(#bubble-area.collapsed) .speech-toast.error { background: #e11d48; box-shadow: 0 0 0 4px #e11d48; color: #9f1239; }
 
     .stage:has(#bubble-area.collapsed) .toast-choice-btn {
       height: 20px;
@@ -2590,11 +2095,7 @@
       line-height: 18px;
     }
 
-    .stage:has(#bubble-area.collapsed) .toast-choice-btn.primary {
-      background: #7c3aed;
-      border-color: #6d28d9;
-      color: #ffffff;
-    }
+    .stage:has(#bubble-area.collapsed) .toast-choice-btn.primary { background: #7c3aed; border-color: #6d28d9; color: #ffffff; }
 
     /* 常驻迷你工具胶囊（位于 Form.Region 内，外层纯色护边 + ::before 内嵌圆角胶囊） */
     .side-tools {
@@ -2639,13 +2140,9 @@
       transition: background 0.15s, transform 0.12s;
     }
 
-    .tool-pill:hover {
-      background: #d8cbff;
-    }
+    .tool-pill:hover { background: #d8cbff; }
 
-    .tool-pill:active {
-      transform: scale(0.9);
-    }
+    .tool-pill:active { transform: scale(0.9); }
 
     .pet-hit {
       position: relative;
@@ -2658,9 +2155,7 @@
       transform-origin: 50% 100%;
     }
 
-    .pet-hit:active {
-      cursor: grabbing;
-    }
+    .pet-hit:active { cursor: grabbing; }
 
     /* 保持容器纯布局职责，改由 JS RAF 与 Form.Region 锁步驱动形变，消除呼吸微缩露框 */
     .pet-breathe {
@@ -2709,9 +2204,7 @@
       transform-origin: 50% 100%;
     }
 
-    #pet-img.flipped {
-      transform: scaleX(-1);
-    }
+    #pet-img.flipped { transform: scaleX(-1); }
   </style>
 </head>
 <body>
@@ -2836,6 +2329,7 @@
               <button class="console-tab-btn" data-tab="ops">🛠️ 运维控制</button>
             </div>
             <button class="stock-pill" id="gpu-stock-pill" title="点击实时读取 Colab 可用显卡算力池">⚪ 待测算力 ↻</button>
+            <button class="stock-pill llm-cfg-pill hidden" id="llm-live-cfg-pill" type="button" title="在线热调整 Qwen3.8 上下文长度 / 量化 / 识图（不断卡不重启 ComfyUI）">⚙️ Q4·64K 调参</button>
           </div>
 
           <!-- 子视图 A: 选卡配置与 7 步直播 -->
@@ -2919,6 +2413,33 @@
               <button class="act-btn upload-bar" id="act-upload" type="button">📤 传图到云端</button>
             </div>
             <div class="act-hint" id="action-status" role="status" aria-live="polite" aria-atomic="true">支持拖入参考图 · PNG/JSON直铺画布 · LoRA模型</div>
+            <div class="ops-llm-tune-box" id="ops-llm-tune-box">
+              <div class="tune-head">
+                <span id="tune-title">Qwen3.8 在线热调参</span>
+                <span class="tune-sub" id="tune-sub-hint">不断卡 · 约15s生效</span>
+              </div>
+              <div class="tune-row">
+                <span>上下文窗口</span>
+                <div class="tune-chips" id="tune-ctx-group">
+                  <button class="tune-chip" data-ctx="65536" type="button">64K</button>
+                  <button class="tune-chip" data-ctx="131072" type="button">128K</button>
+                  <button class="tune-chip" data-ctx="262144" type="button">256K</button>
+                </div>
+              </div>
+              <div class="tune-row">
+                <span>量化·视觉</span>
+                <div class="tune-chips" id="tune-quant-group">
+                  <button class="tune-chip" data-quant="UD-Q4_K_XL" type="button">Q4</button>
+                  <button class="tune-chip" data-quant="UD-IQ4_XS" type="button">IQ4</button>
+                  <button class="tune-chip" data-quant="IQ3_XXS" type="button">IQ3</button>
+                  <button class="tune-chip" id="tune-mmproj-btn" type="button">识图</button>
+                </div>
+              </div>
+              <div class="tune-foot">
+                <button class="tune-back-btn" id="btn-tune-cancel" type="button">返回</button>
+                <button class="boot-start-btn tune-apply-btn" id="btn-tune-apply" type="button">⚡ 热重载生效</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -2968,6 +2489,13 @@
               <button class="seg-btn" data-val="smart" title="活跃期每10分钟保活，连续空闲45分钟停止续命">智能</button>
               <button class="seg-btn active" data-val="stop60" title="智能保活 + 连续空闲满1小时自动归档停卡">闲1h停</button>
               <button class="seg-btn" data-val="off" title="关闭保活心跳（约30分钟闲置由官方自动回收）">关闭</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span>归档失败时</span>
+            <div class="seg-group" id="seg-archive-policy">
+              <button class="seg-btn active" data-val="stop_billing" title="云盘归档重试1次仍失败则优先停卡停止计费，并醒目告警">止损停卡</button>
+              <button class="seg-btn" data-val="keep_alive" title="归档失败则保留实例不自动停卡，等待手动救图并停卡">保图留机</button>
             </div>
           </div>
           <div class="setting-row">
@@ -3148,6 +2676,7 @@
     let dragResetTimer = null;
     let stopArmedUntil = 0;
     let stopResetTimer = null;
+    let stopModePending = "session";
     let bootArmedUntil = 0;
     let bootResetTimer = null;
     let cancelArmedUntil = 0;
@@ -3490,6 +3019,29 @@
 
     // 兼容旧版 wf-cat-tabs 别名，确保 #wf-cat-bar 与既有自动化脚本查询双通
     const el = (id) => document.getElementById(id) || (id === "wf-cat-tabs" ? document.getElementById("wf-cat-bar") : null);
+    const api = () => (window.pywebview && window.pywebview.api) || null;
+    const hasApi = (m) => Boolean(api() && typeof api()[m] === "function");
+    async function apiCall(m, ...args) { return hasApi(m) ? await api()[m](...args) : null; }
+    function h(tag, props, ...children) {
+      const n = document.createElement(tag);
+      if (props) {
+        for (const [k, v] of Object.entries(props)) {
+          if (v === undefined || v === null) continue;
+          if (k === "cls") n.className = v;
+          else if (k === "txt") n.textContent = v;
+          else if (k === "data") Object.assign(n.dataset, v);
+          else if (k === "attrs") for (const [ak, av] of Object.entries(v)) n.setAttribute(ak, String(av));
+          else if (k === "on") for (const [ek, ef] of Object.entries(v)) n.addEventListener(ek, ef);
+          else n[k] = v;
+        }
+      }
+      for (const c of children.flat()) {
+        if (c !== undefined && c !== null && c !== false) {
+          n.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+        }
+      }
+      return n;
+    }
 
     function toRectObj(node) {
       if (!node) return null;
@@ -3975,7 +3527,7 @@
     function syncAllSegGliders(immediate = false) {
       syncSegGlider("console-tabs", ".console-tab-btn", immediate);
       syncSegGlider("acct-tabs", ".console-tab-btn", immediate);
-      ["seg-top", "seg-poll", "seg-scale", "seg-long", "seg-autopull", "seg-keepalive", "seg-edge"].forEach((id) => {
+      ["seg-top", "seg-poll", "seg-scale", "seg-long", "seg-autopull", "seg-keepalive", "seg-archive-policy", "seg-edge"].forEach((id) => {
         syncSegGlider(id, ".seg-btn", immediate);
       });
     }
@@ -4028,93 +3580,42 @@
         const activeId = String(ob.active_account_id || "");
         listEl.innerHTML = "";
         if (accounts.length === 0) {
-          const empty = document.createElement("div");
-          empty.className = "acct-empty-card";
-          const t = document.createElement("div");
-          t.className = "acct-empty-title";
-          t.textContent = ob.auth_expired ? "🔑 Google 登录已失效，请重新授权" : "🔑 尚未绑定 Google Colab 账号";
-          const sub = document.createElement("div");
-          sub.className = "acct-empty-sub";
-          sub.textContent = "支持绑定多个 Google Ultra 账号，一键秒切并隔离各自账本与会话";
-          empty.appendChild(t);
-          empty.appendChild(sub);
-          listEl.appendChild(empty);
+          listEl.appendChild(h("div", { cls: "acct-empty-card" },
+            h("div", { cls: "acct-empty-title", txt: ob.auth_expired ? "🔑 Google 登录已失效，请重新授权" : "🔑 尚未绑定 Google Colab 账号" }),
+            h("div", { cls: "acct-empty-sub", txt: "支持绑定多个 Google Ultra 账号，一键秒切并隔离各自账本与会话" })
+          ));
         } else {
           accounts.forEach((acct) => {
             const aid = String(acct.id || "");
             const isCur = aid && aid === activeId && !ob.auth_missing;
             const liveRunning = isCur ? Boolean(s.is_running) : Boolean(acct.last_is_running);
-            const card = document.createElement("div");
-            card.className = `acct-card${isCur ? " active" : ""}${liveRunning ? " running" : ""}`;
-            card.dataset.id = aid;
-
-            const left = document.createElement("div");
-            left.className = "acct-card-left";
-            const dot = document.createElement("span");
-            dot.className = "acct-dot";
-            const info = document.createElement("div");
-            info.className = "acct-info";
-            const nameRow = document.createElement("div");
-            nameRow.className = "acct-name-row";
-            const lbl = document.createElement("span");
-            lbl.className = "acct-label";
-            lbl.textContent = acct.label || "Ultra 账号";
-            const editBtn = document.createElement("button");
-            editBtn.type = "button";
-            editBtn.className = "acct-edit-btn";
-            editBtn.dataset.action = "rename";
-            editBtn.dataset.id = aid;
-            editBtn.title = "修改备注名";
-            editBtn.textContent = "✎";
-            nameRow.appendChild(lbl);
-            nameRow.appendChild(editBtn);
-
-            const em = document.createElement("div");
-            em.className = "acct-email";
-            em.textContent = acct.email_masked || "***";
-            info.appendChild(nameRow);
-            info.appendChild(em);
-            left.appendChild(dot);
-            left.appendChild(info);
-
-            const right = document.createElement("div");
-            right.className = "acct-card-right";
             const balNum = isCur && typeof s.balance === "number" ? s.balance : acct.last_balance;
-            const balEl = document.createElement("span");
-            balEl.className = "acct-bal";
-            const runMark = !isCur && liveRunning ? "⚡" : "";
-            balEl.textContent = (typeof balNum === "number" && !Number.isNaN(balNum))
-              ? `${runMark}${balNum.toFixed(1)} CU`
-              : "-- CU";
-            right.appendChild(balEl);
-
-            if (isCur) {
-              const curTag = document.createElement("span");
-              curTag.className = "acct-cur-tag";
-              curTag.textContent = "当前";
-              right.appendChild(curTag);
-            } else {
-              const swBtn = document.createElement("button");
-              swBtn.type = "button";
-              swBtn.className = "acct-switch-btn";
-              swBtn.dataset.action = "switch";
-              swBtn.dataset.id = aid;
-              swBtn.textContent = "秒切";
-              right.appendChild(swBtn);
-            }
-
-            const delBtn = document.createElement("button");
-            delBtn.type = "button";
-            delBtn.className = `acct-del-btn${acctDelArmedId === aid ? " armed" : ""}`;
-            delBtn.dataset.action = "remove";
-            delBtn.dataset.id = aid;
-            delBtn.title = isCur ? "解绑当前账号" : "移除该账号";
-            delBtn.textContent = acctDelArmedId === aid ? "移除?" : "×";
-            right.appendChild(delBtn);
-
-            card.appendChild(left);
-            card.appendChild(right);
-            listEl.appendChild(card);
+            const balTxt = (typeof balNum === "number" && !Number.isNaN(balNum)) ? `${!isCur && liveRunning ? "⚡" : ""}${balNum.toFixed(1)} CU` : "-- CU";
+            listEl.appendChild(h("div", { cls: `acct-card${isCur ? " active" : ""}${liveRunning ? " running" : ""}`, data: { id: aid } },
+              h("div", { cls: "acct-card-left" },
+                h("span", { cls: "acct-dot" }),
+                h("div", { cls: "acct-info" },
+                  h("div", { cls: "acct-name-row" },
+                    h("span", { cls: "acct-label", txt: acct.label || "Ultra 账号" }),
+                    h("button", { type: "button", cls: "acct-edit-btn", title: "修改备注名", txt: "✎", data: { action: "rename", id: aid } })
+                  ),
+                  h("div", { cls: "acct-email", txt: acct.email_masked || "***" })
+                )
+              ),
+              h("div", { cls: "acct-card-right" },
+                h("span", { cls: "acct-bal", txt: balTxt }),
+                isCur
+                  ? h("span", { cls: "acct-cur-tag", txt: "当前" })
+                  : h("button", { type: "button", cls: "acct-switch-btn", txt: "秒切", data: { action: "switch", id: aid } }),
+                h("button", {
+                  type: "button",
+                  cls: `acct-del-btn${acctDelArmedId === aid ? " armed" : ""}`,
+                  title: isCur ? "解绑当前账号" : "移除该账号",
+                  txt: acctDelArmedId === aid ? "移除?" : "×",
+                  data: { action: "remove", id: aid }
+                })
+              )
+            ));
           });
         }
       }
@@ -4185,10 +3686,137 @@
       }
     }
 
+    let opsTuneOpen = false;
+    const opsTuneState = {
+      variant: "27b",
+      ctx: 65536,
+      quant: "UD-Q4_K_XL",
+      mmproj: true
+    };
+
+    function formatShortQuantTag(q) {
+      const val = String(q || "").toUpperCase();
+      if (val.includes("IQ3")) return "IQ3";
+      if (val.includes("IQ4")) return "IQ4";
+      return "Q4";
+    }
+
+    function formatShortCtxTag(ctxVal) {
+      const n = Number(ctxVal || 0);
+      if (!Number.isFinite(n) || n <= 0) return "";
+      if (n >= 262144) return "256K";
+      if (n >= 131072) return "128K";
+      if (n >= 98304) return "96K";
+      if (n >= 65536) return "64K";
+      if (n >= 32768) return "32K";
+      return `${Math.max(4, Math.round(n / 1024))}K`;
+    }
+
+    function _resolveLiveLlmContext(snap) {
+      const s = snap || latestSnap || {};
+      const c = s.comfy || {};
+      const prefs = s.prefs || {};
+      const actProfs = Array.isArray(c.active_profiles) ? c.active_profiles : [];
+      const prefProfs = Array.isArray(prefs.boot_profiles) ? prefs.boot_profiles : bootState.profiles;
+      const is27b = (
+        actProfs.includes("qwen_27b")
+        || String(c.model_name || "").includes("27B")
+        || (prefProfs.includes("qwen_27b") && !prefProfs.includes("qwen_llm"))
+      );
+      const quant = String(
+        c.quant || (is27b ? (prefs.boot_llm27_quant || bootState.llm27_quant) : (prefs.boot_llm_quant || bootState.llm_quant)) || "UD-Q4_K_XL"
+      );
+      const ctx = Number(
+        c.ctx_size || (is27b ? (prefs.boot_llm27_ctx || bootState.llm27_ctx) : (prefs.boot_llm_ctx || bootState.llm_ctx)) || (is27b ? 65536 : 32768)
+      );
+      const mmproj = is27b ? (prefs.boot_llm27_mmproj !== undefined ? Boolean(prefs.boot_llm27_mmproj) : Boolean(bootState.llm27_mmproj))
+                           : (prefs.boot_llm_mmproj !== undefined ? Boolean(prefs.boot_llm_mmproj) : Boolean(bootState.llm_mmproj));
+      return { is27b, quant, ctx, mmproj };
+    }
+
+    function syncConsoleTopPills(snap) {
+      const s = snap || latestSnap || {};
+      const stockPill = el("gpu-stock-pill");
+      const cfgPill = el("llm-live-cfg-pill");
+      if (!stockPill || !cfgPill) return;
+      const isDual = isDualOpsMode(s);
+      const isLlm = !isDual && isLlmOpsMode(s);
+      const deploying = Boolean(s.deploy && s.deploy.active);
+      const canTune = Boolean(activeConsoleTab === "ops" && !deploying && s.is_running && (isDual || isLlm));
+      if (!canTune && opsTuneOpen) {
+        opsTuneOpen = false;
+        const opsEl = el("ops-pane");
+        if (opsEl) opsEl.classList.remove("tune-open");
+      }
+      stockPill.classList.toggle("hidden", canTune);
+      cfgPill.classList.toggle("hidden", !canTune);
+      cfgPill.classList.toggle("active", Boolean(canTune && opsTuneOpen));
+      if (canTune) {
+        const live = _resolveLiveLlmContext(s);
+        const qTag = formatShortQuantTag(live.quant);
+        const cTag = formatShortCtxTag(live.ctx) || "64K";
+        cfgPill.textContent = opsTuneOpen ? "✓ 返回运维" : `⚙️ ${qTag}·${cTag} 调参`;
+      }
+    }
+
+    function renderOpsTunePanel() {
+      const is27b = opsTuneState.variant === "27b";
+      const titleEl = el("tune-title");
+      const hintEl = el("tune-sub-hint");
+      if (titleEl) titleEl.textContent = is27b ? "Qwen3.8-27B 在线热调参" : "Qwen3.8-180B 在线热调参";
+      if (hintEl) {
+        hintEl.textContent = isDualOpsMode(latestSnap) ? "保留Comfy · 约15s重载" : "保留实例 · 约15s重载";
+      }
+      const ctxGroup = el("tune-ctx-group");
+      if (ctxGroup) {
+        const opts = is27b
+          ? [[65536, "64K"], [131072, "128K"], [262144, "256K"]]
+          : [[32768, "32K"], [131072, "128K"], [262144, "256K"]];
+        const btns = ctxGroup.querySelectorAll(".tune-chip[data-ctx]");
+        btns.forEach((btn, idx) => {
+          const pair = opts[idx] || opts[opts.length - 1];
+          btn.dataset.ctx = String(pair[0]);
+          btn.textContent = pair[1];
+          btn.classList.toggle("active", Number(opsTuneState.ctx) === Number(pair[0]));
+        });
+      }
+      const qGroup = el("tune-quant-group");
+      if (qGroup) {
+        qGroup.querySelectorAll(".tune-chip[data-quant]").forEach((btn) => {
+          btn.classList.toggle("active", String(opsTuneState.quant) === String(btn.dataset.quant));
+        });
+      }
+      const mmBtn = el("tune-mmproj-btn");
+      if (mmBtn) {
+        mmBtn.classList.toggle("active", Boolean(opsTuneState.mmproj));
+      }
+    }
+
+    function toggleOpsTunePanel(open) {
+      const next = typeof open === "boolean" ? open : !opsTuneOpen;
+      opsTuneOpen = Boolean(next);
+      if (opsTuneOpen) {
+        const live = _resolveLiveLlmContext(latestSnap);
+        opsTuneState.variant = live.is27b ? "27b" : "180b";
+        opsTuneState.ctx = live.ctx;
+        opsTuneState.quant = live.quant;
+        opsTuneState.mmproj = live.mmproj;
+        renderOpsTunePanel();
+      }
+      const opsEl = el("ops-pane");
+      if (opsEl) opsEl.classList.toggle("tune-open", opsTuneOpen);
+      syncConsoleTopPills(latestSnap);
+    }
+
     function setConsoleTab(tab, manual = false) {
       activeConsoleTab = tab === "ops" ? "ops" : "boot";
       if (manual) consoleTabPinned = true;
       if (activeConsoleTab !== "boot") closeWorkflowDrawer();
+      if (activeConsoleTab !== "ops" && opsTuneOpen) {
+        opsTuneOpen = false;
+        const opsEl = el("ops-pane");
+        if (opsEl) opsEl.classList.remove("tune-open");
+      }
       const tabsEl = el("console-tabs");
       if (tabsEl) {
         tabsEl.querySelectorAll(".console-tab-btn").forEach((b) => {
@@ -4198,6 +3826,7 @@
       el("boot-pane").classList.toggle("active", activeConsoleTab === "boot");
       el("ops-pane").classList.toggle("active", activeConsoleTab === "ops");
       syncSegGlider("console-tabs", ".console-tab-btn", false);
+      syncConsoleTopPills(latestSnap);
     }
 
     function clearBootArm() {
@@ -4237,6 +3866,7 @@
 
       if (isDeploying) {
         closeWorkflowDrawer();
+        syncConsoleTopPills(s);
         renderDeployProgress(deploy);
         return;
       }
@@ -4407,6 +4037,7 @@
           startBtn.textContent = `⚡ 停旧卡(${runGpu})并换 ${bootState.gpu}${hmBtnTag}`;
         }
       }
+      syncConsoleTopPills(s);
       // 后台轮询不主动重绘静态工作流抽屉 DOM，避免冲刷正在滚动或交互中的列表位置
     }
 
@@ -4471,6 +4102,9 @@
       }
       if (btnComfy) {
         btnComfy.textContent = isLlmOps ? "💬 打开对话页" : "🚀 打开 ComfyUI";
+        btnComfy.title = isLlmOps
+          ? "打开 Qwen3.8 对话网页"
+          : "左键免密打开 ComfyUI 公网画布 · 右键复制地址与访问口令";
       }
       if (btnSync) {
         if (!isLlmOps) {
@@ -4522,6 +4156,7 @@
           statusEl.textContent = isDualOps ? defaultDualHint : (isLlmOps ? defaultLlmHint : defaultComfyHint);
         }
       }
+      syncConsoleTopPills(snap);
     }
 
     function renderComfyState(comfy) {
@@ -4614,8 +4249,10 @@
           barEl.style.width = "100%";
           miniText = `· ⚡ 对话中 · 并发 ${runCnt}${tpsTxt}`;
         } else {
-          const quantLabel = comfy.quant || "Q4";
-          leftEl.textContent = `🟢 ${mShort} 在线 (${quantLabel}) · 点此对话`;
+          const quantLabel = formatShortQuantTag(comfy.quant);
+          const ctxTag = formatShortCtxTag(comfy.ctx_size);
+          const specLabel = ctxTag ? `${quantLabel}·${ctxTag}` : quantLabel;
+          leftEl.textContent = `🟢 ${mShort} 在线 (${specLabel}) · 点此对话`;
           vramEl.textContent = comfy.vram_total_gb > 0
             ? `VRAM ${Number(comfy.vram_used_gb).toFixed(1)}/${Number(comfy.vram_total_gb).toFixed(1)}G (${Math.round(comfy.vram_pct)}%)`
             : "已连通";
@@ -4665,14 +4302,16 @@
           barEl.style.width = `${Math.max(8, Math.min(100, vp || 100))}%`;
           miniText = `· 📥 待拉图 ${pendPull} 份`;
         } else {
+          const dualCtxTag = formatShortCtxTag(comfy.ctx_size);
+          const llmTag = dualCtxTag ? `${llmShort}(${dualCtxTag})` : llmShort;
           if (comfyOn && llmOn) {
-            leftEl.textContent = `🟢 ComfyUI + ${llmShort} 双在线`;
+            leftEl.textContent = `🟢 ComfyUI + ${llmTag} 双在线`;
             miniText = "· 🟢 双栖双在线";
           } else if (comfyOn) {
             leftEl.textContent = `🟡 Comfy就绪 · ${llmShort}重连中`;
             miniText = "· 🟡 Comfy在线";
           } else {
-            leftEl.textContent = `🟡 ${llmShort}就绪 · Comfy未通`;
+            leftEl.textContent = `🟡 ${llmTag}就绪 · Comfy未通`;
             miniText = `· 🟡 ${llmShort}在线`;
           }
           vramEl.textContent = vramTxt;
@@ -4764,6 +4403,10 @@
         ? "off"
         : (Number(prefs.idle_auto_stop_minutes ?? 60) > 0 ? "stop60" : "smart");
       setSegActive("seg-keepalive", kaMode, firstSync);
+      const archPol = String(prefs.idle_archive_fail_policy || "stop_billing") === "keep_alive"
+        ? "keep_alive"
+        : "stop_billing";
+      setSegActive("seg-archive-policy", archPol, firstSync);
       setSegActive("seg-edge", prefs.edge_auto_hide === false ? "0" : "1", firstSync);
 
       if (!bootState.prefsSynced) {
@@ -5213,6 +4856,16 @@
       showToast(msg, { duration: 2800, isError: Boolean(res && res.ok === false) });
     });
 
+    el("act-comfy").addEventListener("contextmenu", async (e) => {
+      if (!window.pywebview || !window.pywebview.api || isLlmOpsMode(latestSnap)) return;
+      if (typeof window.pywebview.api.copy_comfy_access_config !== "function") return;
+      e.preventDefault();
+      const res = await window.pywebview.api.copy_comfy_access_config();
+      const msg = (res && res.message) || "操作完成";
+      announceActionStatus(msg);
+      showToast(msg, { duration: 2600, isError: Boolean(res && res.ok === false) });
+    });
+
     // 统一幂等 LLM API 复制动作（严禁设置 disabled，2000ms 自动恢复默认按钮文案）
     async function performLlmApiCopy(btn, timerKey, copiedLabel) {
       if (!window.pywebview || !window.pywebview.api || !btn) return;
@@ -5304,36 +4957,74 @@
       showToast((res && res.message) || "已打开 Colab");
     });
 
-    el("act-stop").addEventListener("click", async () => {
-      const btn = el("act-stop");
-      const now = Date.now();
-      if (now > stopArmedUntil) {
-        stopArmedUntil = now + 4000;
-        btn.classList.add("armed");
-        btn.textContent = "⚠️ 再点确认停卡";
-        announceActionStatus("请 4 秒内再次点击以关停全部实例");
-        clearTimeout(stopResetTimer);
-        stopResetTimer = setTimeout(() => {
-          btn.classList.remove("armed");
-          btn.textContent = "🛑 一键停卡";
-        }, 4000);
-        return;
-      }
+    function armStopConfirm(btn, mode) {
+      stopModePending = mode === "all" ? "all" : "session";
+      stopArmedUntil = Date.now() + 4000;
+      btn.classList.add("armed");
+      btn.textContent = stopModePending === "all" ? "⚠️ 再点停全部卡" : "⚠️ 再点停当前卡";
+      announceActionStatus(
+        stopModePending === "all"
+          ? "请 4 秒内再次点击以关停当前账号全部实例"
+          : "再点释放当前绑定实例（右键可停止全部）"
+      );
+      clearTimeout(stopResetTimer);
+      stopResetTimer = setTimeout(() => {
+        stopArmedUntil = 0;
+        btn.classList.remove("armed");
+        btn.textContent = "🛑 一键停卡";
+      }, 4000);
+    }
 
+    async function executeStopConfirm(btn, mode) {
       clearTimeout(stopResetTimer);
       stopArmedUntil = 0;
       btn.classList.remove("armed");
       btn.textContent = "⏳ 正在停机...";
-      announceActionStatus("正在下发 down --all 停机省积分...");
-      const res = await window.pywebview.api.stop_all_instances();
+      const useAll = mode === "all" || typeof window.pywebview.api.stop_session_instance !== "function";
+      announceActionStatus(useAll ? "正在下发 down --all 停机省积分..." : "正在定向释放当前绑定实例并核实...");
+      const res = useAll
+        ? await window.pywebview.api.stop_all_instances()
+        : await window.pywebview.api.stop_session_instance("comfy");
       btn.textContent = "🛑 一键停卡";
-      if (res.snapshot) window.renderState(res.snapshot);
-      announceActionStatus(res.message || "已完成");
-      if (res.ok) {
+      if (res && res.snapshot) window.renderState(res.snapshot);
+      announceActionStatus((res && res.message) || "已完成");
+      if (res && res.ok) {
         proudOverrideUntil = Date.now() + 2600;
         updateSpriteFrame();
       }
-      showToast(res.message || "停机执行完毕");
+      showToast((res && res.message) || "停机执行完毕", {
+        duration: (res && !res.ok) ? 4500 : 2800,
+        isError: Boolean(res && !res.ok)
+      });
+    }
+
+    el("act-stop").addEventListener("click", async () => {
+      if (!window.pywebview || !window.pywebview.api) return;
+      const btn = el("act-stop");
+      const now = Date.now();
+      if (now > stopArmedUntil) {
+        const sessions = Array.isArray(latestSnap && latestSnap.sessions) ? latestSnap.sessions : [];
+        const hasNamed = sessions.some((s) => s && s.name && s.name !== "?");
+        const orphanOnly = sessions.length > 0 && !hasNamed;
+        const targetMode = (orphanOnly || typeof window.pywebview.api.stop_session_instance !== "function")
+          ? "all"
+          : "session";
+        armStopConfirm(btn, targetMode);
+        return;
+      }
+      await executeStopConfirm(btn, stopModePending);
+    });
+
+    el("act-stop").addEventListener("contextmenu", async (e) => {
+      if (!window.pywebview || !window.pywebview.api) return;
+      e.preventDefault();
+      const btn = el("act-stop");
+      if (Date.now() <= stopArmedUntil && stopModePending === "all") {
+        await executeStopConfirm(btn, "all");
+        return;
+      }
+      armStopConfirm(btn, "all");
+      showToast("右键已选择「停止全部」· 再点确认停全部实例", 2400);
     });
 
     el("act-upload").addEventListener("click", async () => {
@@ -5392,6 +5083,55 @@
         }
       } finally {
         btn.classList.remove("spin");
+      }
+    });
+
+    el("llm-live-cfg-pill").addEventListener("click", () => {
+      toggleOpsTunePanel();
+    });
+
+    el("btn-tune-cancel").addEventListener("click", () => {
+      toggleOpsTunePanel(false);
+    });
+
+    el("tune-ctx-group").addEventListener("click", (e) => {
+      const btn = e.target.closest(".tune-chip[data-ctx]");
+      if (!btn) return;
+      opsTuneState.ctx = Number(btn.dataset.ctx || 65536);
+      renderOpsTunePanel();
+    });
+
+    el("tune-quant-group").addEventListener("click", (e) => {
+      const qBtn = e.target.closest(".tune-chip[data-quant]");
+      if (qBtn) {
+        opsTuneState.quant = String(qBtn.dataset.quant || "UD-Q4_K_XL");
+        renderOpsTunePanel();
+        return;
+      }
+      if (e.target.closest("#tune-mmproj-btn")) {
+        opsTuneState.mmproj = !opsTuneState.mmproj;
+        renderOpsTunePanel();
+      }
+    });
+
+    el("btn-tune-apply").addEventListener("click", async () => {
+      if (!window.pywebview || !window.pywebview.api) return;
+      if (typeof window.pywebview.api.reconfigure_running_llm !== "function") return;
+      const res = await window.pywebview.api.reconfigure_running_llm({
+        quant: opsTuneState.quant,
+        ctx: opsTuneState.ctx,
+        mmproj: opsTuneState.mmproj
+      });
+      if (res && res.deploy) {
+        toggleOpsTunePanel(false);
+        if (latestSnap) latestSnap.deploy = res.deploy;
+        setConsoleTab("boot", true);
+        renderBootPanel(latestSnap);
+        renderOpsPanel(latestSnap);
+        renderComfyState(latestSnap ? latestSnap.comfy : null);
+      }
+      if (res && res.message) {
+        showToast(res.message, { duration: 2800, isError: !res.ok });
       }
     });
 
@@ -5511,95 +5251,41 @@
       ));
 
       if (items.length === 0) {
-        const empty = document.createElement("div");
-        empty.className = "wf-empty-card";
-        empty.textContent = "🧩 扩展工作流预设位：可在 WORKFLOW_CATALOG 追加新工作流，或直接将 .json 工作流拖入桌宠铺到云端画布。";
-        listEl.appendChild(empty);
+        listEl.appendChild(h("div", { cls: "wf-empty-card", txt: "🧩 扩展工作流预设位：可在 WORKFLOW_CATALOG 追加新工作流，或直接将 .json 工作流拖入桌宠铺到云端画布。" }));
         listEl.scrollTop = (opts && opts.resetScroll) ? 0 : prevScroll;
         return;
       }
 
       items.forEach((wf) => {
         const isActive = selectedSet.includes(wf.id);
-        const card = document.createElement("div");
-        card.className = `wf-card${isActive ? " active" : ""}`;
-        card.dataset.wf = wf.id;
-        card.setAttribute("role", "checkbox");
-        card.setAttribute("aria-checked", isActive ? "true" : "false");
-        card.tabIndex = 0;
+        const modNodes = Array.isArray(wf.modules) && wf.modules.length > 0
+          ? h("div", { cls: "wf-card-mods" },
+              h("span", { cls: "wf-mods-label", txt: "模块:" }),
+              ...wf.modules.map((mod) => {
+                if (mod.type === "choice" && Array.isArray(mod.options) && mod.options.length > 0) {
+                  const curOpt = mod.options.find((o) => String(o.val) === String(bootState[mod.key])) || mod.options[0];
+                  return h("button", { type: "button", cls: "wf-mod-chip choice", title: "点击循环切换档位", data: { wf: wf.id, mod: mod.key }, txt: `⚙ ${curOpt.label}${curOpt.sizeHint ? ` ${curOpt.sizeHint}` : ""} ↻` });
+                }
+                const on = Boolean(bootState[mod.key]);
+                return h("button", { type: "button", cls: `wf-mod-chip${on ? " active" : ""}`, data: { wf: wf.id, mod: mod.key }, attrs: { "aria-pressed": String(on) }, txt: `${on ? "✓ " : "+ "}${mod.label}${mod.sizeHint ? ` (${mod.sizeHint})` : ""}` });
+              })
+            )
+          : null;
 
-        const top = document.createElement("div");
-        top.className = "wf-card-top";
-        const titleWrap = document.createElement("span");
-        titleWrap.className = "wf-card-title-wrap";
-        const iconSpan = document.createElement("span");
-        iconSpan.className = "wf-card-icon";
-        iconSpan.textContent = wf.icon;
-        const titleSpan = document.createElement("span");
-        titleSpan.className = "wf-card-title";
-        titleSpan.textContent = wf.title || wf.name;
-        titleWrap.appendChild(iconSpan);
-        titleWrap.appendChild(titleSpan);
-
-        const metaWrap = document.createElement("span");
-        metaWrap.className = "wf-card-meta";
-        const recSpan = document.createElement("span");
-        recSpan.className = "wf-card-rec";
-        recSpan.textContent = `${wf.recGpu}★ 推荐`;
-        const checkSpan = document.createElement("span");
-        checkSpan.className = "wf-card-check";
-        checkSpan.textContent = "✓";
-        metaWrap.appendChild(recSpan);
-        metaWrap.appendChild(checkSpan);
-
-        top.appendChild(titleWrap);
-        top.appendChild(metaWrap);
-        card.appendChild(top);
-
-        if (wf.desc) {
-          const descEl = document.createElement("div");
-          descEl.className = "wf-card-desc";
-          descEl.textContent = wf.desc;
-          card.appendChild(descEl);
-        }
-
-        if (Array.isArray(wf.modules) && wf.modules.length > 0) {
-          const modsRow = document.createElement("div");
-          modsRow.className = "wf-card-mods";
-          const modsLabel = document.createElement("span");
-          modsLabel.className = "wf-mods-label";
-          modsLabel.textContent = "模块:";
-          modsRow.appendChild(modsLabel);
-
-          wf.modules.forEach((mod) => {
-            const modBtn = document.createElement("button");
-            modBtn.type = "button";
-            modBtn.dataset.wf = wf.id;
-            modBtn.dataset.mod = mod.key;
-            if (mod.type === "choice" && Array.isArray(mod.options) && mod.options.length > 0) {
-              // 枚举子模块不设 aria-pressed，点击循环切换档位
-              const curOpt = mod.options.find((o) => String(o.val) === String(bootState[mod.key])) || mod.options[0];
-              modBtn.className = "wf-mod-chip choice";
-              modBtn.title = "点击循环切换档位";
-              modBtn.textContent = `⚙ ${curOpt.label}${curOpt.sizeHint ? ` ${curOpt.sizeHint}` : ""} ↻`;
-            } else {
-              const on = Boolean(bootState[mod.key]);
-              modBtn.className = `wf-mod-chip${on ? " active" : ""}`;
-              modBtn.setAttribute("aria-pressed", String(on));
-              modBtn.textContent = `${on ? "✓ " : "+ "}${mod.label}${mod.sizeHint ? ` (${mod.sizeHint})` : ""}`;
-            }
-            modsRow.appendChild(modBtn);
-          });
-          card.appendChild(modsRow);
-        }
-
-        listEl.appendChild(card);
+        listEl.appendChild(h("div", {
+            cls: `wf-card${isActive ? " active" : ""}`, tabIndex: 0,
+            data: { wf: wf.id }, attrs: { role: "checkbox", "aria-checked": isActive ? "true" : "false" }
+          },
+          h("div", { cls: "wf-card-top" },
+            h("span", { cls: "wf-card-title-wrap" }, h("span", { cls: "wf-card-icon", txt: wf.icon }), h("span", { cls: "wf-card-title", txt: wf.title || wf.name })),
+            h("span", { cls: "wf-card-meta" }, h("span", { cls: "wf-card-rec", txt: `${wf.recGpu}★ 推荐` }), h("span", { cls: "wf-card-check", txt: "✓" }))
+          ),
+          wf.desc ? h("div", { cls: "wf-card-desc", txt: wf.desc }) : null,
+          modNodes
+        ));
       });
 
-      const extNote = document.createElement("div");
-      extNote.className = "wf-ext-note";
-      extNote.textContent = "✨ 支持多选混搭同驻（如 MiniMax + Qwen27B）· 勾选后点右上角「完成」生效";
-      listEl.appendChild(extNote);
+      listEl.appendChild(h("div", { cls: "wf-ext-note", txt: "✨ 支持多选混搭同驻（如 MiniMax + Qwen27B）· 勾选后点右上角「完成」生效" }));
       listEl.scrollTop = (opts && opts.resetScroll) ? 0 : prevScroll;
     }
 
@@ -6106,93 +5792,44 @@
       }
     });
 
-    el("seg-top").addEventListener("click", (e) => {
+    const bindSeg = (segId, onPick) => el(segId).addEventListener("click", (e) => {
       const btn = e.target.closest(".seg-btn");
       if (!btn) return;
-      const flag = btn.dataset.val === "1";
-      setSegActive("seg-top", btn.dataset.val);
-      window.pywebview.api.set_topmost(flag);
+      setSegActive(segId, btn.dataset.val);
+      onPick(btn.dataset.val, btn);
+    });
+    const savePref = (patch) => {
+      if (latestSnap && latestSnap.prefs) Object.assign(latestSnap.prefs, patch);
+      apiCall("save_prefs", patch);
+    };
+
+    bindSeg("seg-top", (val) => {
+      const flag = val === "1";
+      apiCall("set_topmost", flag);
       showToast(flag ? "已开启总是置顶" : "已取消窗口置顶");
     });
-
-    el("seg-poll").addEventListener("click", (e) => {
-      const btn = e.target.closest(".seg-btn");
-      if (!btn) return;
-      const sec = Number(btn.dataset.val);
-      setSegActive("seg-poll", btn.dataset.val);
-      window.pywebview.api.save_prefs({ poll_interval_sec: sec });
-      showToast(`已切换为每 ${sec} 秒自动刷新`);
-    });
-
-    el("seg-scale").addEventListener("click", (e) => {
-      const btn = e.target.closest(".seg-btn");
-      if (!btn) return;
-      const sc = Number(btn.dataset.val);
-      setSegActive("seg-scale", btn.dataset.val);
+    bindSeg("seg-poll", (val) => { const sec = Number(val); savePref({ poll_interval_sec: sec }); showToast(`已切换为每 ${sec} 秒自动刷新`); });
+    bindSeg("seg-scale", (val) => {
+      const sc = Number(val);
       document.documentElement.style.setProperty("--pet-scale", String(sc));
-      window.pywebview.api.set_scale(sc).then(() => {
-        setTimeout(scheduleSyncRegion, 80);
-      });
+      apiCall("set_scale", sc).then(() => setTimeout(scheduleSyncRegion, 80));
     });
-
-    el("seg-long").addEventListener("click", (e) => {
-      const btn = e.target.closest(".seg-btn");
-      if (!btn) return;
-      const mins = Number(btn.dataset.val);
-      setSegActive("seg-long", btn.dataset.val);
-      window.pywebview.api.save_prefs({ long_run_warn_minutes: mins });
-      if (latestSnap) manualRefresh(true);
-      showToast(`已设置忘关卡提醒为 ${btn.textContent}`);
+    bindSeg("seg-long", (val, btn) => { savePref({ long_run_warn_minutes: Number(val) }); if (latestSnap) manualRefresh(true); showToast(`已设置忘关卡提醒为 ${btn.textContent}`); });
+    bindSeg("seg-autopull", (val) => { const flag = val === "1"; savePref({ auto_pull_outputs: flag }); showToast(flag ? "已开启出图自动拉回本机" : "已切换为点击提醒后手动拉回"); });
+    bindSeg("seg-keepalive", (val) => {
+      const mode = String(val || "stop60"), flag = mode !== "off", idleMins = mode === "stop60" ? 60 : 0;
+      savePref({ keep_alive: flag, idle_auto_stop_minutes: idleMins });
+      showToast(mode === "stop60" ? "已开启智能保活 + 闲置1h自动归档停卡" : (mode === "smart" ? "已切换为智能保活（闲置45m自动停止续命）" : "已关闭保活（闲置约30m由官方自动回收）"));
     });
-
-    el("seg-autopull").addEventListener("click", (e) => {
-      const btn = e.target.closest(".seg-btn");
-      if (!btn) return;
-      const flag = btn.dataset.val === "1";
-      setSegActive("seg-autopull", btn.dataset.val);
-      if (latestSnap && latestSnap.prefs) {
-        latestSnap.prefs.auto_pull_outputs = flag;
-      }
-      if (window.pywebview && window.pywebview.api) {
-        window.pywebview.api.save_prefs({ auto_pull_outputs: flag });
-      }
-      showToast(flag ? "已开启出图自动拉回本机" : "已切换为点击提醒后手动拉回");
+    bindSeg("seg-archive-policy", (val) => {
+      const policy = val === "keep_alive" ? "keep_alive" : "stop_billing";
+      savePref({ idle_archive_fail_policy: policy });
+      showToast(policy === "stop_billing" ? "已设为：归档重试失败后优先停卡止损" : "已设为：归档失败时保图留机并告警提醒");
     });
-
-    el("seg-keepalive").addEventListener("click", (e) => {
-      const btn = e.target.closest(".seg-btn");
-      if (!btn) return;
-      const mode = String(btn.dataset.val || "stop60");
-      const flag = mode !== "off";
-      const idleMins = mode === "stop60" ? 60 : 0;
-      setSegActive("seg-keepalive", mode);
-      if (latestSnap && latestSnap.prefs) {
-        latestSnap.prefs.keep_alive = flag;
-        latestSnap.prefs.idle_auto_stop_minutes = idleMins;
-      }
-      if (window.pywebview && window.pywebview.api) {
-        window.pywebview.api.save_prefs({ keep_alive: flag, idle_auto_stop_minutes: idleMins });
-      }
-      if (mode === "stop60") {
-        showToast("已开启智能保活 + 闲置1h自动归档停卡");
-      } else if (mode === "smart") {
-        showToast("已切换为智能保活（闲置45m自动停止续命）");
-      } else {
-        showToast("已关闭保活（闲置约30m由官方自动回收）");
-      }
-    });
-
-    el("seg-edge").addEventListener("click", (e) => {
-      const btn = e.target.closest(".seg-btn");
-      if (!btn) return;
-      const flag = btn.dataset.val === "1";
-      setSegActive("seg-edge", btn.dataset.val);
-      if (latestSnap && latestSnap.prefs) {
-        latestSnap.prefs.edge_auto_hide = flag;
-      }
-      if (window.pywebview && window.pywebview.api) {
-        window.pywebview.api.set_edge_auto_hide(flag);
-      }
+    bindSeg("seg-edge", (val) => {
+      const flag = val === "1";
+      if (latestSnap && latestSnap.prefs) latestSnap.prefs.edge_auto_hide = flag;
+      apiCall("set_edge_auto_hide", flag);
       showToast(flag ? "已开启靠边停靠自动半隐藏" : "已切换为常驻不自动贴边隐藏");
     });
 
@@ -6445,11 +6082,31 @@
         if (evt.snapshot) {
           window.renderState(evt.snapshot);
         }
-        proudOverrideUntil = Date.now() + 3000;
+        const archFailed = Boolean(evt.archive_failed || evt.is_error);
+        if (archFailed) {
+          proudOverrideUntil = 0;
+          if (latestSnap) latestSnap.mood = "sad";
+        } else {
+          proudOverrideUntil = Date.now() + 3000;
+        }
         updateSpriteFrame();
-        announceActionStatus(evt.summary || "已闲置自动停卡");
-        showToast(evt.summary || "🛑 已闲置自动归档并停卡", {
-          duration: 10000
+        announceActionStatus(evt.summary || (archFailed ? "归档未成功但已停卡止损" : "已闲置自动停卡"));
+        showToast(evt.summary || (archFailed ? "⚠️ 归档失败，已优先停卡停止计费！" : "🛑 已闲置自动归档并停卡"), {
+          duration: archFailed ? 15000 : 10000,
+          isError: archFailed
+        });
+        return;
+      }
+
+      if (evt.type === "idle_archive_failed") {
+        proudOverrideUntil = 0;
+        if (latestSnap) latestSnap.mood = "sad";
+        updateSpriteFrame();
+        announceActionStatus(evt.summary || "云盘归档失败，实例仍保留计费中");
+        showToast(evt.summary || "🚨 云盘归档失败，请立即手动拉回并停卡！", {
+          duration: 15000,
+          isError: true,
+          action: evt.action || "sync_outputs"
         });
         return;
       }
@@ -6526,324 +6183,143 @@
       if (!bodyEl || !titleEl) return;
       const ob = (latestSnap && latestSnap.onboarding) || {};
       bodyEl.innerHTML = "";
+      const mkField = (id, labelTxt, { type = "text", value = "", placeholder = "", maxLength } = {}) => {
+        const inp = h("input", { id, cls: "acct-input", type, value, placeholder, ...(maxLength ? { maxLength } : {}) });
+        return { wrap: h("div", { cls: "acct-field" }, h("label", { attrs: { for: id }, txt: labelTxt }), inp), inp };
+      };
+      const applySnap = (res) => { if (res && res.snapshot) window.renderState(res.snapshot); };
 
       if (acctDrawerMode === "oauth") {
         titleEl.textContent = "🔑 绑定 Google Colab 账号";
-        const tip = document.createElement("div");
-        tip.className = "acct-drawer-tip";
-        tip.textContent = "在浏览器选择 Google Ultra 账号并点「继续」后，点击页面里的复制授权码，再回来点下方粘贴绑定。";
-        bodyEl.appendChild(tip);
-
-        const f1 = document.createElement("div");
-        f1.className = "acct-field";
-        const l1 = document.createElement("label");
-        l1.setAttribute("for", "inp-oauth-label");
-        l1.textContent = "账号备注名（选填）";
-        const i1 = document.createElement("input");
-        i1.id = "inp-oauth-label";
-        i1.className = "acct-input";
-        i1.type = "text";
-        i1.maxLength = 16;
-        i1.placeholder = "如: Ultra 主号 / 2号生图";
-        f1.appendChild(l1);
-        f1.appendChild(i1);
-        bodyEl.appendChild(f1);
-
-        const f2 = document.createElement("div");
-        f2.className = "acct-field";
-        const l2 = document.createElement("label");
-        l2.setAttribute("for", "inp-oauth-code");
-        l2.textContent = "Google 授权码（留空时点下方可自动从剪贴板读取）";
-        const i2 = document.createElement("input");
-        i2.id = "inp-oauth-code";
-        i2.className = "acct-input";
-        i2.type = "text";
-        i2.placeholder = "4/0A... 或包含 code= 的整串地址";
-        f2.appendChild(l2);
-        f2.appendChild(i2);
-        bodyEl.appendChild(f2);
-
-        const submitBtn = document.createElement("button");
-        submitBtn.id = "btn-oauth-paste-submit";
-        submitBtn.type = "button";
-        submitBtn.className = "boot-start-btn";
-        submitBtn.textContent = "📋 一键读取剪贴板并绑定";
-        submitBtn.addEventListener("click", async () => {
-          if (!window.pywebview || !window.pywebview.api) return;
-          let rawCode = String(i2.value || "").trim();
-          if (!rawCode && typeof window.pywebview.api.read_clipboard_text === "function") {
-            const clip = await window.pywebview.api.read_clipboard_text();
-            if (clip) {
-              rawCode = String(clip).trim();
-              i2.value = rawCode;
+        const fLabel = mkField("inp-oauth-label", "账号备注名（选填）", { maxLength: 16, placeholder: "如: Ultra 主号 / 2号生图" });
+        const fCode = mkField("inp-oauth-code", "Google 授权码（留空时点下方可自动从剪贴板读取）", { placeholder: "4/0A... 或包含 code= 的整串地址" });
+        const submitBtn = h("button", {
+          id: "btn-oauth-paste-submit", type: "button", cls: "boot-start-btn", txt: "📋 一键读取剪贴板并绑定",
+          on: {
+            click: async () => {
+              if (!api()) return;
+              let rawCode = String(fCode.inp.value || "").trim();
+              if (!rawCode) {
+                const clip = await apiCall("read_clipboard_text");
+                if (clip) { rawCode = String(clip).trim(); fCode.inp.value = rawCode; }
+              }
+              if (!rawCode) return showToast("剪贴板为空，请先在浏览器复制 Google 授权码", { duration: 2400, isError: true });
+              submitBtn.textContent = "⏳ 正在验证授权并同步余额...";
+              const res = await apiCall("complete_colab_oauth", rawCode, String(fLabel.inp.value || "").trim());
+              submitBtn.textContent = "📋 一键读取剪贴板并绑定";
+              applySnap(res);
+              if (res && res.ok) { closeAccountDrawer(); showToast(res.message || "✅ 账号绑定成功", 3000); }
+              else showToast((res && res.message) || "授权绑定失败", { duration: 3200, isError: true });
             }
           }
-          if (!rawCode) {
-            showToast("剪贴板为空，请先在浏览器复制 Google 授权码", { duration: 2400, isError: true });
-            return;
-          }
-          submitBtn.textContent = "⏳ 正在验证授权并同步余额...";
-          const res = await window.pywebview.api.complete_colab_oauth(rawCode, String(i1.value || "").trim());
-          submitBtn.textContent = "📋 一键读取剪贴板并绑定";
-          if (res && res.snapshot) window.renderState(res.snapshot);
-          if (res && res.ok) {
-            closeAccountDrawer();
-            showToast(res.message || "✅ 账号绑定成功", 3000);
-          } else {
-            showToast((res && res.message) || "授权绑定失败", { duration: 3200, isError: true });
-          }
         });
-        bodyEl.appendChild(submitBtn);
-
-        const row = document.createElement("div");
-        row.className = "acct-btn-row";
-        const reopenBtn = document.createElement("button");
-        reopenBtn.type = "button";
-        reopenBtn.className = "env-btn";
-        reopenBtn.textContent = "🌐 重开授权网页";
-        reopenBtn.addEventListener("click", async () => {
-          if (!window.pywebview || !window.pywebview.api) return;
-          const res = await window.pywebview.api.start_colab_oauth();
-          if (res && res.snapshot) window.renderState(res.snapshot);
-          if (res && res.message) showToast(res.message, { duration: 2400, isError: !res.ok });
-        });
-        const cancelBtn = document.createElement("button");
-        cancelBtn.type = "button";
-        cancelBtn.className = "env-btn warn";
-        cancelBtn.textContent = "取消本次绑定";
-        cancelBtn.addEventListener("click", async () => {
-          if (window.pywebview && window.pywebview.api) {
-            const res = await window.pywebview.api.cancel_colab_oauth();
-            if (res && res.snapshot) window.renderState(res.snapshot);
-          }
-          closeAccountDrawer();
-        });
-        row.appendChild(reopenBtn);
-        row.appendChild(cancelBtn);
-        bodyEl.appendChild(row);
+        bodyEl.append(
+          h("div", { cls: "acct-drawer-tip", txt: "在浏览器选择 Google Ultra 账号并点「继续」后，点击页面里的复制授权码，再回来点下方粘贴绑定。" }),
+          fLabel.wrap, fCode.wrap, submitBtn,
+          h("div", { cls: "acct-btn-row" },
+            h("button", { type: "button", cls: "env-btn", txt: "🌐 重开授权网页", on: { click: async () => { const r = await apiCall("start_colab_oauth"); applySnap(r); if (r && r.message) showToast(r.message, { duration: 2400, isError: !r.ok }); } } }),
+            h("button", { type: "button", cls: "env-btn warn", txt: "取消本次绑定", on: { click: async () => { applySnap(await apiCall("cancel_colab_oauth")); closeAccountDrawer(); } } })
+          )
+        );
         return;
       }
 
       if (acctDrawerMode === "rename" && acctRenameTarget) {
         titleEl.textContent = "✎ 修改账号备注";
-        const tip = document.createElement("div");
-        tip.className = "acct-drawer-tip";
-        tip.textContent = `当前账号: ${acctRenameTarget.email_masked || acctRenameTarget.id}`;
-        bodyEl.appendChild(tip);
-
-        const f = document.createElement("div");
-        f.className = "acct-field";
-        const l = document.createElement("label");
-        l.setAttribute("for", "inp-rename-label");
-        l.textContent = "新备注名（最多 16 字）";
-        const inp = document.createElement("input");
-        inp.id = "inp-rename-label";
-        inp.className = "acct-input";
-        inp.type = "text";
-        inp.maxLength = 16;
-        inp.value = String(acctRenameTarget.label || "");
-        f.appendChild(l);
-        f.appendChild(inp);
-        bodyEl.appendChild(f);
-
-        const saveBtn = document.createElement("button");
-        saveBtn.id = "btn-rename-save";
-        saveBtn.type = "button";
-        saveBtn.className = "boot-start-btn";
-        saveBtn.textContent = "✓ 保存备注";
-        saveBtn.addEventListener("click", async () => {
-          if (!window.pywebview || !window.pywebview.api) return;
-          const res = await window.pywebview.api.rename_colab_account(acctRenameTarget.id, inp.value);
-          if (res && res.snapshot) window.renderState(res.snapshot);
-          if (res && res.ok) {
-            closeAccountDrawer();
-            showToast(res.message || "已更新备注", 2200);
-          } else {
-            showToast((res && res.message) || "修改失败", { duration: 2400, isError: true });
-          }
-        });
-        bodyEl.appendChild(saveBtn);
+        const fName = mkField("inp-rename-label", "新备注名（最多 16 字）", { maxLength: 16, value: String(acctRenameTarget.label || "") });
+        bodyEl.append(
+          h("div", { cls: "acct-drawer-tip", txt: `当前账号: ${acctRenameTarget.email_masked || acctRenameTarget.id}` }),
+          fName.wrap,
+          h("button", {
+            id: "btn-rename-save", type: "button", cls: "boot-start-btn", txt: "✓ 保存备注",
+            on: {
+              click: async () => {
+                const res = await apiCall("rename_colab_account", acctRenameTarget.id, fName.inp.value);
+                applySnap(res);
+                if (res && res.ok) { closeAccountDrawer(); showToast(res.message || "已更新备注", 2200); }
+                else showToast((res && res.message) || "修改失败", { duration: 2400, isError: true });
+              }
+            }
+          })
+        );
         return;
       }
 
       if (acctDrawerMode === "tunnel") {
         titleEl.textContent = "🌐 Cloudflare 固定域名配置";
         const cf = ob.cf_tunnel || {};
-        const tip = document.createElement("div");
-        tip.className = "acct-drawer-tip";
-        tip.textContent = "普通用户推荐直接用免费临时隧道；仅当你自有 Cloudflare 域名时需要填写（密钥单向加密存储，不回显旧值）。";
-        bodyEl.appendChild(tip);
-
-        const mkField = (id, labelTxt, type, val, ph) => {
-          const wrap = document.createElement("div");
-          wrap.className = "acct-field";
-          const lb = document.createElement("label");
-          lb.setAttribute("for", id);
-          lb.textContent = labelTxt;
-          const inp = document.createElement("input");
-          inp.id = id;
-          inp.className = "acct-input";
-          inp.type = type;
-          inp.value = val || "";
-          inp.placeholder = ph || "";
-          wrap.appendChild(lb);
-          wrap.appendChild(inp);
-          return { wrap, inp };
-        };
-
-        const fTok = mkField("inp-cf-token", "Tunnel Token（命名隧道令牌）", "password", "", cf.has_token ? "已保存密钥（留空则保持不变）" : "粘贴 Cloudflare Tunnel Token");
-        const fComfy = mkField("inp-cf-comfy", "ComfyUI 固定域名", "url", cf.comfy_url || "", "https://comfy.example.com");
-        const fLlm = mkField("inp-cf-llm", "LLM 对话固定域名（选填）", "url", cf.llm_url || "", "https://llm.example.com");
-        const fKey = mkField("inp-cf-llmkey", "固定 LLM API Key（选填≥16位）", "password", "", cf.has_fixed_llm_key ? "已配置固定 Key（留空不变）" : "留空则每次开机随机生成");
-        bodyEl.appendChild(fTok.wrap);
-        bodyEl.appendChild(fComfy.wrap);
-        bodyEl.appendChild(fLlm.wrap);
-        bodyEl.appendChild(fKey.wrap);
-
-        const btnRow = document.createElement("div");
-        btnRow.className = "acct-btn-row";
-        const saveCfBtn = document.createElement("button");
-        saveCfBtn.id = "btn-cf-save";
-        saveCfBtn.type = "button";
-        saveCfBtn.className = "env-btn primary";
-        saveCfBtn.textContent = "✓ 保存启用";
-        saveCfBtn.addEventListener("click", async () => {
-          if (!window.pywebview || !window.pywebview.api) return;
-          const res = await window.pywebview.api.save_cf_tunnel_config({
-            tunnel_token: fTok.inp.value,
-            comfy_url: fComfy.inp.value,
-            llm_url: fLlm.inp.value,
-            llm_api_key: fKey.inp.value
-          });
-          if (res && res.snapshot) window.renderState(res.snapshot);
-          if (res && res.ok) {
-            closeAccountDrawer();
-            showToast(res.message || "已保存固定隧道", 2600);
-          } else {
-            showToast((res && res.message) || "保存失败", { duration: 2800, isError: true });
-          }
-        });
-
-        const clearCfBtn = document.createElement("button");
-        clearCfBtn.id = "btn-cf-clear";
-        clearCfBtn.type = "button";
-        clearCfBtn.className = "env-btn";
-        clearCfBtn.textContent = "切回免费隧道";
-        clearCfBtn.addEventListener("click", async () => {
-          const now = Date.now();
-          if (now > cfClearArmedUntil) {
-            cfClearArmedUntil = now + 4000;
-            clearCfBtn.className = "env-btn warn";
-            clearCfBtn.textContent = "⚠️ 再点确认";
-            clearTimeout(cfClearResetTimer);
-            cfClearResetTimer = setTimeout(() => {
-              cfClearArmedUntil = 0;
-              clearCfBtn.className = "env-btn";
-              clearCfBtn.textContent = "切回免费隧道";
-            }, 4000);
-            return;
-          }
-          clearCfResetArm();
-          if (window.pywebview && window.pywebview.api) {
-            const res = await window.pywebview.api.clear_cf_tunnel_config();
-            if (res && res.snapshot) window.renderState(res.snapshot);
-            if (res && res.ok) {
-              closeAccountDrawer();
-              showToast(res.message || "已切回免费隧道", 2400);
+        const fTok = mkField("inp-cf-token", "Tunnel Token（命名隧道令牌）", { type: "password", placeholder: cf.has_token ? "已保存密钥（留空则保持不变）" : "粘贴 Cloudflare Tunnel Token" });
+        const fComfy = mkField("inp-cf-comfy", "ComfyUI 固定域名", { type: "url", value: cf.comfy_url || "", placeholder: "https://comfy.example.com" });
+        const fLlm = mkField("inp-cf-llm", "LLM 对话固定域名（选填）", { type: "url", value: cf.llm_url || "", placeholder: "https://llm.example.com" });
+        const fKey = mkField("inp-cf-llmkey", "固定 LLM API Key（选填≥16位）", { type: "password", placeholder: cf.has_fixed_llm_key ? "已配置固定 Key（留空不变）" : "留空则每次开机随机生成" });
+        const clearCfBtn = h("button", {
+          id: "btn-cf-clear", type: "button", cls: "env-btn", txt: "切回免费隧道",
+          on: {
+            click: async () => {
+              const now = Date.now();
+              if (now > cfClearArmedUntil) {
+                cfClearArmedUntil = now + 4000;
+                clearCfBtn.className = "env-btn warn";
+                clearCfBtn.textContent = "⚠️ 再点确认";
+                clearTimeout(cfClearResetTimer);
+                cfClearResetTimer = setTimeout(() => {
+                  cfClearArmedUntil = 0; clearCfBtn.className = "env-btn"; clearCfBtn.textContent = "切回免费隧道";
+                }, 4000);
+                return;
+              }
+              clearCfResetArm();
+              const res = await apiCall("clear_cf_tunnel_config");
+              applySnap(res);
+              if (res && res.ok) { closeAccountDrawer(); showToast(res.message || "已切回免费隧道", 2400); }
             }
           }
         });
-        btnRow.appendChild(saveCfBtn);
-        btnRow.appendChild(clearCfBtn);
-        bodyEl.appendChild(btnRow);
+        bodyEl.append(
+          h("div", { cls: "acct-drawer-tip", txt: "普通用户推荐直接用免费临时隧道；仅当你自有 Cloudflare 域名时需要填写（密钥存入系统凭据库，配置文件不存明文且不回显）。" }),
+          fTok.wrap, fComfy.wrap, fLlm.wrap, fKey.wrap,
+          h("div", { cls: "acct-btn-row" },
+            h("button", {
+              id: "btn-cf-save", type: "button", cls: "env-btn primary", txt: "✓ 保存启用",
+              on: {
+                click: async () => {
+                  const res = await apiCall("save_cf_tunnel_config", { tunnel_token: fTok.inp.value, comfy_url: fComfy.inp.value, llm_url: fLlm.inp.value, llm_api_key: fKey.inp.value });
+                  applySnap(res);
+                  if (res && res.ok) { closeAccountDrawer(); showToast(res.message || "已保存固定隧道", 2600); }
+                  else showToast((res && res.message) || "保存失败", { duration: 2800, isError: true });
+                }
+              }
+            }),
+            clearCfBtn
+          )
+        );
         return;
       }
 
       // mode === "tools"
       titleEl.textContent = "🧰 运行组件安装与路径管理";
       const tp = ob.tool_paths || {};
-      const cmdTip = document.createElement("div");
-      cmdTip.className = "acct-drawer-tip";
-      cmdTip.textContent = "新电脑未装命令行工具时可先复制下方命令在终端安装，或直接手动选择本地程序路径：";
-      bodyEl.appendChild(cmdTip);
-
-      const cmdRow = document.createElement("div");
-      cmdRow.className = "acct-btn-row";
-      const cpColab = document.createElement("button");
-      cpColab.type = "button";
-      cpColab.className = "env-btn";
-      cpColab.textContent = "📋 复制装 colab-cli";
-      cpColab.addEventListener("click", async () => {
-        const cmdTxt = "uv tool install google-colab-cli";
-        if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.copy_text === "function") {
-          await window.pywebview.api.copy_text(cmdTxt);
-        }
-        showToast("已复制: uv tool install google-colab-cli", 2400);
+      const cpBtn = (lbl, cmd) => h("button", {
+        type: "button", cls: "env-btn", txt: lbl,
+        on: { click: async () => { await apiCall("copy_text", cmd); showToast(`已复制: ${cmd}`, 2400); } }
       });
-      const cpRclone = document.createElement("button");
-      cpRclone.type = "button";
-      cpRclone.className = "env-btn";
-      cpRclone.textContent = "📋 复制装 rclone";
-      cpRclone.addEventListener("click", async () => {
-        const cmdTxt = "winget install Rclone.Rclone";
-        if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.copy_text === "function") {
-          await window.pywebview.api.copy_text(cmdTxt);
-        }
-        showToast("已复制: winget install Rclone.Rclone", 2400);
-      });
-      cmdRow.appendChild(cpColab);
-      cmdRow.appendChild(cpRclone);
-      bodyEl.appendChild(cmdRow);
-
-      [
-        { kind: "colab_py", label: "colab-cli Python", val: tp.colab_py },
-        { kind: "colab_exe", label: "colab.exe", val: tp.colab_exe },
-        { kind: "rclone_exe", label: "rclone.exe", val: tp.rclone_exe },
-        { kind: "rclone_conf", label: "rclone.conf", val: tp.rclone_conf }
-      ].forEach((item) => {
-        const row = document.createElement("div");
-        row.className = "tool-path-row";
-        const meta = document.createElement("div");
-        meta.className = "tool-path-meta";
-        const nm = document.createElement("span");
-        nm.className = "tool-path-name";
-        nm.textContent = item.label;
-        const vl = document.createElement("span");
-        vl.className = "tool-path-val";
-        vl.title = item.val || "";
-        vl.textContent = formatToolShortName(item.val);
-        meta.appendChild(nm);
-        meta.appendChild(vl);
-        const pickBtn = document.createElement("button");
-        pickBtn.type = "button";
-        pickBtn.className = "env-btn";
-        pickBtn.textContent = "定位";
-        pickBtn.addEventListener("click", async () => {
-          if (!window.pywebview || !window.pywebview.api) return;
-          const res = await window.pywebview.api.pick_tool_binary(item.kind);
-          if (res && res.snapshot) window.renderState(res.snapshot);
-          if (res && !res.cancelled && res.message) {
-            renderAccountDrawerContent();
-            showToast(res.message, { duration: 2400, isError: !res.ok });
-          }
-        });
-        row.appendChild(meta);
-        row.appendChild(pickBtn);
-        bodyEl.appendChild(row);
-      });
-
-      const resetBtn = document.createElement("button");
-      resetBtn.type = "button";
-      resetBtn.className = "env-btn";
-      resetBtn.textContent = "↻ 全部恢复自动探测路径";
-      resetBtn.addEventListener("click", async () => {
-        if (!window.pywebview || !window.pywebview.api) return;
-        const res = await window.pywebview.api.reset_tool_paths();
-        if (res && res.snapshot) window.renderState(res.snapshot);
-        renderAccountDrawerContent();
-        if (res && res.message) showToast(res.message, 2200);
-      });
-      bodyEl.appendChild(resetBtn);
+      bodyEl.append(
+        h("div", { cls: "acct-drawer-tip", txt: "新电脑未装命令行工具时可先复制下方命令在终端安装，或直接手动选择本地程序路径：" }),
+        h("div", { cls: "acct-btn-row" }, cpBtn("📋 复制装 colab-cli", "uv tool install google-colab-cli"), cpBtn("📋 复制装 rclone", "winget install Rclone.Rclone")),
+        ...[
+          { kind: "colab_py", label: "colab-cli Python", val: tp.colab_py },
+          { kind: "colab_exe", label: "colab.exe", val: tp.colab_exe },
+          { kind: "rclone_exe", label: "rclone.exe", val: tp.rclone_exe },
+          { kind: "rclone_conf", label: "rclone.conf", val: tp.rclone_conf }
+        ].map((item) => h("div", { cls: "tool-path-row" },
+          h("div", { cls: "tool-path-meta" }, h("span", { cls: "tool-path-name", txt: item.label }), h("span", { cls: "tool-path-val", title: item.val || "", txt: formatToolShortName(item.val) })),
+          h("button", { type: "button", cls: "env-btn", txt: "定位", on: { click: async () => { const r = await apiCall("pick_tool_binary", item.kind); applySnap(r); if (r && !r.cancelled && r.message) { renderAccountDrawerContent(); showToast(r.message, { duration: 2400, isError: !r.ok }); } } } })
+        )),
+        h("button", { type: "button", cls: "env-btn", txt: "↻ 全部恢复自动探测路径", on: { click: async () => { const r = await apiCall("reset_tool_paths"); applySnap(r); renderAccountDrawerContent(); if (r && r.message) showToast(r.message, 2200); } } }),
+        h("div", { cls: "acct-btn-row" },
+          h("button", { id: "btn-export-diag", type: "button", cls: "env-btn", txt: "🩺 导出诊断包", on: { click: async () => { const r = await apiCall("export_diagnostics"); if (r && r.message) showToast(r.message, { duration: 3000, isError: !r.ok }); } } }),
+          h("button", { id: "btn-open-logs", type: "button", cls: "env-btn", txt: "📄 打开日志", on: { click: async () => { const r = await apiCall("open_logs_dir"); if (r && r.message) showToast(r.message, { duration: 2400, isError: !r.ok }); } } })
+        )
+      );
     }
 
     el("acct-tabs").addEventListener("click", (e) => {

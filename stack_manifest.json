@@ -1,0 +1,230 @@
+{
+  "schema_version": 1,
+  "default_profile": "anima",
+  "host_baseline": {
+    "python_min": "3.11",
+    "python_verified": "3.14.6",
+    "tools": {
+      "google-colab-cli": "0.8.0",
+      "rclone": "1.76.0",
+      "webview2_min": "120.0"
+    },
+    "requirements_file": "requirements.txt",
+    "requirements_lock_file": "requirements-lock.txt"
+  },
+  "profiles": {
+    "anima": {
+      "label": "Anima 二次元生图",
+      "category": "image",
+      "verified_default": true,
+      "bootstrap_script": "colab_bootstrap_anima.py",
+      "smoke_script": "verify_smoke.py",
+      "recommended_gpu": "L4",
+      "min_vram_gib": 20.0,
+      "min_cloud_free_gib": 20.0,
+      "min_local_free_gib": 1.0,
+      "engine": {
+        "kind": "ComfyUI",
+        "repo": "https://github.com/comfyanonymous/ComfyUI.git",
+        "ref_env": "COMFY_GIT_REF",
+        "min_version": "0.40.0",
+        "preserve_system_torch": true
+      },
+      "custom_nodes": [
+        {
+          "name": "colab_pet_bridge",
+          "version": 3,
+          "source": "colab_pet_bridge_node.py",
+          "features": ["canvas_bridge", "public_auth_gateway"]
+        }
+      ],
+      "models": [
+        {
+          "role": "diffusion_model",
+          "file": "diffusion_models/anima-base-v1.0.safetensors",
+          "repo": "circlestone-labs/Anima",
+          "exact_bytes": 4182218328
+        },
+        {
+          "role": "text_encoder",
+          "file": "text_encoders/qwen_3_06b_base.safetensors",
+          "repo": "circlestone-labs/Anima",
+          "exact_bytes": 1192135096
+        },
+        {
+          "role": "vae",
+          "file": "vae/qwen_image_vae.safetensors",
+          "repo": "circlestone-labs/Anima",
+          "exact_bytes": 253806246
+        }
+      ]
+    },
+    "minimax": {
+      "label": "MiniMax-H3 视频音频与高分辨率生图",
+      "category": "video",
+      "verified_default": false,
+      "bootstrap_script": "colab_bootstrap_minimax_h3.py",
+      "smoke_script": "verify_minimax_h3.py",
+      "recommended_gpu": "G4",
+      "min_vram_gib": 35.0,
+      "min_cloud_free_gib": 98.0,
+      "min_local_free_gib": 2.0,
+      "engine": {
+        "kind": "ComfyUI",
+        "repo": "https://github.com/Comfy-Org/ComfyUI.git",
+        "ref_env": "COMFY_GIT_REF",
+        "min_version": "0.40.0",
+        "preserve_system_torch": true
+      },
+      "custom_nodes": [
+        {
+          "name": "colab_pet_bridge",
+          "version": 3,
+          "source": "colab_pet_bridge_node.py",
+          "features": ["canvas_bridge", "public_auth_gateway"]
+        }
+      ],
+      "models": [
+        {
+          "role": "text_encoder_shared",
+          "file": "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+          "repo": "Comfy-Org/MiniMax-H3",
+          "min_bytes": 10000000000
+        },
+        {
+          "role": "image_diffusion",
+          "file": "diffusion_models/minimax_h3_image_pruned_int8_convrot.safetensors",
+          "repo": "Comfy-Org/MiniMax-H3-Image",
+          "min_bytes": 15000000000
+        },
+        {
+          "role": "video_diffusion_fl2va",
+          "file": "diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "repo": "Comfy-Org/MiniMax-H3",
+          "min_bytes": 15000000000
+        },
+        {
+          "role": "video_diffusion_r2v_optional",
+          "file": "diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+          "repo": "Comfy-Org/MiniMax-H3",
+          "min_bytes": 15000000000
+        }
+      ]
+    },
+    "drama3": {
+      "label": "Drama 3 语音克隆与自由演戏",
+      "category": "audio",
+      "verified_default": false,
+      "bootstrap_script": "colab_bootstrap_drama3.py",
+      "smoke_script": "verify_drama3.py",
+      "recommended_gpu": "G4",
+      "min_vram_gib": 20.0,
+      "min_cloud_free_gib": 46.0,
+      "min_local_free_gib": 1.0,
+      "engine": {
+        "kind": "ComfyUI",
+        "repo": "https://github.com/Comfy-Org/ComfyUI.git",
+        "ref_env": "COMFY_GIT_REF",
+        "min_version": "0.40.0",
+        "preserve_system_torch": true
+      },
+      "custom_nodes": [
+        {
+          "name": "ComfyUI-Drama3",
+          "repo": "https://github.com/PedroMarinhoDev/ComfyUI-Drama3.git",
+          "ref_env": "DRAMA3_NODE_GIT_REF"
+        },
+        {
+          "name": "colab_pet_bridge",
+          "version": 3,
+          "source": "colab_pet_bridge_node.py",
+          "features": ["canvas_bridge", "public_auth_gateway"]
+        }
+      ],
+      "models": [
+        {
+          "role": "diffusion_model",
+          "file": "diffusion_models/drama3_fp8experts_bf16.safetensors",
+          "repo": "PedroMarinhoDev/Drama-3-ComfyUI",
+          "exact_bytes": 38578426208
+        },
+        {
+          "role": "vae_codec",
+          "file": "vae/drama3_codec.safetensors",
+          "repo": "PedroMarinhoDev/Drama-3-ComfyUI",
+          "exact_bytes": 1565647484
+        },
+        {
+          "role": "asr",
+          "file": "asr/qwen3_asr_1.7b_bf16.safetensors",
+          "repo": "PedroMarinhoDev/Qwen3-ASR-ComfyUI",
+          "exact_bytes": 4076192608
+        }
+      ]
+    },
+    "qwen_27b": {
+      "label": "Qwen3.8-27B 稠密破限版对话",
+      "category": "llm",
+      "verified_default": false,
+      "bootstrap_script": "colab_bootstrap_qwen_llm.py",
+      "smoke_script": "verify_qwen_llm.py",
+      "recommended_gpu": "L4",
+      "min_vram_gib": 20.0,
+      "min_cloud_free_gib": 24.0,
+      "min_local_free_gib": 0.5,
+      "engine": {
+        "kind": "llama.cpp",
+        "repo": "https://github.com/ggml-org/llama.cpp.git",
+        "pinned_tag": "b12415",
+        "ref_env": "LLAMA_CPP_TAG"
+      },
+      "custom_nodes": [],
+      "models": [
+        {
+          "role": "gguf_q4",
+          "file": "Huihui-Qwen3.8-27B-abliterated-UD-Q4_K_XL.gguf",
+          "repo": "huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF",
+          "min_bytes": 17000000000
+        },
+        {
+          "role": "mmproj",
+          "file": "mmproj-model-bf16.gguf",
+          "repo": "huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF",
+          "min_bytes": 900000000
+        }
+      ]
+    },
+    "qwen_llm": {
+      "label": "Qwen3.8-180B Flash-Next 破限旗舰对话",
+      "category": "llm",
+      "verified_default": false,
+      "bootstrap_script": "colab_bootstrap_qwen_llm.py",
+      "smoke_script": "verify_qwen_llm.py",
+      "recommended_gpu": "G4",
+      "min_vram_gib": 45.0,
+      "min_cloud_free_gib": 112.0,
+      "min_local_free_gib": 0.5,
+      "engine": {
+        "kind": "llama.cpp",
+        "repo": "https://github.com/ggml-org/llama.cpp.git",
+        "pinned_tag": "b12415",
+        "ref_env": "LLAMA_CPP_TAG"
+      },
+      "custom_nodes": [],
+      "models": [
+        {
+          "role": "gguf_ud_q4_shards",
+          "file": "unsloth-UD-Q4_K_XL-V2/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf",
+          "repo": "huihui-ai/Huihui-Qwen3.8-Flash-Next-abliterated-v2-GGUF",
+          "shards": 4
+        },
+        {
+          "role": "mmproj",
+          "file": "mmproj-Qwen3.8-Flash-Next-BF16.gguf",
+          "repo": "huihui-ai/Huihui-Qwen3.8-Flash-Next-abliterated-v2-GGUF",
+          "min_bytes": 850000000
+        }
+      ]
+    }
+  }
+}

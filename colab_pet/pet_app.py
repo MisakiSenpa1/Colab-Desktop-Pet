@@ -43,6 +43,17 @@ def _ensure_std_streams() -> None:
 
 _ensure_std_streams()
 
+# 内部 CLI 转发（专供 PyInstaller 冻结单目录版后台无窗口调用 colab_ctl 子命令，零 GUI 开销）
+if sys.argv[1:2] == ["--internal-ctl"]:
+    _pet_dir_early = Path(__file__).resolve().parent
+    _pkg_dir_early = _pet_dir_early.parent
+    for _p in (str(_pkg_dir_early), str(_pet_dir_early)):
+        if _p not in sys.path:
+            sys.path.insert(0, _p)
+    import colab_ctl  # noqa: E402
+
+    raise SystemExit(colab_ctl.main(sys.argv[2:]))
+
 import clr
 from PIL import Image, ImageDraw
 
@@ -60,7 +71,7 @@ ASSETS_DIR = PET_DIR / "assets"
 if str(PET_DIR) not in sys.path:
     sys.path.insert(0, str(PET_DIR))
 
-from colab_backend import ColabPetBackend  # noqa: E402
+from colab_backend import ColabPetBackend, _redact_payload  # noqa: E402
 
 BASE_W = 392
 BASE_H = 548
@@ -197,7 +208,6 @@ def _render_fallback_sprite(mood: str) -> tuple[Image.Image, bytes]:
     return res
 
 
-
 def _current_desktop_tag() -> str:
     """获取当前线程所属 Win32 桌面名称并清洗为互斥量后缀，避免跨桌面误锁。"""
     user32 = ctypes.windll.user32
@@ -273,11 +283,20 @@ def _get_hwnd_process_start_epoch(hwnd: int) -> float | None:
 
 
 def _latest_pet_source_mtime() -> float:
-    """获取 pet_app.py 与 ui.html 的最新磁盘修改时间戳（秒）。"""
+    """获取桌宠前后端源码（含 colab_backend.py 与 colab_core）最新修改时间戳，用于自动热替换。"""
     latest = 0.0
-    for fname in ("pet_app.py", "ui.html"):
+    candidates = [
+        PET_DIR / "pet_app.py",
+        PET_DIR / "ui.html",
+        PET_DIR / "colab_backend.py",
+        PET_DIR.parent / "colab_security.py",
+    ]
+    core_dir = PET_DIR.parent / "colab_core"
+    if core_dir.is_dir():
+        candidates.extend(core_dir.glob("*.py"))
+    for p in candidates:
         try:
-            latest = max(latest, float((PET_DIR / fname).stat().st_mtime))
+            latest = max(latest, float(p.stat().st_mtime))
         except OSError:
             pass
     return latest
@@ -435,7 +454,6 @@ def _get_alpha_template(is_blink: bool) -> Image.Image | None:
             )
             _SPRITE_ALPHA_CACHE[key] = alpha
             return alpha
-
     # 未放置自定义立绘时，提取内置兜底矢量立绘的 Alpha 轮廓以确保边缘裁剪完整
     fb_img, _ = _render_fallback_sprite("blink" if is_blink else "idle")
     alpha = fb_img.getchannel("A")
@@ -767,27 +785,25 @@ class PetBridgeApi:
         return self._backend.fetch_live_status()
 
     def _apply_clipboard_and_redact(self, res: dict[str, Any]) -> dict[str, Any]:
-        """若后端结果含非空剪贴板文本则写入系统剪贴板，并剥离原文防止敏感密钥进入前端日志。"""
+        """若后端结果含非空剪贴板文本则写入系统剪贴板，并剥离原文与脱敏返回给前端。"""
         if not isinstance(res, dict):
             return res
         out = dict(res)
         clip_text = out.pop("clipboard_text", None)
         if isinstance(clip_text, str) and clip_text:
             self._set_clipboard(clip_text)
-        return out
+        return _redact_payload(out)
 
     def open_comfy_tunnel(self) -> dict[str, Any]:
         return self._apply_clipboard_and_redact(self._backend.open_comfy_tunnel())
 
+    def copy_comfy_access_config(self) -> dict[str, Any]:
+        """一键复制当前在线 ComfyUI 公网地址与访问口令并脱敏返回前端。"""
+        return self._apply_clipboard_and_redact(self._backend.get_comfy_access_bundle("comfy"))
+
     def open_llm_tunnel(self) -> dict[str, Any]:
         """打开 Qwen3.8 对话网页并将密钥写入剪贴板（双栖或纯 LLM 模式均适用）。"""
         return self._apply_clipboard_and_redact(self._backend.open_llm_tunnel())
-
-    def open_comfy_workflow(self, workflow_name: str) -> dict[str, Any]:
-        """按文件名直铺指定工作流到云端 ComfyUI 画布。"""
-        return self._apply_clipboard_and_redact(
-            self._backend.open_comfy_tunnel(workflow_name=workflow_name)
-        )
 
     def open_colab_url(self) -> dict[str, Any]:
         return self._backend.open_colab_url()
@@ -799,12 +815,20 @@ class PetBridgeApi:
         """一键复制当前在线 Qwen3.8 实例的 OpenAI 接口配置并脱敏返回前端。"""
         return self._apply_clipboard_and_redact(self._backend.get_llm_api_bundle("comfy"))
 
+    def stop_session_instance(self, session: str = "comfy") -> dict[str, Any]:
+        """精准释放指定绑定会话的 Colab 实例（绝不误杀同账号其余会话）。"""
+        return self._apply_clipboard_and_redact(self._backend.stop_session_instance(session=session))
+
     def stop_all_instances(self) -> dict[str, Any]:
-        return self._backend.stop_all_instances()
+        return self._apply_clipboard_and_redact(self._backend.stop_all_instances())
 
     def start_instance(self, config: dict[str, Any] | None = None) -> dict[str, Any]:
         """按所选生态与显卡一键开机部署并直播 7 步进度。"""
         return self._backend.start_instance(config or {})
+
+    def reconfigure_running_llm(self, config: dict[str, Any] | None = None) -> dict[str, Any]:
+        """在线热修改运行中 Qwen3.8 的上下文/量化/识图参数（不断开同机 ComfyUI）。"""
+        return self._backend.reconfigure_running_llm(config or {})
 
     def cancel_deploy(self) -> dict[str, Any]:
         """主动中止当前正在执行的一键开机部署任务。"""
@@ -906,47 +930,42 @@ class PetBridgeApi:
         """一键打开本机历史成图产出目录。"""
         return self._backend.open_local_outputs_dir()
 
-    def pick_rclone_conf(self) -> dict[str, Any]:
-        """打开本地文件选择器导入现有 rclone.conf 配置文件。"""
+    def export_diagnostics(self) -> dict[str, Any]:
+        """导出全量脱敏的排障诊断包 (.zip) 方便定位问题。"""
+        return self._apply_clipboard_and_redact(self._backend.export_diagnostics())
+
+    def open_logs_dir(self) -> dict[str, Any]:
+        """打开本地诊断日志目录。"""
+        return self._apply_clipboard_and_redact(self._backend.open_logs_dir())
+
+    def _open_single_file_dialog(self, file_types: tuple[str, ...]) -> str | None:
         if not self._window:
-            return {"ok": False, "message": "窗口未就绪"}
+            return None
         self._in_dialog = True
         self._peek_wake_until = max(self._peek_wake_until, time.monotonic() + 4.0)
         try:
             selected = self._window.create_file_dialog(
-                webview.FileDialog.OPEN,
-                allow_multiple=False,
-                file_types=("rclone 配置文件 (*.conf)", "所有文件 (*.*)"),
+                webview.FileDialog.OPEN, allow_multiple=False, file_types=file_types
             )
+            return str(selected[0]) if selected else None
         finally:
             self._in_dialog = False
             self._peek_wake_until = max(self._peek_wake_until, time.monotonic() + 2.0)
             self._wake_event.set()
-        if not selected:
-            return {"ok": False, "cancelled": True, "message": "已取消选择"}
-        return self._backend.import_rclone_conf(str(selected[0]))
+
+    def pick_rclone_conf(self) -> dict[str, Any]:
+        if not self._window:
+            return {"ok": False, "message": "窗口未就绪"}
+        picked = self._open_single_file_dialog(("rclone 配置文件 (*.conf)", "所有文件 (*.*)"))
+        return self._backend.import_rclone_conf(picked) if picked else {"ok": False, "cancelled": True, "message": "已取消选择"}
 
     def pick_tool_binary(self, kind: str) -> dict[str, Any]:
-        """打开本地文件选择器手动定位 colab.exe / python.exe / rclone.exe / rclone.conf。"""
         if str(kind or "").strip().lower() == "rclone_conf":
             return self.pick_rclone_conf()
         if not self._window:
             return {"ok": False, "message": "窗口未就绪"}
-        self._in_dialog = True
-        self._peek_wake_until = max(self._peek_wake_until, time.monotonic() + 4.0)
-        try:
-            selected = self._window.create_file_dialog(
-                webview.FileDialog.OPEN,
-                allow_multiple=False,
-                file_types=("可执行程序 (*.exe)", "所有文件 (*.*)"),
-            )
-        finally:
-            self._in_dialog = False
-            self._peek_wake_until = max(self._peek_wake_until, time.monotonic() + 2.0)
-            self._wake_event.set()
-        if not selected:
-            return {"ok": False, "cancelled": True, "message": "已取消选择"}
-        return self._backend.set_tool_path(kind, str(selected[0]))
+        picked = self._open_single_file_dialog(("可执行程序 (*.exe)", "所有文件 (*.*)"))
+        return self._backend.set_tool_path(kind, picked) if picked else {"ok": False, "cancelled": True, "message": "已取消选择"}
 
     def _on_dom_drop(self, event: Any) -> None:
         """响应 Edge WebView2 DOM 原生 drop 事件，提取真实磁盘路径并投递后端。"""
@@ -1053,6 +1072,8 @@ class PetBridgeApi:
             if self._backend.is_llm_mode_active():
                 return self._apply_clipboard_and_redact(self._backend.get_llm_api_bundle("comfy"))
             return self._apply_clipboard_and_redact(self._backend.pull_or_open_latest_outputs())
+        if action == "sync_outputs":
+            return self._apply_clipboard_and_redact(self._backend.sync_outputs())
         if action == "error":
             self._backend.acknowledge_comfy_error()
             return self._apply_clipboard_and_redact(self._backend.open_comfy_tunnel())
@@ -1344,14 +1365,14 @@ class PetBridgeApi:
         flag = bool(enabled)
         res = self._backend.update_prefs({"edge_auto_hide": flag})
         if not flag:
-            self.wake_from_edge_peek(hold_sec=2.0)
+            self._wake_from_edge_peek(hold_sec=2.0)
         else:
             self._hover_out_since = None
             self._peek_wake_until = max(self._peek_wake_until, time.monotonic() + 0.6)
             self._wake_event.set()
         return res
 
-    def wake_from_edge_peek(self, hold_sec: float = 4.0) -> None:
+    def _wake_from_edge_peek(self, hold_sec: float = 4.0) -> None:
         """从贴边半隐藏状态平顺唤醒回屏幕可见区并延长防隐藏窗口。"""
         self._peek_wake_until = max(self._peek_wake_until, time.monotonic() + max(0.5, float(hold_sec)))
         self._hover_out_since = None
@@ -1827,10 +1848,11 @@ def _push_event_to_ui(
         "dual_image_choice",
         "idle_warning",
         "idle_stopped",
+        "idle_archive_failed",
         "onboarding_event",
     }:
-        api.wake_from_edge_peek(hold_sec=8.5)
-    safe_evt = {k: v for k, v in evt.items() if k != "clipboard_text"}
+        api._wake_from_edge_peek(hold_sec=8.5)
+    safe_evt = _redact_payload({k: v for k, v in evt.items() if k != "clipboard_text"})
     payload = json.dumps(safe_evt, ensure_ascii=False)
     try:
         win.evaluate_js(f"window.onBackendEvent && window.onBackendEvent({payload});")
@@ -1847,6 +1869,11 @@ def run_app(
         return 0
 
     backend = ColabPetBackend()
+    backend._diag.info(
+        "pet",
+        "Colab 桌宠界面进程已启动",
+        frozen=bool(getattr(sys, "frozen", False)),
+    )
     prefs = backend.state.get("prefs") or {}
     scale = max(0.75, min(1.35, float(prefs.get("scale", 1.0))))
     win_w = int(math.ceil(BASE_W * scale))
@@ -2037,7 +2064,23 @@ def main() -> int:
         action="store_true",
         help="若已有桌宠实例运行，优雅关闭旧窗口并以最新代码重启",
     )
+    parser.add_argument(
+        "--doctor",
+        action="store_true",
+        help="执行启动前全维度环境体检并打印报告后退出",
+    )
+    parser.add_argument(
+        "--export-diag",
+        action="store_true",
+        help="立即导出脱敏排障诊断包 (.zip) 并打印路径后退出",
+    )
     args = parser.parse_args()
+    if args.doctor or args.export_diag:
+        import colab_ctl
+
+        if args.doctor:
+            return colab_ctl.main(["doctor"])
+        return colab_ctl.main(["diag"])
     return run_app(
         test_render_sec=args.test_render,
         capture_path=args.capture,

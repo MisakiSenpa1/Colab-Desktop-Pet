@@ -21,7 +21,6 @@
 """
 import json
 import os
-import re
 import secrets
 import shutil
 import subprocess
@@ -29,12 +28,30 @@ import sys
 import tarfile
 import time
 import urllib.request
-import zipfile
 from pathlib import Path, PurePosixPath
+
+from colab_remote_common import (
+    CLOUDFLARED_LOG,
+    LLM_TUNNEL_URL_FILE,
+    RCLONE_CONF,
+    SERVICE_META_FILE,
+    TUNNEL_URL_FILE,
+    DEFAULT_TUNNEL_URL_RE as TUNNEL_URL_RE,
+    download_and_verify,
+    download_with_urllib as _download_with_urllib,
+    ensure_tools,
+    env_flag as _env_flag,
+    mask_secret as _mask_key,
+    read_json_dict,
+    run_cmd,
+    start_cloudflared_tunnel,
+    write_private_json as _write_private_meta,
+    write_runtime_versions_record as _write_versions_common,
+)
 
 HF_REPO_180B = "huihui-ai/Huihui-Qwen3.8-Flash-Next-abliterated-v2-GGUF"
 HF_REPO_27B = "huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF"
-LLAMA_CPP_TAG = "b12415"
+LLAMA_CPP_TAG = (os.environ.get("LLAMA_CPP_TAG") or "b12415").strip() or "b12415"
 LLAMA_DIR = Path("/opt/llama_cpp")
 
 LLAMA_PORT = 18080
@@ -45,17 +62,9 @@ LLAMA_INTERNAL_API = f"http://127.0.0.1:{LLAMA_INTERNAL_PORT}"
 LLAMA_LOG = Path("/root/llama_server.log")
 SSE_GATEWAY_FILE = Path("/root/llm_sse_gateway.py")
 SSE_GATEWAY_LOG = Path("/root/llm_sse_gateway.log")
-CLOUDFLARED_BIN = Path("/usr/local/bin/cloudflared")
-CLOUDFLARED_LOG = Path("/root/cloudflared.log")
 CLOUDFLARED_LLM_LOG = Path("/root/cloudflared_llm.log")
-TUNNEL_URL_FILE = Path("/root/comfy_tunnel_url.txt")
-LLM_TUNNEL_URL_FILE = Path("/root/llm_tunnel_url.txt")
-SERVICE_META_FILE = Path("/root/colab_service_meta.json")
-RCLONE_CONF = Path("/tmp/rclone.conf")
 
 GDRIVE_BIN_REMOTE = "gdrive_save:Colab_LLM_Binaries"
-
-TUNNEL_URL_RE = re.compile(r"https://(?!api\.)[a-z0-9-]+\.trycloudflare\.com")
 
 # 180B 精确量化分片配置表（v2 仓库实测路径与最小字节阈值，注意 Unsloth 首片仅为 ~10.9 MB 元数据头）
 QUANT_SPECS_180B: dict[str, dict] = {
@@ -114,14 +123,6 @@ QUANT_SPECS_27B: dict[str, dict] = {
 }
 
 
-def _env_flag(name: str, default: bool) -> bool:
-    """读取布尔环境变量。"""
-    val = os.environ.get(name)
-    if val is None:
-        return default
-    return val.strip().lower() not in ("0", "false", "no", "off", "")
-
-
 def _env_int(name: str, default: int) -> int:
     """读取整型环境变量，非法格式时回退默认值。"""
     val = (os.environ.get(name) or "").strip()
@@ -174,96 +175,6 @@ def _calc_n_parallel(vram_gib: float) -> int:
     if MODEL_VARIANT == "27b":
         return 4 if vram_gib >= 38.0 else 2
     return 4 if vram_gib >= 88.0 else 2
-
-
-def _mask_key(key: str) -> str:
-    """生成安全脱敏密钥摘要，严禁在部署日志中打印完整明文密钥。"""
-    if not key:
-        return "(empty)"
-    if key.startswith("sk-pet-"):
-        return "sk-pet-****"
-    if len(key) <= 8:
-        return "****"
-    return f"{key[:4]}****"
-
-
-def run_cmd(cmd, check: bool = True, cwd=None, capture: bool = False, env=None, redact_secret: str = ""):
-    """在非交互标准输入模式下流式执行子进程命令，防止 colab exec 挂起并支持敏感词脱敏。"""
-    cmd_list = [str(x) for x in cmd]
-    shown = [(_mask_key(x) if redact_secret and x == redact_secret else x) for x in cmd_list]
-    print(f"[执行] {' '.join(shown)}", flush=True)
-    if capture:
-        return subprocess.run(
-            cmd_list,
-            cwd=str(cwd) if cwd else None,
-            check=check,
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=env,
-        )
-    proc = subprocess.Popen(
-        cmd_list,
-        cwd=str(cwd) if cwd else None,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        bufsize=1,
-        env=env,
-    )
-    assert proc.stdout is not None
-    try:
-        for line in proc.stdout:
-            if redact_secret and redact_secret in line:
-                line = line.replace(redact_secret, _mask_key(redact_secret))
-            print(line, end="", flush=True)
-    finally:
-        proc.stdout.close()
-    rc = proc.wait()
-    if check and rc != 0:
-        raise subprocess.CalledProcessError(rc, shown)
-    return subprocess.CompletedProcess(shown, rc)
-
-
-def _download_with_urllib(url: str, dst: Path, retries: int = 3):
-    """使用标准库 urllib 流式分块下载文件并原子替换。"""
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    part = dst.with_suffix(dst.suffix + ".part")
-    last_err = None
-    for attempt in range(1, retries + 1):
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                total = int(resp.headers.get("Content-Length") or 0)
-                done = 0
-                last_log = 0.0
-                with open(part, "wb") as f:
-                    while True:
-                        chunk = resp.read(8 * 1024 * 1024)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        done += len(chunk)
-                        now = time.monotonic()
-                        if total > 0 and now - last_log >= 5.0:
-                            pct = done * 100.0 / total
-                            print(
-                                f"  [urllib] {dst.name}: {done / (1024**3):.2f}/{total / (1024**3):.2f} GiB ({pct:.1f}%)",
-                                flush=True,
-                            )
-                            last_log = now
-            part.replace(dst)
-            return
-        except Exception as exc:
-            last_err = exc
-            print(f"[下载重试] {dst.name} 第 {attempt}/{retries} 次失败: {exc}", flush=True)
-            time.sleep(3 * attempt)
-    raise RuntimeError(f"下载失败: {url} ({last_err})")
 
 
 def _safe_extract_tar(tar_path: Path, dest_dir: Path):
@@ -431,45 +342,6 @@ def check_environment() -> tuple[str, float, str]:
         )
 
     return active_quant, vram_gib, sm_num
-
-
-def ensure_tools():
-    """确保 rclone、aria2c、cloudflared 基础传输与隧道工具已安装就绪。"""
-    print("=== [2/7] 安装基础传输与隧道工具 ===", flush=True)
-    rclone_bin = Path("/usr/local/bin/rclone")
-    if not shutil.which("rclone"):
-        subprocess.run(
-            ["bash", "-lc", "apt-get update -qq && apt-get install -y -qq rclone aria2"],
-            check=False,
-            stdin=subprocess.DEVNULL,
-        )
-        if not shutil.which("rclone") and not rclone_bin.is_file():
-            zip_path = Path("/tmp/rclone-linux-amd64.zip")
-            _download_with_urllib("https://downloads.rclone.org/rclone-current-linux-amd64.zip", zip_path)
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                members = [m for m in zf.namelist() if m.endswith("/rclone") and m.count("/") == 1]
-                with zf.open(members[0]) as src, open(rclone_bin, "wb") as dst:
-                    shutil.copyfileobj(src, dst)
-            os.chmod(rclone_bin, 0o755)
-            zip_path.unlink(missing_ok=True)
-    if not shutil.which("aria2c"):
-        subprocess.run(
-            ["bash", "-lc", "apt-get update -qq && apt-get install -y -qq aria2"],
-            check=False,
-            stdin=subprocess.DEVNULL,
-        )
-    if not shutil.which("cloudflared") and not CLOUDFLARED_BIN.exists():
-        cf_tmp = CLOUDFLARED_BIN.with_suffix(".part")
-        _download_with_urllib(
-            "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64",
-            cf_tmp,
-        )
-        cf_tmp.replace(CLOUDFLARED_BIN)
-        os.chmod(CLOUDFLARED_BIN, 0o755)
-    print(
-        f"工具就绪: rclone={shutil.which('rclone') or rclone_bin}, aria2c={shutil.which('aria2c')}, cloudflared={shutil.which('cloudflared') or CLOUDFLARED_BIN}",
-        flush=True,
-    )
 
 
 def _build_ld_library_path(search_root: Path) -> str:
@@ -751,87 +623,34 @@ def ensure_llama_server(sm_num: str) -> tuple[Path, str]:
 
 
 def _download_model_file(rel_path: str, dst: Path, min_bytes: int, quant: str):
-    """下载单个 GGUF 分片或 mmproj（支持可选云盘缓存与 aria2c 16 线程直拉）。"""
+    """下载单个 GGUF 分片或 mmproj（支持可选云盘缓存与防 .aria2 空洞高速直拉）。"""
+    from colab_remote_common import is_complete_file
+
     dst.parent.mkdir(parents=True, exist_ok=True)
-    if dst.is_file() and dst.stat().st_size >= min_bytes:
+    if is_complete_file(dst, min_bytes=min_bytes):
         print(f"  [已就绪] {dst.name} ({dst.stat().st_size / (1024**3):.2f} GiB)", flush=True)
         return
 
     url = f"https://huggingface.co/{HF_REPO}/resolve/main/{rel_path}"
-    print(f"  [开始下载] {dst.name} <- {url}", flush=True)
-    t0 = time.monotonic()
-
     rclone_bin = shutil.which("rclone") or "/usr/local/bin/rclone"
     can_gdrive = WITH_GDRIVE_CACHE and RCLONE_CONF.is_file() and Path(rclone_bin).is_file()
     gdrive_uri = f"{GDRIVE_MODEL_REMOTE}/{quant}/{dst.name}"
     pulled_from_gdrive = False
 
     if can_gdrive:
+        print(f"  [云盘拉取] {dst.name} <- {gdrive_uri}", flush=True)
         res_gd = run_cmd(
-            [
-                rclone_bin,
-                "copyto",
-                "--config", str(RCLONE_CONF),
-                "--disable-http2",
-                "--stats", "2s",
-                "--stats-one-line",
-                "-v",
-                gdrive_uri,
-                str(dst),
-            ],
+            [rclone_bin, "copyto", "--config", str(RCLONE_CONF), "--disable-http2", "--stats", "2s", "--stats-one-line", "-v", gdrive_uri, str(dst)],
             check=False,
         )
-        pulled_from_gdrive = res_gd.returncode == 0 and dst.is_file() and dst.stat().st_size >= min_bytes
+        pulled_from_gdrive = res_gd.returncode == 0 and is_complete_file(dst, min_bytes=min_bytes)
 
     if not pulled_from_gdrive:
-        used_aria = False
-        if shutil.which("aria2c"):
-            res_aria = run_cmd(
-                [
-                    "aria2c",
-                    "-c",
-                    "-x", "16",
-                    "-s", "16",
-                    "-k", "1M",
-                    "--summary-interval=2",
-                    "--console-log-level=warn",
-                    "--show-console-readout=false",
-                    "--allow-overwrite=true",
-                    "-d", str(dst.parent),
-                    "-o", dst.name,
-                    url,
-                ],
-                check=False,
-            )
-            used_aria = res_aria.returncode == 0 and dst.is_file() and dst.stat().st_size >= min_bytes
-
-        if not used_aria:
-            _download_with_urllib(url, dst)
-
-    if not dst.is_file() or dst.stat().st_size < min_bytes:
-        raise RuntimeError(
-            f"模型分片校验失败（大小不足或缺失）: {dst} "
-            f"(实际={dst.stat().st_size if dst.is_file() else 0} B, 最低要求={min_bytes} B)"
-        )
-
-    dt = max(0.1, time.monotonic() - t0)
-    gib = dst.stat().st_size / (1024 ** 3)
-    mib_s = dst.stat().st_size / (1024 ** 2) / dt
-    print(f"  [完成] {dst.name}: {gib:.2f} GiB ({dt:.1f}s, {mib_s:.1f} MiB/s)", flush=True)
+        download_and_verify(url, dst, min_bytes=min_bytes, chunk_size_m="1M", summary_interval=2)
 
     if can_gdrive and not pulled_from_gdrive:
         print(f"  [云盘归档] 正在同步模型缓存至 {gdrive_uri} ...", flush=True)
-        run_cmd(
-            [
-                rclone_bin,
-                "copyto",
-                "--config", str(RCLONE_CONF),
-                "--disable-http2",
-                str(dst),
-                gdrive_uri,
-            ],
-            check=False,
-        )
+        run_cmd([rclone_bin, "copyto", "--config", str(RCLONE_CONF), "--disable-http2", str(dst), gdrive_uri], check=False)
 
 
 def download_qwen_models(active_quant: str) -> tuple[Path, Path | None]:
@@ -863,13 +682,7 @@ def download_qwen_models(active_quant: str) -> tuple[Path, Path | None]:
 
 def _read_existing_meta() -> dict:
     """安全读取已有的 /root/colab_service_meta.json，不存在或损坏时返回空字典。"""
-    if not SERVICE_META_FILE.is_file():
-        return {}
-    try:
-        data = json.loads(SERVICE_META_FILE.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+    return read_json_dict(SERVICE_META_FILE)
 
 
 def build_auth_and_args(
@@ -918,8 +731,8 @@ def build_auth_and_args(
     except Exception:
         total_ram_mib = 32768
     if COHOST_COMFY:
-        # 双栖共驻模式下控制 llama-server Prompt RAM 缓存至 8 GiB，给 ComfyUI 模型动态调度留足内存
-        cache_ram_mib = 8192
+        # 双栖共驻模式下 G4(96G显存/176G内存) 可分配 24 GiB Prompt 缓存，常规卡保留 8 GiB 给 ComfyUI
+        cache_ram_mib = 24576 if (total_ram_mib >= 131072 and vram_gib >= 60.0) else 8192
     elif total_ram_mib >= 131072:
         cache_ram_mib = 49152
     elif total_ram_mib >= 65536:
@@ -990,7 +803,9 @@ import asyncio
 import gzip
 import json
 import os
+import re
 import sys
+import zlib
 
 LISTEN_HOST = os.environ.get("SSE_GW_HOST", "127.0.0.1")
 LISTEN_PORT = int(os.environ.get("SSE_GW_PORT", "18080"))
@@ -1320,17 +1135,83 @@ async def _wait_client_disconnect(reader: asyncio.StreamReader) -> None:
             return
 
 
-async def _send_simple_error(writer: asyncio.StreamWriter, status: int, reason: str, message: str) -> None:
-    """向下游返回标准 OpenAI 风格 JSON 错误响应。"""
+def _cors_header_block(hdr_map: dict[str, str]) -> str:
+    """生成浏览器 Web 客户端兼容的 CORS 响应头片段（支持 Origin 回显与凭据请求）。"""
+    origin = str(hdr_map.get("origin") or "").strip()
+    if origin and "\r" not in origin and "\n" not in origin:
+        lines = [
+            f"Access-Control-Allow-Origin: {origin}",
+            "Access-Control-Allow-Credentials: true",
+            "Vary: Origin",
+        ]
+    else:
+        lines = ["Access-Control-Allow-Origin: *"]
+    lines.extend([
+        "Access-Control-Allow-Methods: GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers: Authorization, Content-Type, X-Api-Key, Anthropic-Version, X-Requested-With",
+    ])
+    return "\r\n".join(lines) + "\r\n"
+
+
+async def _send_simple_error(
+    writer: asyncio.StreamWriter,
+    status: int,
+    reason: str,
+    message: str,
+    hdr_map: dict[str, str] | None = None,
+) -> None:
+    """向下游返回标准 OpenAI 风格 JSON 错误响应（附带 CORS 头防浏览器跨域拦截）。"""
     body = json.dumps({"error": {"message": message, "type": "gateway_error"}}, ensure_ascii=False).encode("utf-8")
+    cors_blk = _cors_header_block(hdr_map or {})
     hdr = (
         f"HTTP/1.1 {status} {reason}\r\n"
+        f"{cors_blk}"
         f"Content-Type: application/json; charset=utf-8\r\n"
         f"Content-Length: {len(body)}\r\n"
         f"Connection: close\r\n\r\n"
     ).encode("latin-1")
     writer.write(hdr + body)
     await writer.drain()
+
+
+def _format_sse_error_frame(path: str, status: int, raw_text: str) -> bytes:
+    """按请求端点协议格式化已进入 SSE 流后的终端错误帧（兼容 Anthropic /v1/messages 与 OpenAI）。"""
+    clean_msg = str(raw_text or f"Upstream HTTP {status}").strip()
+    err_type = "api_error"
+    try:
+        parsed = json.loads(clean_msg)
+        if isinstance(parsed, dict):
+            inner = parsed.get("error") if isinstance(parsed.get("error"), dict) else parsed
+            if isinstance(inner, dict):
+                if inner.get("message"):
+                    clean_msg = str(inner["message"])
+                if inner.get("type"):
+                    err_type = str(inner["type"])
+    except Exception:
+        pass
+
+    if path in {"/v1/messages", "/messages"}:
+        if status == 400 or "context size" in clean_msg.lower():
+            anth_type = "invalid_request_error"
+        elif status in (401, 403):
+            anth_type = "authentication_error"
+        elif status == 429:
+            anth_type = "rate_limit_error"
+        else:
+            anth_type = "api_error"
+        frame_obj = {
+            "type": "error",
+            "error": {"type": anth_type, "message": clean_msg},
+        }
+        return (
+            f"event: error\n"
+            f"data: {json.dumps(frame_obj, ensure_ascii=False)}\n\n"
+        ).encode("utf-8")
+
+    return (
+        f"data: {json.dumps({'error': {'status': status, 'type': err_type, 'message': clean_msg}}, ensure_ascii=False)}\n\n"
+        f"data: [DONE]\n\n"
+    ).encode("utf-8")
 
 
 async def _close_writer(writer: asyncio.StreamWriter | None) -> None:
@@ -1357,10 +1238,20 @@ async def _handle_client(client_reader: asyncio.StreamReader, client_writer: asy
         start_line, hdrs, hdr_map = _parse_headers(raw_req_head)
         parts = start_line.split(" ", 2)
         if len(parts) < 2:
-            await _send_simple_error(client_writer, 400, "Bad Request", "Malformed HTTP request line")
+            await _send_simple_error(client_writer, 400, "Bad Request", "Malformed HTTP request line", hdr_map)
             return
         method, target = parts[0].upper(), parts[1]
         path = target.split("?", 1)[0]
+        if method == "OPTIONS":
+            preflight_hdr = (
+                f"HTTP/1.1 204 No Content\r\n"
+                f"{_cors_header_block(hdr_map)}"
+                f"Access-Control-Max-Age: 86400\r\n"
+                f"Connection: close\r\n\r\n"
+            ).encode("latin-1")
+            client_writer.write(preflight_hdr)
+            await client_writer.drain()
+            return
         is_upgrade = "upgrade" in hdr_map
         is_chunked_req = "chunked" in hdr_map.get("transfer-encoding", "").lower()
 
@@ -1391,17 +1282,20 @@ async def _handle_client(client_reader: asyncio.StreamReader, client_writer: asy
                     body_bytes = await client_reader.readexactly(content_len or 0)
             except ValueError as exc:
                 if str(exc) == "payload_too_large":
-                    await _send_simple_error(client_writer, 413, "Payload Too Large", "Request body exceeds 128 MiB limit")
+                    await _send_simple_error(client_writer, 413, "Payload Too Large", "Request body exceeds 128 MiB limit", hdr_map)
                     return
-                await _send_simple_error(client_writer, 400, "Bad Request", "Invalid chunked request body")
+                await _send_simple_error(client_writer, 400, "Bad Request", "Invalid chunked request body", hdr_map)
                 return
             except (EOFError, asyncio.IncompleteReadError):
                 return
 
             try:
                 inspect_bytes = body_bytes
-                if "gzip" in hdr_map.get("content-encoding", "").lower():
+                enc = hdr_map.get("content-encoding", "").lower()
+                if "gzip" in enc:
                     inspect_bytes = gzip.decompress(body_bytes)
+                elif "deflate" in enc:
+                    inspect_bytes = zlib.decompress(body_bytes)
                 payload_obj = json.loads(inspect_bytes.decode("utf-8"))
                 if isinstance(payload_obj, dict):
                     is_stream = bool(payload_obj.get("stream"))
@@ -1409,12 +1303,13 @@ async def _handle_client(client_reader: asyncio.StreamReader, client_writer: asy
                     body_bytes = json.dumps(payload_obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
                     was_rewritten = True
             except Exception:
-                is_stream = False
+                # 若外层带非标准编码或微格式异常，至少按明文切片探测 stream 意图，绝不误关 SSE 保活
+                is_stream = bool(re.search(rb'"stream"\s*:\s*true\b', body_bytes or b""))
 
         try:
             up_reader, up_writer = await asyncio.open_connection(UPSTREAM_HOST, UPSTREAM_PORT, limit=1024 * 1024)
         except Exception as exc:
-            await _send_simple_error(client_writer, 502, "Bad Gateway", f"Upstream unavailable: {exc}")
+            await _send_simple_error(client_writer, 502, "Bad Gateway", f"Upstream unavailable: {exc}", hdr_map)
             return
 
         if (not is_upgrade) and (method == "GET") and (path in MODELS_PATHS):
@@ -1424,7 +1319,7 @@ async def _handle_client(client_reader: asyncio.StreamReader, client_writer: asy
             try:
                 up_hdr_raw = await up_reader.readuntil(b"\r\n\r\n")
             except (asyncio.IncompleteReadError, asyncio.LimitOverrunError, ConnectionError) as exc:
-                await _send_simple_error(client_writer, 502, "Bad Gateway", f"Upstream closed early: {exc}")
+                await _send_simple_error(client_writer, 502, "Bad Gateway", f"Upstream closed early: {exc}", hdr_map)
                 return
             up_start, _, up_hdr_map = _parse_headers(up_hdr_raw)
             up_parts = up_start.split(" ", 2)
@@ -1458,6 +1353,7 @@ async def _handle_client(client_reader: asyncio.StreamReader, client_writer: asy
                 out_models_bytes = raw_models_body
             resp_hdr = (
                 f"HTTP/1.1 200 OK\r\n"
+                f"{_cors_header_block(hdr_map)}"
                 f"Content-Type: application/json; charset=utf-8\r\n"
                 f"Content-Length: {len(out_models_bytes)}\r\n"
                 f"Connection: close\r\n\r\n"
@@ -1545,13 +1441,16 @@ async def _handle_client(client_reader: asyncio.StreamReader, client_writer: asy
                     break
                 if not sent_sse_headers:
                     client_writer.write(
-                        b"HTTP/1.1 200 OK\r\n"
-                        b"Content-Type: text/event-stream; charset=utf-8\r\n"
-                        b"Cache-Control: no-cache, no-transform\r\n"
-                        b"Connection: close\r\n"
-                        b"Transfer-Encoding: chunked\r\n"
-                        b"X-Accel-Buffering: no\r\n"
-                        b"\r\n"
+                        (
+                            f"HTTP/1.1 200 OK\r\n"
+                            f"{_cors_header_block(hdr_map)}"
+                            f"Content-Type: text/event-stream; charset=utf-8\r\n"
+                            f"Cache-Control: no-cache, no-transform\r\n"
+                            f"Connection: close\r\n"
+                            f"Transfer-Encoding: chunked\r\n"
+                            f"X-Accel-Buffering: no\r\n"
+                            f"\r\n"
+                        ).encode("latin-1")
                     )
                     sent_sse_headers = True
                 client_writer.write(_KEEPALIVE_CHUNK)
@@ -1561,12 +1460,9 @@ async def _handle_client(client_reader: asyncio.StreamReader, client_writer: asy
                 up_hdr_raw = hdr_task.result()
             except (asyncio.IncompleteReadError, asyncio.LimitOverrunError, ConnectionError) as exc:
                 if not sent_sse_headers:
-                    await _send_simple_error(client_writer, 502, "Bad Gateway", f"Upstream closed early: {exc}")
+                    await _send_simple_error(client_writer, 502, "Bad Gateway", f"Upstream closed early: {exc}", hdr_map)
                 else:
-                    err_evt = (
-                        f"data: {json.dumps({'error': {'message': f'Upstream closed early: {exc}'}}, ensure_ascii=False)}\n\n"
-                        f"data: [DONE]\n\n"
-                    ).encode("utf-8")
+                    err_evt = _format_sse_error_frame(path, 502, f"Upstream closed early: {exc}")
                     client_writer.write(f"{len(err_evt):x}\r\n".encode("ascii") + err_evt + b"\r\n0\r\n\r\n")
                     await client_writer.drain()
                 return
@@ -1591,10 +1487,7 @@ async def _handle_client(client_reader: asyncio.StreamReader, client_writer: asy
             if up_status != 200:
                 err_raw = await up_reader.read(65536)
                 err_txt = err_raw.decode("utf-8", errors="ignore").strip() or f"Upstream HTTP {up_status}"
-                err_evt = (
-                    f"data: {json.dumps({'error': {'status': up_status, 'message': err_txt}}, ensure_ascii=False)}\n\n"
-                    f"data: [DONE]\n\n"
-                ).encode("utf-8")
+                err_evt = _format_sse_error_frame(path, up_status, err_txt)
                 client_writer.write(f"{len(err_evt):x}\r\n".encode("ascii") + err_evt + b"\r\n0\r\n\r\n")
                 await client_writer.drain()
                 return
@@ -1859,22 +1752,6 @@ def start_llama_and_wait(
     raise TimeoutError(f"等待 SSE 保活网关 :{LLAMA_PORT}/health 就绪超时（15s），末尾日志:\n{gw_tail}")
 
 
-def _write_private_meta(meta: dict):
-    """以 0o600 严格私密权限原子写入 /root/colab_service_meta.json。"""
-    tmp_meta = SERVICE_META_FILE.with_suffix(".json.tmp")
-    fd = os.open(str(tmp_meta), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
-            f.write("\n")
-    except Exception:
-        tmp_meta.unlink(missing_ok=True)
-        raise
-    os.chmod(tmp_meta, 0o600)
-    tmp_meta.replace(SERVICE_META_FILE)
-    os.chmod(SERVICE_META_FILE, 0o600)
-
-
 def _probe_local_comfy_ready(timeout: float = 2.0) -> bool:
     """探测本机 ComfyUI (:8188/system_stats) 是否正在运行。"""
     try:
@@ -1882,19 +1759,6 @@ def _probe_local_comfy_ready(timeout: float = 2.0) -> bool:
             return resp.status == 200
     except Exception:
         return False
-
-
-def _probe_public_llm_tunnel(url: str, timeout: float = 5.0) -> bool:
-    """校验现存公网隧道是否正转发至当前 llama-server (:18080/health)。"""
-    try:
-        req = urllib.request.Request(f"{url.rstrip('/')}/health", headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            if resp.status == 200:
-                data = json.loads(resp.read().decode("utf-8", errors="ignore") or "{}")
-                return data.get("status") == "ok"
-    except Exception:
-        return False
-    return False
 
 
 def start_tunnel_and_write_contract(
@@ -1907,158 +1771,37 @@ def start_tunnel_and_write_contract(
 ) -> str:
     """确保 cloudflared 指向 127.0.0.1:18080（优先命名隧道），落盘 0600 服务契约并输出公网地址。"""
     print("=== [7/7] 打通 Cloudflared 隧道并写入服务契约 ===", flush=True)
-    tunnel_url: str | None = None
-
-    pgrep_res = subprocess.run(
-        ["pgrep", "-af", "cloudflared tunnel"],
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
+    tunnel_url = start_cloudflared_tunnel(
+        local_port=LLAMA_PORT,
+        service_kind="llm",
+        cf_token=CF_TUNNEL_TOKEN,
+        cf_url=CF_TUNNEL_URL,
+        cohost_other=COHOST_COMFY,
+        tunnel_url_file=(LLM_TUNNEL_URL_FILE if COHOST_COMFY else TUNNEL_URL_FILE),
+        log_file=(CLOUDFLARED_LLM_LOG if (COHOST_COMFY and not (CF_TUNNEL_TOKEN and CF_TUNNEL_URL)) else CLOUDFLARED_LOG),
+        tunnel_re=TUNNEL_URL_RE,
     )
-    proc_lines = pgrep_res.stdout or ""
-    use_named_tunnel = bool(CF_TUNNEL_TOKEN and CF_TUNNEL_URL)
-
-    if use_named_tunnel:
-        if (
-            pgrep_res.returncode == 0
-            and " run" in proc_lines
-            and _probe_public_llm_tunnel(CF_TUNNEL_URL)
-        ):
-            tunnel_url = CF_TUNNEL_URL
-            print(f"复用运行中的命名隧道: {tunnel_url}", flush=True)
-
-        if not tunnel_url:
-            subprocess.run(
-                ["pkill", "-f", "cloudflared tunnel"],
-                check=False,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            time.sleep(0.5)
-
-            cf_bin = shutil.which("cloudflared") or str(CLOUDFLARED_BIN)
-            if not Path(cf_bin).is_file():
-                raise FileNotFoundError(f"未找到 cloudflared 可执行文件: {cf_bin}")
-
-            # 仅通过子进程环境变量传递连接器口令，严禁暴露于命令行参数
-            cf_env = os.environ.copy()
-            cf_env["TUNNEL_TOKEN"] = CF_TUNNEL_TOKEN
-
-            log_f = open(CLOUDFLARED_LOG, "wb")
-            try:
-                proc = subprocess.Popen(
-                    [cf_bin, "tunnel", "--no-autoupdate", "--protocol", "http2", "run"],
-                    env=cf_env,
-                    stdin=subprocess.DEVNULL,
-                    stdout=log_f,
-                    stderr=subprocess.STDOUT,
-                    start_new_session=True,
-                    close_fds=True,
-                )
-            finally:
-                log_f.close()
-            print(f"已拉起 cloudflared 命名隧道 (PID={proc.pid})", flush=True)
-
-            registered = False
-            for _ in range(35):
-                if proc.poll() is not None:
-                    tail = CLOUDFLARED_LOG.read_text(encoding="utf-8", errors="ignore")[-1500:] if CLOUDFLARED_LOG.is_file() else ""
-                    if CF_TUNNEL_TOKEN and CF_TUNNEL_TOKEN in tail:
-                        tail = tail.replace(CF_TUNNEL_TOKEN, "[REDACTED]")
-                    raise RuntimeError(f"cloudflared 命名隧道异常退出 (rc={proc.returncode})，末尾日志:\n{tail}")
-                log_text = CLOUDFLARED_LOG.read_text(encoding="utf-8", errors="ignore") if CLOUDFLARED_LOG.is_file() else ""
-                if "Registered tunnel connection" in log_text:
-                    registered = True
-                    break
-                if _probe_public_llm_tunnel(CF_TUNNEL_URL, timeout=2.0):
-                    registered = True
-                    tunnel_url = CF_TUNNEL_URL
-                    break
-                time.sleep(1.0)
-
-            if not registered:
-                tail = CLOUDFLARED_LOG.read_text(encoding="utf-8", errors="ignore")[-1500:] if CLOUDFLARED_LOG.is_file() else ""
-                if CF_TUNNEL_TOKEN and CF_TUNNEL_TOKEN in tail:
-                    tail = tail.replace(CF_TUNNEL_TOKEN, "[REDACTED]")
-                raise TimeoutError(f"等待 cloudflared 命名隧道注册超时（35s），末尾日志:\n{tail}")
-
-            if not tunnel_url:
-                for _ in range(5):
-                    if _probe_public_llm_tunnel(CF_TUNNEL_URL, timeout=3.0):
-                        break
-                    time.sleep(1.5)
-                tunnel_url = CF_TUNNEL_URL
-    else:
-        quick_log = CLOUDFLARED_LLM_LOG if COHOST_COMFY else CLOUDFLARED_LOG
-        quick_url_file = LLM_TUNNEL_URL_FILE if COHOST_COMFY else TUNNEL_URL_FILE
-        if (
-            pgrep_res.returncode == 0
-            and f"127.0.0.1:{LLAMA_PORT}" in proc_lines
-            and quick_url_file.is_file()
-        ):
-            cached = quick_url_file.read_text(encoding="utf-8", errors="ignore").strip()
-            m_cached = TUNNEL_URL_RE.search(cached)
-            if m_cached and _probe_public_llm_tunnel(m_cached.group(0)):
-                tunnel_url = m_cached.group(0)
-                print(f"复用运行中的 {LLAMA_PORT} 端口 cloudflared 隧道: {tunnel_url}", flush=True)
-
-        if not tunnel_url:
-            kill_pat = f"cloudflared tunnel.*{LLAMA_PORT}" if COHOST_COMFY else "cloudflared tunnel"
-            subprocess.run(
-                ["pkill", "-f", kill_pat],
-                check=False,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            time.sleep(0.5)
-
-            cf_bin = shutil.which("cloudflared") or str(CLOUDFLARED_BIN)
-            if not Path(cf_bin).is_file():
-                raise FileNotFoundError(f"未找到 cloudflared 可执行文件: {cf_bin}")
-
-            log_f = open(quick_log, "wb")
-            try:
-                proc = subprocess.Popen(
-                    [cf_bin, "tunnel", "--no-autoupdate", "--protocol", "http2", "--url", LLAMA_API],
-                    stdin=subprocess.DEVNULL,
-                    stdout=log_f,
-                    stderr=subprocess.STDOUT,
-                    start_new_session=True,
-                    close_fds=True,
-                )
-            finally:
-                log_f.close()
-            print(f"已拉起 cloudflared (PID={proc.pid}, port={LLAMA_PORT})", flush=True)
-
-            for _ in range(30):
-                if quick_log.is_file():
-                    m = TUNNEL_URL_RE.search(quick_log.read_text(encoding="utf-8", errors="ignore"))
-                    if m:
-                        tunnel_url = m.group(0)
-                        break
-                time.sleep(1.0)
-
-            if not tunnel_url:
-                tail = quick_log.read_text(encoding="utf-8", errors="ignore")[-1500:] if quick_log.is_file() else ""
-                raise TimeoutError(f"等待 cloudflared 分配隧道地址超时（30s），末尾日志:\n{tail}")
-
     LLM_TUNNEL_URL_FILE.write_text(tunnel_url + "\n", encoding="utf-8")
     if not COHOST_COMFY:
         TUNNEL_URL_FILE.write_text(tunnel_url + "\n", encoding="utf-8")
 
     comfy_alive = _probe_local_comfy_ready(timeout=2.0)
     is_dual = bool(COHOST_COMFY or comfy_alive)
+    old_meta = _read_existing_meta()
     comfy_url_val = CF_COMFY_TUNNEL_URL or ""
     if not comfy_url_val and comfy_alive and TUNNEL_URL_FILE.is_file():
         m_comfy = TUNNEL_URL_RE.search(TUNNEL_URL_FILE.read_text(encoding="utf-8", errors="ignore"))
         if m_comfy:
             comfy_url_val = m_comfy.group(0)
+    if not comfy_url_val and is_dual:
+        old_comfy_url = str(old_meta.get("comfy_tunnel_url") or "").strip().rstrip("/")
+        if not old_comfy_url and old_meta.get("kind") in ("comfy", "dual"):
+            old_comfy_url = str(old_meta.get("tunnel_url") or "").strip().rstrip("/")
+        comfy_url_val = old_comfy_url
 
     prof_id = "qwen_27b" if MODEL_VARIANT == "27b" else "qwen_llm"
-    old_meta = _read_existing_meta()
     existing_comfy_profs = old_meta.get("comfy_profiles") if isinstance(old_meta.get("comfy_profiles"), list) else []
+    existing_comfy_key = str(old_meta.get("comfy_api_key") or "").strip()
 
     meta = {
         "kind": "dual" if is_dual else "llm",
@@ -2089,10 +1832,12 @@ def start_tunnel_and_write_contract(
         meta["comfy_port"] = 8188
         if comfy_url_val:
             meta["comfy_tunnel_url"] = comfy_url_val
+        if existing_comfy_key:
+            meta["comfy_api_key"] = existing_comfy_key
         if existing_comfy_profs:
             meta["comfy_profiles"] = existing_comfy_profs
             meta["profiles"] = [*existing_comfy_profs, prof_id]
-    _write_private_meta(meta)
+    _write_private_meta(SERVICE_META_FILE, meta)
 
     print("========================================", flush=True)
     print(f"SERVICE_TUNNEL_URL: {tunnel_url}", flush=True)
@@ -2101,6 +1846,26 @@ def start_tunnel_and_write_contract(
         print(f"COMFYUI_TUNNEL_URL: {tunnel_url}", flush=True)
     print("========================================", flush=True)
     return tunnel_url
+
+
+def write_runtime_versions_record(
+    active_quant: str,
+    gpu_name: str,
+    vram_total_gb: float,
+) -> None:
+    """将当前 LLM 推理引擎与硬件/工具版本落盘至 0600 清单。"""
+    _write_versions_common(
+        "qwen_27b" if MODEL_VARIANT == "27b" else "qwen_llm",
+        {
+            "variant": MODEL_VARIANT,
+            "engine": "llama-server",
+            "llama_cpp_tag": LLAMA_CPP_TAG,
+            "quant": active_quant,
+            "ctx_size": CTX_SIZE,
+            "gpu": gpu_name,
+            "vram_total_gb": vram_total_gb,
+        },
+    )
 
 
 def main():
@@ -2117,6 +1882,7 @@ def main():
     start_tunnel_and_write_contract(
         active_quant, api_key, gpu_name, vram_used_gb, vram_total_gb, n_parallel=n_parallel
     )
+    write_runtime_versions_record(active_quant, gpu_name, vram_total_gb)
 
 
 if __name__ == "__main__":

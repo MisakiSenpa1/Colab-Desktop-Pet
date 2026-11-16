@@ -19,7 +19,16 @@ drama3_refs/
 
 # Python 与系统临时文件
 __pycache__/
+.pytest_cache/
 *.py[cod]
 *$py.class
 .DS_Store
 Thumbs.db
+
+# 诊断日志与打包构建产物
+colab_pet/logs/
+build/
+dist/
+_pyinstaller_work/
+*.zip
+*.ico

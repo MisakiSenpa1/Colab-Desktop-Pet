@@ -1,0 +1,37 @@
+# Google Colab 总控与桌宠已验证锁定依赖组合 (Verified Baseline Lock)
+# 验证环境：
+#   - 宿主机 Windows 11 x64 + Python 3.14.6
+#   - CI Windows Runner Python 3.12
+#   - 外部工具基线：google-colab-cli==0.8.0 | rclone==1.76.0 | uv==0.11.24 | Edge WebView2 >= 120.0
+#
+# 本机桌宠核心依赖（精确锁版本）
+aiohttp==3.14.3
+pillow==12.2.0
+requests==2.34.2
+websocket-client==1.9.0
+pywebview==6.2.1; sys_platform == "win32"
+pythonnet==3.1.0; sys_platform == "win32"
+pywin32==312; sys_platform == "win32"
+
+# requests / aiohttp / pywebview 核心传递依赖（实测共存组合）
+aiohappyeyeballs==2.7.1
+aiosignal==1.4.0
+attrs==26.1.0
+bottle==0.13.4
+certifi==2026.6.17
+charset-normalizer==3.4.7
+clr_loader==0.3.1
+frozenlist==1.8.0
+idna==3.18
+multidict==6.7.1
+propcache==0.5.2
+proxy_tools==0.1.0
+typing_extensions==4.15.0
+urllib3==2.7.0
+yarl==1.24.5
+
+# 离线边界与安全验证测试依赖
+pytest==9.1.1
+pluggy==1.6.0
+iniconfig==2.3.0
+packaging==26.2

@@ -36,12 +36,22 @@
 ```text
 Colab-Desktop-Pet/
 ├── 启动Colab桌宠.pyw                # Windows 无控制台黑框桌宠启动入口
-├── colab_ctl.py                     # 本机总控 CLI（up/status/tunnel/smoke/sync/run/down）
+├── colab_ctl.py                     # 本机总控 CLI（up/status/tunnel/smoke/sync/run/down/doctor/diag）
+├── colab_core/                      # 共享内核（accounts / colab_client / file_sync / health / runtime）
+├── colab_security.py                # 系统凭据保险箱 (keyring)、密钥脱敏与域名安全校验
+├── colab_cli_bridge.py              # google-colab-cli 虚拟环境统一桥接助手
+├── colab_remote_common.py           # 远端部署与冒烟验证共享基础库
+├── colab_pet_bridge_node.py         # ComfyUI 服务端直铺画布 + 公网口令鉴权扩展
 ├── colab_bootstrap_*.py             # 四套云端 Colab 实例幂等自举脚本
 ├── verify_*.py                      # 四套端到端冒烟验证脚本
+├── build_windows_package.py         # Windows 便携版 / PyInstaller 发行包构建与安全扫描脚本
+├── colab_pet.spec                   # PyInstaller 单目录 (onedir) 打包配置
+├── stack_manifest.json              # 五套生态依赖、模型与显存门槛版本清单
 ├── workflows/                       # 预置 ComfyUI 工作流 JSON（drama3 / minimax_h3）
+├── tests/                           # 架构复现与安全可靠性 pytest 测试集
 ├── .cf_tunnel_secret.example.json   # Cloudflare 命名隧道可选配置模板
-├── requirements.txt                 # 桌宠 Python 依赖
+├── requirements.txt                 # 桌宠 Python 依赖基线
+├── requirements-lock.txt            # 已验证精确锁定依赖清单
 └── colab_pet/
     ├── pet_app.py                   # pywebview + Edge WebView2 + Win32 区域裁剪窗体
     ├── colab_backend.py             # 状态采集、账本统计、保活、隧道与任务调度后端
@@ -94,8 +104,24 @@ python colab_ctl.py smoke --profile anima
 # 同步输出至 Google Drive 并拉回本地 _downloads/
 python colab_ctl.py sync --pull
 
+# 启动前全维度环境自检 / 导出全量脱敏排障诊断包 (.zip)
+python colab_ctl.py doctor --profile anima --gpu L4
+python colab_ctl.py diag
+
 # 关闭会话并停止计费（--all 可一并释放网页端遗留实例）
 python colab_ctl.py down --all
+```
+
+### 4. Windows 打包与测试校验
+```powershell
+# 运行完整自动化测试套件
+python -m pytest tests -v
+
+# 构建零额外依赖原生 EXE 便携发布包（输出至 dist/）
+python build_windows_package.py --mode portable
+
+# 或构建免安装 Python 的 PyInstaller 独立目录包
+python build_windows_package.py --mode pyinstaller
 ```
 
 ---
