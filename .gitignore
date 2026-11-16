@@ -7,8 +7,7 @@ rclone.conf
 .env
 *.log
 
-# 按 ASSETS_NOTICE.txt 版权要求，公开仓库不跟踪第三方人物立绘图片
-colab_pet/assets/*.png
+# 默认内置 Q 版四表情透明立绘 PNG；临时测试图与其他格式图片保持忽略
 colab_pet/assets/*.jpg
 colab_pet/assets/*.jpeg
 colab_pet/assets/*.webp

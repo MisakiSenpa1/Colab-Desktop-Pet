@@ -2,7 +2,7 @@
 
 面向 Windows 桌面的 Google Colab 计算单元（CU）监控桌宠与一键 GPU 工作流控制台，基于 `pywebview` + Edge WebView2 + Win32 `SetWindowRgn` 像素级不规则裁剪悬浮窗构建。
 
-> 本仓库代码遵循 [LICENSE](LICENSE)（MIT 开源协议）。按 [colab_pet/ASSETS_NOTICE.txt](colab_pet/ASSETS_NOTICE.txt) 声明，公开仓库**不包含**第三方人物立绘 PNG 素材，也**不包含**任何个人账号凭据、邮箱、自定义域名或本地私有路径。
+> 本仓库源代码遵循 [LICENSE](LICENSE)（MIT 开源协议）。按 [colab_pet/ASSETS_NOTICE.txt](colab_pet/ASSETS_NOTICE.txt) 声明，仓库已随附一套重绘的四表情 Q 版桌宠立绘（仅限非商业个人展示与学习参考），且**不包含**任何个人账号凭据、邮箱、自定义域名或本地私有路径。
 
 ---
 
@@ -19,7 +19,7 @@
   - **多账号切换保险箱**：支持前端一键发起 Google OAuth2 授权绑定/切换多组 Colab 账号，令牌与会话列表隔离保存于系统凭据库（`keyring`）及用户私密配置目录，状态文件仅展示脱敏邮箱；
   - **Google Drive 云盘引导**：支持弹窗一键触发 `rclone` 浏览器授权 `[gdrive_save]` 或导入已有 `rclone.conf`；
   - **工具链自适应探测 & 固定隧道配置**：自动探测本机 `colab.exe` / `rclone.exe` / 虚拟环境并支持文件选择器手动定位，可在前端直接保存 Cloudflare 固定域名与 Bearer Key（单向写入 `.cf_tunnel_secret.json`，不回显明文密钥）。
-- **内置矢量兜底立绘**：未在 [colab_pet/assets/](colab_pet/assets/README.md) 放入自定义 PNG 时，自动生成 `500 × 418` RGBA 原创矢量角色保证开箱可运行；放入 `idle.png` / `blink.png` / `proud.png` / `sad.png` 后自动切换为自定义立绘。
+- **内置 Q 版四表情立绘 + 矢量兜底**：[colab_pet/assets/](colab_pet/assets/README.md) 现已开箱附带统一轮廓对齐的 `1200 × 1004` 四表情透明立绘（`idle` / `blink` / `proud` / `sad`）；支持随时替换为自定义 PNG，若删除图片则自动切回内存生成的 `500 × 418` 原创矢量兜底角色。
 
 ### 2. CLI 总控、5 套生态与双栖共驻（[colab_ctl.py](colab_ctl.py)）
 支持命令行与桌宠界面双重触发，内置 5 套幂等部署 Profile，并支持通过 `--profiles` 将「ComfyUI 生态 + Qwen3.8 LLM」并发部署至同一 GPU 实例（双栖模式自带显存预留保护与独立双隧道）：
@@ -46,8 +46,8 @@ Colab-Desktop-Pet/
     ├── pet_app.py                   # pywebview + Edge WebView2 + Win32 区域裁剪窗体
     ├── colab_backend.py             # 状态采集、账本统计、保活、隧道与任务调度后端
     ├── ui.html                      # 桌宠气泡与控制台前端界面
-    ├── ASSETS_NOTICE.txt            # 立绘素材版权声明
-    └── assets/README.md             # 自定义立绘替换说明
+    ├── ASSETS_NOTICE.txt            # 立绘素材使用声明与非商业边界
+    └── assets/                      # 开箱内置 Q 版四表情透明立绘 + 替换说明
 ```
 
 ---
