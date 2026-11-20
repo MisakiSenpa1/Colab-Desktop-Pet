@@ -1,0 +1,13 @@
+# Google Colab 总控与桌宠开发及离线测试依赖清单
+# 使用方式：请先按 requirements.txt 或 requirements-lock.txt 安装运行基线，
+# 再安装本文件中的离线测试、Mock 网关及资产预处理依赖：
+#   pip install -r requirements-dev.txt
+
+# 离线自动化测试框架（tests/ 回归测试套件）
+pytest==9.1.1
+# ComfyUI 公网认证网关与流式 SSE 网关测试依赖（tests/ 离线 Mock 服务端与客户端）
+aiohttp==3.14.3
+# 离线静态资产预处理（生成 .webp / pet.ico / alpha_masks.json）与测试占位图构造依赖
+pillow==12.2.0
+# 静态代码质量、空异常捕获与圈复杂度 CI 门禁检查（配套 ruff.toml）
+ruff==0.16.4

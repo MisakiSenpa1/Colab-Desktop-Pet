@@ -23,7 +23,6 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
-import aiohttp
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 from PIL import Image
@@ -1205,3 +1204,730 @@ def test_stop_chain_timeouts_never_hang_or_swallow(
     assert "ModuleNotFoundError" in cap_c.err, "Endpoint 查询失败原因必须可见"
     assert "未能预先锁定" in cap_c.err and "无法精确核实" in cap_c.err
     assert "ep-other-sess" in cap_c.err
+
+
+# =========================================================================
+# 9. R1/R2 ComfyUI 成图自动/手动拉取全败禁误报与部分成功逐项重试收敛
+# =========================================================================
+
+
+class _DummyComfyResp:
+    """用于沙箱模拟 ComfyUI HTTP 响应的轻量上下文对象。"""
+
+    def __init__(
+        self,
+        *,
+        status_code: int = 200,
+        json_data: Any = None,
+        body: bytes = b"",
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        self.status_code = status_code
+        self._json_data = json_data
+        self._body = body
+        self.headers = headers or {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            import requests
+
+            raise requests.HTTPError(f"HTTP {self.status_code}", response=self)  # type: ignore[arg-type]
+
+    def json(self) -> Any:
+        return self._json_data
+
+    def iter_content(self, chunk_size: int = 65536) -> list[bytes]:
+        if not self._body:
+            return []
+        return [
+            self._body[i : i + chunk_size]
+            for i in range(0, len(self._body), chunk_size)
+        ]
+
+
+def _make_png_bytes(color: tuple[int, int, int] = (90, 160, 240)) -> bytes:
+    import io
+
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), color).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_comfy_auto_pull_all_failed_never_claims_saved_and_keeps_pending(
+    isolated_env,
+) -> None:
+    """R1：auto_pull_outputs=True 下 /view 全部 502/超时时，绝不报「已存本机」且完整保留待重试队列。"""
+    import requests
+
+    backend = _make_backend(isolated_env, "r1_all_fail")
+    with backend._lock:
+        backend.state["prefs"]["auto_pull_outputs"] = True
+    events: list[dict[str, Any]] = []
+    backend._event_cb = lambda evt: events.append(dict(evt))
+
+    hist_calls = {"n": 0}
+    base_url = "https://mock-r1.trycloudflare.com"
+
+    def _mock_http_get(url: str, *, base_url: str = "", ep: str = "", retry_on_401: bool = True, **kwargs: Any):
+        del base_url, ep, retry_on_401
+        if url.endswith("/system_stats"):
+            return _DummyComfyResp(
+                json_data={
+                    "devices": [
+                        {"name": "NVIDIA L4", "vram_total": 24 * (1024**3), "vram_free": 20 * (1024**3)}
+                    ]
+                }
+            )
+        if url.endswith("/queue"):
+            return _DummyComfyResp(json_data={"queue_running": [], "queue_pending": []})
+        if url.endswith("/history"):
+            hist_calls["n"] += 1
+            if hist_calls["n"] == 1:
+                return _DummyComfyResp(json_data={})
+            return _DummyComfyResp(
+                json_data={
+                    "pid_fail_1": {
+                        "outputs": {
+                            "9": {
+                                "images": [
+                                    {"filename": "bad_502.png", "subfolder": "", "type": "output"},
+                                    {"filename": "bad_timeout.png", "subfolder": "", "type": "output"},
+                                ]
+                            }
+                        }
+                    }
+                }
+            )
+        if url.endswith("/view"):
+            fn = str((kwargs.get("params") or {}).get("filename") or "")
+            if fn == "bad_502.png":
+                return _DummyComfyResp(status_code=502)
+            raise requests.exceptions.ReadTimeout("simulated view read timeout")
+        raise AssertionError(f"意外请求路径: {url}")
+
+    # 预先放入一份历史旧图，校验全败重试时严禁退回打开旧图假装成功
+    old_ok = isolated_env.tmp / "old_prev.png"
+    old_ok.write_bytes(_make_png_bytes())
+    with backend._comfy_lock:
+        backend._last_downloaded_files = [old_ok]
+
+    revealed: list[Path] = []
+    with (
+        patch.object(backend, "_comfy_http_get", side_effect=_mock_http_get),
+        patch.object(cb, "_reveal_path_in_explorer", side_effect=lambda p: revealed.append(Path(p))),
+    ):
+        c1 = backend.poll_comfy_http_once(base_url)
+        assert c1["online"] is True
+
+        events.clear()
+        c2 = backend.poll_comfy_http_once(base_url)
+        out_evts = [e for e in events if e.get("type") == "outputs_ready"]
+        assert len(out_evts) == 1, events
+        ev = out_evts[0]
+        assert "已存本机" not in ev["summary"]
+        assert "尚未存本机" in ev["summary"]
+        assert ev["pulled"] is False
+        assert ev["is_error"] is True
+        assert ev["count"] == 2 and ev["failed_count"] == 2
+        assert ev["files"] == []
+        assert c2["pending_pull_count"] == 2
+        assert c2["last_output_count"] == 0
+        assert [m["filename"] for _, m in backend._pending_pull_items] == [
+            "bad_502.png",
+            "bad_timeout.png",
+        ]
+        assert not any(backend.download_root.rglob("*"))
+
+        retry_res = backend.pull_or_open_latest_outputs()
+        assert retry_res["ok"] is False
+        assert retry_res["failed_count"] == 2
+        assert "拉取失败" in retry_res["message"]
+        assert revealed == []
+        assert backend.get_comfy_state()["pending_pull_count"] == 2
+        assert len(backend._pending_pull_items) == 2
+
+    diag_txt = isolated_env.diag_log.read_text(encoding="utf-8")
+    assert "bad_502.png" in diag_txt and "bad_timeout.png" in diag_txt
+
+
+def test_comfy_partial_pull_and_incremental_retry_convergence(
+    isolated_env,
+) -> None:
+    """R2：3 张成图首轮 1 成 2 败时仅落盘 1 张并精确保留后 2 张，后续逐轮重试精确收敛至 0。"""
+    import requests
+
+    backend = _make_backend(isolated_env, "r2_partial_retry")
+    with backend._lock:
+        backend.state["prefs"]["auto_pull_outputs"] = True
+    events: list[dict[str, Any]] = []
+    backend._event_cb = lambda evt: events.append(dict(evt))
+
+    png_1 = _make_png_bytes((220, 90, 90))
+    png_2 = _make_png_bytes((90, 220, 90))
+    png_3 = _make_png_bytes((90, 90, 220))
+    png_4 = _make_png_bytes((220, 220, 90))
+
+    hist_seq = {"n": 0}
+    view_mode: dict[str, Any] = {
+        "img_1.png": png_1,
+        "img_2.png": 502,
+        "img_3.png": "timeout",
+        "img_4.png": png_4,
+    }
+    base_url = "https://mock-r2.trycloudflare.com"
+
+    def _mock_http_get(url: str, *, base_url: str = "", ep: str = "", retry_on_401: bool = True, **kwargs: Any):
+        del base_url, ep, retry_on_401
+        if url.endswith("/system_stats"):
+            return _DummyComfyResp(
+                json_data={
+                    "devices": [
+                        {"name": "NVIDIA L4", "vram_total": 24 * (1024**3), "vram_free": 18 * (1024**3)}
+                    ]
+                }
+            )
+        if url.endswith("/queue"):
+            return _DummyComfyResp(json_data={"queue_running": [], "queue_pending": []})
+        if url.endswith("/history"):
+            hist_seq["n"] += 1
+            if hist_seq["n"] == 1:
+                return _DummyComfyResp(json_data={})
+            if hist_seq["n"] == 2:
+                return _DummyComfyResp(
+                    json_data={
+                        "pid_partial_3": {
+                            "outputs": {
+                                "9": {
+                                    "images": [
+                                        {"filename": "img_1.png", "subfolder": "", "type": "output"},
+                                        {"filename": "img_2.png", "subfolder": "", "type": "output"},
+                                        {"filename": "img_3.png", "subfolder": "", "type": "output"},
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                )
+            return _DummyComfyResp(
+                json_data={
+                    "pid_partial_3": {
+                        "outputs": {
+                            "9": {
+                                "images": [
+                                    {"filename": "img_1.png", "subfolder": "", "type": "output"},
+                                    {"filename": "img_2.png", "subfolder": "", "type": "output"},
+                                    {"filename": "img_3.png", "subfolder": "", "type": "output"},
+                                ]
+                            }
+                        }
+                    },
+                    "pid_next_ok": {
+                        "outputs": {
+                            "9": {"images": [{"filename": "img_4.png", "subfolder": "", "type": "output"}]}
+                        }
+                    },
+                }
+            )
+        if url.endswith("/view"):
+            fn = str((kwargs.get("params") or {}).get("filename") or "")
+            behavior = view_mode.get(fn)
+            if isinstance(behavior, bytes):
+                return _DummyComfyResp(
+                    body=behavior,
+                    headers={"Last-Modified": "Wed, 18 Nov 2026 04:00:00 GMT"},
+                )
+            if behavior == "timeout":
+                raise requests.exceptions.Timeout("simulated view timeout")
+            return _DummyComfyResp(status_code=int(behavior or 502))
+        raise AssertionError(f"意外请求路径: {url}")
+
+    revealed: list[Path] = []
+    with (
+        patch.object(backend, "_comfy_http_get", side_effect=_mock_http_get),
+        patch.object(cb, "_reveal_path_in_explorer", side_effect=lambda p: revealed.append(Path(p))),
+    ):
+        backend.poll_comfy_http_once(base_url)
+
+        # 3 张成图第 1 张成功、后 2 张失败 -> 仅落盘 1 张，pending_pull_count == 2 保留后 2 张
+        events.clear()
+        c2 = backend.poll_comfy_http_once(base_url)
+        disk_files = [p for p in backend.download_root.rglob("*") if p.is_file()]
+        assert len(disk_files) == 1 and "img_1" in disk_files[0].name
+        assert c2["pending_pull_count"] == 2
+        assert c2["last_output_count"] == 1
+        assert [m["filename"] for _, m in backend._pending_pull_items] == ["img_2.png", "img_3.png"]
+
+        ev2 = next(e for e in events if e.get("type") == "outputs_ready")
+        assert ev2["pulled"] is False and ev2["partial"] is True and ev2["is_warning"] is True
+        assert ev2["count"] == 1 and ev2["failed_count"] == 2
+        assert len(ev2["files"]) == 1
+        assert "已存本机 1 份" in ev2["summary"] and "2 份拉取失败" in ev2["summary"]
+
+        # 后续另一批全成功新出图不得误清此前积压的 img_2/img_3 待重试项
+        events.clear()
+        c3 = backend.poll_comfy_http_once(base_url)
+        ev3 = next(e for e in events if e.get("type") == "outputs_ready")
+        assert ev3["pulled"] is True and ev3["count"] == 1
+        assert c3["pending_pull_count"] == 2
+        assert [m["filename"] for _, m in backend._pending_pull_items] == ["img_2.png", "img_3.png"]
+
+        # 首次手动拉回：第 2 张成功、第 3 张仍失败 -> ok=False, partial=True, 精确只剩第 3 张
+        view_mode["img_2.png"] = png_2
+        res1 = backend.pull_or_open_latest_outputs()
+        assert res1["ok"] is False
+        assert res1["partial"] is True
+        assert res1["saved_count"] == 1 and res1["failed_count"] == 1
+        assert Path(res1["path"]).exists() and "img_2" in Path(res1["path"]).name
+        assert backend.get_comfy_state()["pending_pull_count"] == 1
+        assert [m["filename"] for _, m in backend._pending_pull_items] == ["img_3.png"]
+
+        # 再次重试第 3 张成功 -> pending_pull_count == 0 且返回 ok=True
+        view_mode["img_3.png"] = png_3
+        res2 = backend.pull_or_open_latest_outputs()
+        assert res2["ok"] is True
+        assert Path(res2["path"]).exists() and "img_3" in Path(res2["path"]).name
+        assert backend.get_comfy_state()["pending_pull_count"] == 0
+        assert backend._pending_pull_items == []
+        assert revealed[-1] == Path(res2["path"]).resolve()
+
+
+def test_comfy_pending_dedup_and_monkeypatch_download_compat(
+    isolated_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """验证待拉取队列去重保序辅助及 monkeypatch `_download_comfy_outputs` 兼容分支。"""
+    from backend_comfy import ComfySyncService
+
+    item_a1 = ("https://demo.example/", {"filename": "a.png", "subfolder": "", "type": "output"})
+    item_a2 = ("https://demo.example", {"filename": "a.png"})
+    item_b = ("https://demo.example", {"filename": "b.png", "subfolder": "sub", "type": "output"})
+    merged = ComfySyncService._merge_pending_items([item_a1], [item_a2, item_b])
+    assert len(merged) == 2
+    assert merged[0][1]["filename"] == "a.png" and merged[1][1]["filename"] == "b.png"
+
+    backend = _make_backend(isolated_env, "patch_dl_compat")
+    with backend._lock:
+        backend.state["prefs"]["auto_pull_outputs"] = True
+    events: list[dict[str, Any]] = []
+    backend._event_cb = lambda evt: events.append(dict(evt))
+
+    hist_calls = {"n": 0}
+    base_url = "https://mock-patch.trycloudflare.com"
+
+    def _mock_http_get(url: str, **_kwargs: Any):
+        if url.endswith("/system_stats"):
+            return _DummyComfyResp(json_data={"devices": []})
+        if url.endswith("/queue"):
+            return _DummyComfyResp(json_data={"queue_running": [], "queue_pending": []})
+        if url.endswith("/history"):
+            hist_calls["n"] += 1
+            if hist_calls["n"] == 1:
+                return _DummyComfyResp(json_data={})
+            return _DummyComfyResp(
+                json_data={
+                    "pid_patch_1": {
+                        "outputs": {
+                            "9": {
+                                "images": [
+                                    {"filename": "p_one.png", "subfolder": "", "type": "output"},
+                                    {"filename": "p_two.png", "subfolder": "", "type": "output"},
+                                ]
+                            }
+                        }
+                    }
+                }
+            )
+        raise AssertionError(f"patched 下载路径不应直接请求 {url}")
+
+    saved_one = backend.download_root / "p_one_20261118-120000.png"
+    saved_two = backend.download_root / "p_two_20261118-120001.png"
+    backend.download_root.mkdir(parents=True, exist_ok=True)
+    saved_one.write_bytes(_make_png_bytes())
+    saved_two.write_bytes(_make_png_bytes())
+
+    dl_mode = {"phase": "partial"}
+
+    def _patched_download(items: list[tuple[str, dict[str, str]]]) -> list[Path]:
+        if dl_mode["phase"] == "partial":
+            assert len(items) == 2
+            return [saved_one]
+        assert len(items) == 1 and items[0][1]["filename"] == "p_two.png"
+        return [saved_two]
+
+    monkeypatch.setattr(backend, "_download_comfy_outputs", _patched_download)
+
+    with (
+        patch.object(backend, "_comfy_http_get", side_effect=_mock_http_get),
+        patch.object(cb, "_reveal_path_in_explorer", return_value=True),
+    ):
+        backend.poll_comfy_http_once(base_url)
+        c2 = backend.poll_comfy_http_once(base_url)
+        assert c2["pending_pull_count"] == 1
+        assert [m["filename"] for _, m in backend._pending_pull_items] == ["p_two.png"]
+        ev = next(e for e in events if e.get("type") == "outputs_ready")
+        assert ev["partial"] is True and ev["pulled"] is False
+
+        dl_mode["phase"] = "retry_ok"
+        res = backend.pull_or_open_latest_outputs()
+        assert res["ok"] is True
+        assert backend.get_comfy_state()["pending_pull_count"] == 0
+
+
+def test_comfy_download_mkdir_failure_still_persists_pending_and_recovers(isolated_env) -> None:
+    """验证创建下载目录失败时已先 Write-Ahead 持久化待重试队列，修复目录后可成功拉回。"""
+    tmp = isolated_env.tmp
+    blocked_root = tmp / "blocked_dl_file"
+    blocked_root.write_text("file_blocks_mkdir", encoding="utf-8")
+
+    state_p = tmp / "mkdir_fail_state.json"
+    backend = cb.ColabPetBackend(
+        state_path=state_p,
+        download_root=blocked_root,
+        cf_config_path=isolated_env.cf_file,
+    )
+    with backend._lock:
+        backend.state["prefs"]["auto_pull_outputs"] = True
+    events: list[dict[str, Any]] = []
+    backend._event_cb = lambda evt: events.append(dict(evt))
+
+    base_url = "https://mock-mkdir-fail.trycloudflare.com"
+    hist_calls = {"n": 0}
+    png_bytes = _make_png_bytes()
+
+    def _mock_http_get(url: str, params: dict[str, Any] | None = None, **_kwargs: Any):
+        if url.endswith("/system_stats"):
+            return _DummyComfyResp(json_data={"devices": []})
+        if url.endswith("/queue"):
+            return _DummyComfyResp(json_data={"queue_running": [], "queue_pending": []})
+        if url.endswith("/history"):
+            hist_calls["n"] += 1
+            if hist_calls["n"] == 1:
+                return _DummyComfyResp(json_data={})
+            return _DummyComfyResp(
+                json_data={
+                    "pid_mkdir_1": {
+                        "outputs": {
+                            "9": {"images": [{"filename": "mkdir_ok.png", "subfolder": "", "type": "output"}]}
+                        }
+                    }
+                }
+            )
+        if url.endswith("/view") and (params or {}).get("filename") == "mkdir_ok.png":
+            return _DummyComfyResp(body=png_bytes, headers={"Last-Modified": "Wed, 18 Nov 2026 12:00:00 GMT"})
+        raise AssertionError(f"意外请求: {url}")
+
+    with (
+        patch.object(backend, "_comfy_http_get", side_effect=_mock_http_get),
+        patch.object(cb, "_reveal_path_in_explorer", return_value=True),
+    ):
+        backend.poll_comfy_http_once(base_url)
+        events.clear()
+        cstate = backend.poll_comfy_http_once(base_url)
+        assert cstate["pending_pull_count"] == 1
+        assert [m["filename"] for _, m in backend._pending_pull_items] == ["mkdir_ok.png"]
+        disk_pending = json.loads(state_p.read_text(encoding="utf-8")).get("pending_pull_items") or []
+        assert len(disk_pending) == 1 and disk_pending[0]["filename"] == "mkdir_ok.png"
+
+        ev = next(e for e in events if e.get("type") == "outputs_ready")
+        assert ev["pulled"] is False and ev["is_error"] is True
+        assert "已存本机" not in ev["summary"]
+
+        # 修复 download_root 后手动重试成功并清空持久化队列
+        blocked_root.unlink()
+        res_ok = backend.pull_or_open_latest_outputs()
+        assert res_ok["ok"] is True
+        assert Path(res_ok["path"]).is_file()
+        assert backend.get_comfy_state()["pending_pull_count"] == 0
+        assert json.loads(state_p.read_text(encoding="utf-8")).get("pending_pull_items") == []
+
+
+def test_comfy_pending_pull_survives_backend_restart(isolated_env) -> None:
+    """验证下载失败进入队列后即使桌宠进程重启，待重试队列也能自动恢复并完成补拉。"""
+    tmp = isolated_env.tmp
+    state_p = tmp / "restart_pending_state.json"
+    dl_root = tmp / "restart_dl"
+    base_url = "https://mock-restart.trycloudflare.com"
+    png_bytes = _make_png_bytes()
+
+    b1 = cb.ColabPetBackend(state_path=state_p, download_root=dl_root, cf_config_path=isolated_env.cf_file)
+    with b1._lock:
+        b1.state["prefs"]["auto_pull_outputs"] = True
+
+    hist_calls = {"n": 0}
+
+    def _fail_first_get(url: str, **_kwargs: Any):
+        if url.endswith("/system_stats"):
+            return _DummyComfyResp(json_data={"devices": []})
+        if url.endswith("/queue"):
+            return _DummyComfyResp(json_data={"queue_running": [], "queue_pending": []})
+        if url.endswith("/history"):
+            hist_calls["n"] += 1
+            if hist_calls["n"] == 1:
+                return _DummyComfyResp(json_data={})
+            return _DummyComfyResp(
+                json_data={
+                    "pid_rst_1": {
+                        "outputs": {"9": {"images": [{"filename": "survive.png", "subfolder": "", "type": "output"}]}}
+                    }
+                }
+            )
+        if url.endswith("/view"):
+            return _DummyComfyResp(status_code=502)
+        raise AssertionError(url)
+
+    with patch.object(b1, "_comfy_http_get", side_effect=_fail_first_get):
+        b1.poll_comfy_http_once(base_url)
+        b1.poll_comfy_http_once(base_url)
+
+    # 模拟进程重启：构造全新 ColabPetBackend 加载同一 state_path
+    b2 = cb.ColabPetBackend(state_path=state_p, download_root=dl_root, cf_config_path=isolated_env.cf_file)
+    assert b2.get_comfy_state()["pending_pull_count"] == 1
+    assert [m["filename"] for _, m in b2._pending_pull_items] == ["survive.png"]
+
+    with (
+        patch.object(
+            b2,
+            "_comfy_http_get",
+            return_value=_DummyComfyResp(body=png_bytes, headers={"Last-Modified": "Wed, 18 Nov 2026 12:00:00 GMT"}),
+        ),
+        patch.object(cb, "_reveal_path_in_explorer", return_value=True),
+    ):
+        res = b2.pull_or_open_latest_outputs()
+    assert res["ok"] is True and Path(res["path"]).is_file()
+    assert b2.get_comfy_state()["pending_pull_count"] == 0
+    assert json.loads(state_p.read_text(encoding="utf-8")).get("pending_pull_items") == []
+
+
+def test_comfy_concurrent_pull_deduplicated_via_pull_lock(isolated_env) -> None:
+    """验证双线程并发调用 pull_or_open_latest_outputs 时受 _pull_lock 互斥保护，每张图仅请求 1 次。"""
+    tmp = isolated_env.tmp
+    state_p = tmp / "concurrent_pull_state.json"
+    dl_root = tmp / "concurrent_dl"
+    base_url = "https://mock-concurrent.trycloudflare.com"
+    png_bytes = _make_png_bytes()
+
+    backend = cb.ColabPetBackend(state_path=state_p, download_root=dl_root, cf_config_path=isolated_env.cf_file)
+    with backend._comfy_lock:
+        backend._pending_pull_items = [
+            (base_url, {"filename": "conc_1.png", "subfolder": "", "type": "output"}),
+            (base_url, {"filename": "conc_2.png", "subfolder": "", "type": "output"}),
+        ]
+        backend._comfy_state["pending_pull_count"] = 2
+
+    view_counts: dict[str, int] = {"conc_1.png": 0, "conc_2.png": 0}
+    cnt_lock = threading.Lock()
+
+    def _slow_view_get(_url: str, params: dict[str, Any] | None = None, **_kwargs: Any):
+        fn = str((params or {}).get("filename") or "")
+        with cnt_lock:
+            view_counts[fn] = view_counts.get(fn, 0) + 1
+        time.sleep(0.05)
+        return _DummyComfyResp(body=png_bytes, headers={"Last-Modified": "Wed, 18 Nov 2026 12:00:00 GMT"})
+
+    barrier = threading.Barrier(2)
+    results: list[dict[str, Any]] = []
+    res_lock = threading.Lock()
+
+    def _worker() -> None:
+        barrier.wait(timeout=3.0)
+        r = backend.pull_or_open_latest_outputs()
+        with res_lock:
+            results.append(r)
+
+    with (
+        patch.object(backend, "_comfy_http_get", side_effect=_slow_view_get),
+        patch.object(cb, "_reveal_path_in_explorer", return_value=True),
+    ):
+        t1 = threading.Thread(target=_worker)
+        t2 = threading.Thread(target=_worker)
+        t1.start()
+        t2.start()
+        t1.join(timeout=5.0)
+        t2.join(timeout=5.0)
+
+    assert len(results) == 2 and all(r.get("ok") is True for r in results)
+    assert view_counts == {"conc_1.png": 1, "conc_2.png": 1}
+    disk_files = [p for p in dl_root.rglob("*") if p.is_file()]
+    assert len(disk_files) == 2
+    assert backend.get_comfy_state()["pending_pull_count"] == 0
+    assert json.loads(state_p.read_text(encoding="utf-8")).get("pending_pull_items") == []
+
+
+def test_comfy_probe_cross_origin_redirect_never_leaks_key() -> None:
+    """验证 ComfyUI 隧道探针与 HTTP 封装遇 302 跨源重定向时拒绝跳转且异源收到 0 请求。"""
+    import http.server
+    from colab_core import colab_client
+
+    evil_reqs: list[dict[str, Any]] = []
+
+    class _EvilHandler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *_a: Any) -> None:
+            return
+
+        def do_GET(self) -> None:  # noqa: N802
+            evil_reqs.append({"path": self.path, "headers": dict(self.headers)})
+            self.send_response(200)
+            self.end_headers()
+
+    evil_srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _EvilHandler)
+    evil_port = int(evil_srv.server_address[1])
+    evil_t = threading.Thread(target=evil_srv.serve_forever, daemon=True)
+    evil_t.start()
+
+    class _RedirHandler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *_a: Any) -> None:
+            return
+
+        def do_GET(self) -> None:  # noqa: N802
+            self.send_response(302)
+            self.send_header("Location", f"http://127.0.0.1:{evil_port}/system_stats")
+            self.end_headers()
+
+    orig_srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _RedirHandler)
+    orig_port = int(orig_srv.server_address[1])
+    orig_t = threading.Thread(target=orig_srv.serve_forever, daemon=True)
+    orig_t.start()
+
+    try:
+        with pytest.raises(Exception, match="跨源重定向"):
+            colab_client.probe_comfy_endpoint_ok(
+                f"http://127.0.0.1:{orig_port}",
+                comfy_key="cpk-never-leak-on-redirect",
+                timeout=3.0,
+            )
+        assert evil_reqs == []
+    finally:
+        orig_srv.shutdown()
+        orig_srv.server_close()
+        orig_t.join(timeout=2.0)
+        evil_srv.shutdown()
+        evil_srv.server_close()
+        evil_t.join(timeout=2.0)
+
+
+def test_comfy_first_request_url_mismatch_never_attaches_wrong_key(isolated_env) -> None:
+    """验证 ComfyUI 密钥按账号+实例+源站绑定，目标 URL 不匹配时首次请求与补水重试验收均不带错密钥。"""
+    import http.server
+
+    seen_auth_headers: list[str | None] = []
+    stub_status = {"code": 401}
+
+    class _SpyHandler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *_a: Any) -> None:
+            return
+
+        def do_GET(self) -> None:  # noqa: N802
+            seen_auth_headers.append(self.headers.get("Authorization"))
+            if stub_status["code"] == 200 or self.headers.get("Authorization") == "Bearer cpk-matched-target":
+                raw = json.dumps({"system": {"os": "posix"}, "devices": []}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+                return
+            self.send_response(401)
+            self.end_headers()
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _SpyHandler)
+    port = int(srv.server_address[1])
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    target_url = f"http://127.0.0.1:{port}"
+
+    try:
+        backend = _make_backend(isolated_env, "comfy_mismatch_key")
+        with backend._lock:
+            backend.state["prefs"]["active_account_id"] = "acct_b"
+            backend.state["active_endpoint"] = "ep-a"
+            backend.state["last_assignments_count"] = 1
+            backend.state["last_sessions"] = [{"name": "comfy", "endpoint": "ep-a", "accelerator": "L4"}]
+            backend.state["tunnel_cache"] = {"ep-a": "https://comfy-a.trycloudflare.com"}
+            backend._comfy_secrets_by_ep = {"ep-a": "cpk-secret-a-never-leak"}
+            backend._comfy_key_bindings_by_ep = {"ep-a": ("acct_a", "https://comfy-a.trycloudflare.com:443")}
+
+        def _hydrate_other(_ep: str, _sname: str, account_id: str = ""):
+            _ = account_id
+            backend._comfy_secrets_by_ep["ep-a"] = "cpk-secret-a-never-leak"
+            return "ok", "ep-a", "https://comfy-a.trycloudflare.com"
+
+        with patch.object(backend._tunnel_svc, "fast_read_slot_tunnel_url", side_effect=_hydrate_other):
+            # 1) 不传 ep 且唯一缓存密钥绑定在其它源站 -> 首次请求与 401 补水后均绝不带错密钥
+            r1 = backend._comfy_http_get(f"{target_url}/system_stats", timeout=3.0)
+            assert r1.status_code == 401
+            # 2) 显式传入 ep="ep-a" 但 URL 源站不匹配 -> 同样绝不携带 ep-a 密钥
+            backend._last_comfy_key_hydrate_m.clear()
+            r2 = backend._comfy_http_get(f"{target_url}/system_stats", base_url=target_url, ep="ep-a", timeout=3.0)
+            assert r2.status_code == 401
+        assert seen_auth_headers and all(h is None for h in seen_auth_headers)
+
+        # 3) 对照组：绑定完全匹配当前账号 + 实例 + 源站时，正常携带对应 Bearer 密钥
+        seen_auth_headers.clear()
+        with backend._lock:
+            backend._comfy_secrets_by_ep["ep-b"] = "cpk-matched-target"
+            backend._comfy_key_bindings_by_ep["ep-b"] = ("acct_b", f"http://127.0.0.1:{port}")
+        r_ok = backend._comfy_http_get(f"{target_url}/system_stats", base_url=target_url, ep="ep-b", timeout=3.0)
+        assert r_ok.status_code == 200
+        assert seen_auth_headers == ["Bearer cpk-matched-target"]
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        t.join(timeout=2.0)
+
+
+def test_comfy_download_validates_complete_200_body_and_large_queue_survives_restart(
+    isolated_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """验证非 200/空包/HTML/截断下载响应必判失败，以及 >256 积压队列重启零丢失与容量一致。"""
+    from backend_comfy import ComfySyncService
+
+    tmp = isolated_env.tmp
+    state_p = tmp / "queue_and_resp_state.json"
+    dl_root = tmp / "queue_dl"
+    base_url = "https://mock-qcheck.trycloudflare.com"
+    backend = cb.ColabPetBackend(state_path=state_p, download_root=dl_root, cf_config_path=isolated_env.cf_file)
+
+    bad_cases = {
+        "r_302.png": _DummyComfyResp(status_code=302, body=_make_png_bytes()),
+        "r_204.png": _DummyComfyResp(status_code=204, body=b""),
+        "r_empty.png": _DummyComfyResp(status_code=200, body=b""),
+        "r_trunc.png": _DummyComfyResp(status_code=200, body=b"abc", headers={"Content-Length": "120"}),
+        "r_html.png": _DummyComfyResp(status_code=200, body=b"<html>error</html>", headers={"Content-Type": "text/html; charset=utf-8"}),
+    }
+    bad_items = [(base_url, {"filename": fn, "subfolder": "", "type": "output"}) for fn in bad_cases]
+
+    with patch.object(
+        backend,
+        "_comfy_http_get",
+        side_effect=lambda _u, params=None, **_kw: bad_cases[str((params or {}).get("filename") or "")],
+    ):
+        saved, failed = backend._comfy_svc.download_comfy_outputs_detailed(bad_items)
+    assert saved == [] and len(failed) == 5
+    assert not any(dl_root.rglob("*"))
+
+    # 300 项 (>256) 积压重启后必须全部恢复，尾部绝不截断丢失
+    items_300 = [(base_url, {"filename": f"q_{i:03d}.png", "subfolder": "", "type": "output"}) for i in range(300)]
+    with backend._comfy_lock:
+        backend._pending_pull_items = items_300
+    backend._comfy_svc._persist_pending_pull_items()
+
+    restarted = cb.ColabPetBackend(state_path=state_p, download_root=dl_root, cf_config_path=isolated_env.cf_file)
+    assert len(restarted._pending_pull_items) == 300
+    assert restarted.get_comfy_state()["pending_pull_count"] == 300
+    assert restarted._pending_pull_items[-1][1]["filename"] == "q_299.png"
+
+    # 当队列超出统一上限时，内存与持久化一致保留最新尾部条目
+    monkeypatch.setattr(ComfySyncService, "MAX_PENDING_PULL_ITEMS", 5)
+    cap_items = [(base_url, {"filename": f"cap_{i}.png", "subfolder": "", "type": "output"}) for i in range(7)]
+    merged = ComfySyncService._merge_pending_items([], cap_items)
+    assert [m["filename"] for _, m in merged] == [f"cap_{i}.png" for i in range(2, 7)]
+    with restarted._comfy_lock:
+        restarted._pending_pull_items = cap_items
+    restarted._comfy_svc._persist_pending_pull_items()
+    disk_cap = json.loads(state_p.read_text(encoding="utf-8")).get("pending_pull_items") or []
+    assert [it["filename"] for it in disk_cap] == [f"cap_{i}.png" for i in range(2, 7)]

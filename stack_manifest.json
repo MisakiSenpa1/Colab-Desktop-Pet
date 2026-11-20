@@ -1,6 +1,59 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "default_profile": "anima",
+  "gpu_order": ["T4", "L4", "A100", "G4", "H100"],
+  "gpu_specs": {
+    "T4": {
+      "vram": "16G",
+      "vram_hm": "16G高",
+      "ram": "13G内存",
+      "ram_hm": "51G高存",
+      "default_rate_std": 1.15,
+      "default_rate_hm": 1.31,
+      "hm_locked": false,
+      "note": "省钱入门"
+    },
+    "L4": {
+      "vram": "24G高",
+      "vram_hm": "24G高",
+      "ram": "53G高存",
+      "ram_hm": "53G高存",
+      "default_rate_std": 1.94,
+      "default_rate_hm": 1.94,
+      "hm_locked": true,
+      "note": "Anima甜点"
+    },
+    "A100": {
+      "vram": "40G",
+      "vram_hm": "80G高",
+      "ram": "83G内存",
+      "ram_hm": "167G高存",
+      "default_rate_std": 5.5,
+      "default_rate_hm": 11.5,
+      "hm_locked": false,
+      "note": "极速生图"
+    },
+    "G4": {
+      "vram": "96G",
+      "vram_hm": "96G",
+      "ram": "176G高存",
+      "ram_hm": "176G高存",
+      "default_rate_std": 10.05,
+      "default_rate_hm": 10.05,
+      "hm_locked": true,
+      "note": "大显存甜点"
+    },
+    "H100": {
+      "vram": "80G",
+      "vram_hm": "80G高",
+      "ram": "167G内存",
+      "ram_hm": "230G高存",
+      "default_rate_std": 12.6,
+      "default_rate_hm": 14.2,
+      "hm_locked": false,
+      "note": "旗舰算力"
+    }
+  },
   "host_baseline": {
     "python_min": "3.11",
     "python_verified": "3.14.6",

@@ -2,13 +2,14 @@
 
 支持两种构建模式：
 1. `--mode portable`（默认，零额外打包依赖）：
-   - 从 `colab_pet/assets/idle.png` 生成多尺寸图标 `pet.ico`；
+   - 复用预置多尺寸图标 `colab_pet/assets/pet.ico` 作为可执行文件图标；
    - 使用 Windows 系统自带 .NET C# 编译器 (`csc.exe`) 编译原生无黑框 GUI 启动器 `Colab桌宠.exe`
      （支持 `--self-test`、`--doctor`、`--export-diag` 与自动探测本机 Python / 内嵌运行时）；
    - 生成 `一键环境自检与安装.bat`、`导出排障诊断包.bat`、`Windows打包版使用说明.txt`；
    - 经由严格白名单复制源码与资产 + 敏感密钥安全闸门全量扫描后，产出独立 `.zip` 发布包。
 2. `--mode pyinstaller`：
-   - 调用 `colab_pet.spec` 打出免安装 Python 的独立可执行目录与 `.zip` 发行包。
+   - 将预置 `pet.ico` 复制到 `build/pet.ico` 并调用 `colab_pet.spec` 打出免安装 Python 的独立可执行目录与 `.zip` 发行包
+     （配套生成调用 `"%~dp0Colab桌宠.exe" --doctor` 的 `一键环境自检.bat`）。
 """
 
 from __future__ import annotations
@@ -20,13 +21,11 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
-
-from PIL import Image
 
 PKG_DIR = Path(__file__).resolve().parent
-DEFAULT_OUT_DIR = PKG_DIR / "dist"
+DEFAULT_OUT_DIR = PKG_DIR.parent / "dist"
 CSC_CANDIDATES = (
     Path(r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"),
     Path(r"C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe"),
@@ -36,6 +35,7 @@ CSC_CANDIDATES = (
 FORBIDDEN_FILENAMES = {
     ".cf_tunnel_secret.json",
     "pet_state.json",
+    "agent_sessions.json",
     "pet_error.log",
     "rclone.conf",
     "sessions.json",
@@ -59,6 +59,8 @@ PORTABLE_TOP_FILES = (
     "colab_remote_common.py",
     "colab_security.py",
     "colab_pet_bridge_node.py",
+    "colab_pet_direct_canvas.js",
+    "colab_sse_gateway.py",
     "colab_bootstrap_anima.py",
     "colab_bootstrap_minimax_h3.py",
     "colab_bootstrap_drama3.py",
@@ -73,9 +75,27 @@ PORTABLE_TOP_FILES = (
 )
 
 PORTABLE_PET_FILES = (
+    "__init__.py",
     "pet_app.py",
+    "win32_window.py",
+    "asset_server.py",
+    "bridge_api.py",
+    "state_store.py",
+    "secret_store.py",
+    "context.py",
     "colab_backend.py",
+    "backend_monitor.py",
+    "backend_deploy.py",
+    "backend_tunnel.py",
+    "backend_comfy.py",
+    "backend_accounts.py",
+    "backend_cluster.py",
+    "backend_studio.py",
+    "backend_agent.py",
     "ui.html",
+    "studio.html",
+    "studio.css",
+    "studio.js",
     "ASSETS_NOTICE.txt",
 )
 
@@ -269,20 +289,24 @@ def find_csc_compiler() -> Path:
     raise FileNotFoundError("未找到 Windows .NET csc.exe 编译器，无法生成原生 EXE 启动器")
 
 
-def generate_pet_ico(src_png: Path, dst_ico: Path) -> Path:
-    """将桌宠立绘 PNG 转换为包含多尺寸的 Windows `.ico` 应用图标。"""
-    dst_ico.parent.mkdir(parents=True, exist_ok=True)
-    with Image.open(src_png) as raw_img:
-        img = raw_img.convert("RGBA")
-        # 居中填充到正方形画布保持人物头像完整居中
-        side = max(img.width, img.height)
-        square = Image.new("RGBA", (side, side), (0, 0, 0, 0))
-        square.paste(img, ((side - img.width) // 2, (side - img.height) // 2), img)
-        square.save(
-            dst_ico,
-            format="ICO",
-            sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)],
+def generate_pet_ico(src_img: Path, dst_ico: Path) -> Path:
+    """复用并复制预置的多尺寸 Windows `.ico` 应用图标到目标路径（零 Pillow 依赖）。"""
+    preset_ico = PKG_DIR / "colab_pet" / "assets" / "pet.ico"
+    src_ico: Path | None = None
+    if src_img.is_file() and src_img.suffix.lower() == ".ico":
+        src_ico = src_img
+    elif preset_ico.is_file():
+        src_ico = preset_ico
+    elif src_img.with_suffix(".ico").is_file():
+        src_ico = src_img.with_suffix(".ico")
+    if src_ico is None:
+        raise FileNotFoundError(
+            f"未找到预置多尺寸应用图标文件: {preset_ico}（参考参数: {src_img}）"
         )
+    if src_ico.resolve() == dst_ico.resolve():
+        return dst_ico
+    dst_ico.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src_ico, dst_ico)
     return dst_ico
 
 
@@ -319,7 +343,55 @@ def _write_crlf_utf8(path: Path, text: str) -> None:
 
 
 def write_helper_scripts(bundle_dir: Path, *, mode: str) -> None:
-    """生成普通用户友好的自检安装批处理、诊断包导出脚本及中文使用说明。"""
+    """生成普通用户友好的自检批处理、诊断包导出脚本及中文使用说明。"""
+    if mode == "pyinstaller":
+        (bundle_dir / "一键环境自检与安装.bat").unlink(missing_ok=True)
+        doctor_bat = """@echo off
+chcp 65001 >nul
+setlocal EnableExtensions
+cd /d "%~dp0"
+echo ========================================================
+echo   Colab 桌宠 · 一键环境自检（独立打包版）
+echo ========================================================
+echo 正在调用内置运行时执行全维度环境体检（无需宿主机安装 Python）...
+where colab >nul 2>&1 || echo [提示] 未检测到 colab，建议执行: uv tool install google-colab-cli
+where rclone >nul 2>&1 || echo [提示] 未检测到 rclone，建议执行: winget install Rclone.Rclone
+start "" /b /wait "%~dp0Colab桌宠.exe" --doctor
+echo.
+pause
+"""
+        diag_bat = """@echo off
+chcp 65001 >nul
+setlocal EnableExtensions
+cd /d "%~dp0"
+echo 正在导出全量脱敏排障诊断包 (.zip)...
+start "" /b /wait "%~dp0Colab桌宠.exe" --export-diag
+echo 诊断包已保存至 colab_pet\\logs\\ 目录，可安全用于反馈排障（已剔除全部令牌与密钥）。
+pause
+"""
+        readme_txt = f"""Google Colab 桌面宠物挂件（Windows 独立发行版 · 模式: {mode}）
+==========================================================
+
+1. 启动方式
+   - 本版本已内置完整 Python 运行时与桌面依赖，无需宿主机安装 Python，直接双击「Colab桌宠.exe」即可启动。
+   - 首次运行前可先双击「一键环境自检.bat」检查 google-colab-cli、rclone、Edge WebView2 及云盘配置是否就绪。
+
+2. 多账号与云盘配置（第 5 页）
+   - 在桌宠气泡顶部分页切换到第 5 页「账号与环境」即可图形化绑定多个 Google Ultra 账号及 Google Drive (gdrive_save)。
+   - 固定 Cloudflare 隧道口令、Google OAuth 刷新令牌与 LLM API Key 均通过系统凭据保险箱保存，本地配置文件不存明文。
+
+3. ComfyUI 公网保护说明
+   - 公网访问 ComfyUI 时默认启用密码与一次性票据保护；在桌宠左键「打开 ComfyUI」可免输直进画布，右键可复制公网地址与口令。
+
+4. 故障定位与诊断包导出
+   - 遇到开机或同步异常时，可在第 5 页「路径管理 ›」底部点击「🩺 导出诊断包」，或直接双击本目录「导出排障诊断包.bat」。
+   - 诊断包 (.zip) 会自动脱敏所有 Token、授权码、隧道口令与访问密钥，可放心提交排障。
+"""
+        _write_crlf_utf8(bundle_dir / "一键环境自检.bat", doctor_bat)
+        _write_crlf_utf8(bundle_dir / "导出排障诊断包.bat", diag_bat)
+        _write_crlf_utf8(bundle_dir / "Windows打包版使用说明.txt", readme_txt)
+        return
+
     setup_bat = """@echo off
 chcp 65001 >nul
 setlocal EnableExtensions
@@ -333,8 +405,8 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-echo [1/3] 正在按锁定基线检查/安装桌面依赖 (requirements.txt)...
-python -m pip install -r requirements.txt
+echo [1/3] 正在按锁定基线检查/安装桌面依赖 (requirements-lock.txt)...
+python -m pip install -r requirements-lock.txt
 if errorlevel 1 (
     echo [警告] 依赖安装返回异常，请检查网络或代理设置后重试。
     pause
@@ -391,7 +463,7 @@ pause
 def audit_release_directory(bundle_dir: Path) -> None:
     """发布安全闸门：校验打包目录绝对不含任何私密状态文件与明文泄露密钥。"""
     for p in bundle_dir.rglob("*"):
-        if any(part in FORBIDDEN_DIRS for part in p.parts):
+        if any(part in FORBIDDEN_DIRS for part in p.relative_to(bundle_dir).parts):
             raise RuntimeError(f"打包安全闸门拦截到禁止目录: {p}")
         if p.name in FORBIDDEN_FILENAMES or p.suffix.lower() == ".log":
             raise RuntimeError(f"打包安全闸门拦截到个人状态/日志文件: {p}")
@@ -458,8 +530,10 @@ def build_portable_package(pkg_dir: Path, out_dir: Path) -> tuple[Path, Path]:
         shutil.copy2(src, pet_dst / rel)
     _copy_clean_tree(pkg_dir / "colab_pet" / "assets", pet_dst / "assets")
 
-    idle_src = pkg_dir / "colab_pet" / "assets" / "idle.png"
-    ico_path = generate_pet_ico(idle_src, bundle_dir / "colab_pet" / "assets" / "pet.ico") if idle_src.is_file() else None
+    ico_path = generate_pet_ico(
+        pkg_dir / "colab_pet" / "assets" / "pet.ico",
+        bundle_dir / "colab_pet" / "assets" / "pet.ico",
+    )
     compile_native_launcher(bundle_dir / "Colab桌宠.exe", ico_path=ico_path)
     write_helper_scripts(bundle_dir, mode="portable")
 
@@ -478,9 +552,12 @@ def build_pyinstaller_package(pkg_dir: Path, out_dir: Path) -> tuple[Path, Path]
     out_dir.mkdir(parents=True, exist_ok=True)
     build_work = out_dir / "_pyinstaller_work"
     build_work.mkdir(parents=True, exist_ok=True)
-    idle_src = pkg_dir / "colab_pet" / "assets" / "idle.png"
-    if idle_src.is_file():
-        generate_pet_ico(idle_src, pkg_dir / "build" / "pet.ico")
+    ico_path = generate_pet_ico(
+        pkg_dir / "colab_pet" / "assets" / "pet.ico",
+        pkg_dir / "build" / "pet.ico",
+    )
+    if not ico_path.is_file():
+        raise FileNotFoundError(f"未生成 PyInstaller 应用图标: {ico_path}")
 
     cmd = [
         sys.executable,

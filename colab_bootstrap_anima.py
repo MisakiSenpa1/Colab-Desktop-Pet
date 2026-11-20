@@ -23,9 +23,8 @@ from colab_remote_common import (
 )
 
 COMFY_DB = Path("/root/comfy_db")
-_RCLONE_REMOTE = (os.environ.get("COLAB_RCLONE_REMOTE") or "gdrive_save").strip().rstrip(":") or "gdrive_save"
-GDRIVE_LORA_REMOTE = f"{_RCLONE_REMOTE}:Colab_ComfyUI_Models/loras"
-GDRIVE_WF_REMOTE = f"{_RCLONE_REMOTE}:Colab_ComfyUI_Models/workflows"
+GDRIVE_LORA_REMOTE = "gdrive_save:Colab_ComfyUI_Models/loras"
+GDRIVE_WF_REMOTE = "gdrive_save:Colab_ComfyUI_Models/workflows"
 
 _BRIDGE_BASE_DIR = Path(__file__).resolve().parent if "__file__" in globals() else None
 _PET_BRIDGE_INIT_PY = load_pet_bridge_init_py(_BRIDGE_BASE_DIR)
@@ -49,17 +48,20 @@ ANIMA_BASE_FILES = [
 ]
 
 def _load_required_loras() -> dict[str, int]:
-    """从可选环境变量 REQUIRED_LORAS_JSON 加载 {文件名: 精确字节数} 校验字典。"""
+    """从可选环境变量 `REQUIRED_LORAS_JSON` 加载 `{文件名: 精确字节数}` 强校验字典。"""
     raw = (os.environ.get("REQUIRED_LORAS_JSON") or "").strip()
     if not raw:
         return {}
-    data = json.loads(raw)
-    if not isinstance(data, dict):
-        return {}
-    return {str(k): int(v) for k, v in data.items() if str(k).strip()}
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            return {str(k).strip(): int(v) for k, v in parsed.items() if str(k).strip() and int(v) > 0}
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"环境变量 REQUIRED_LORAS_JSON 格式无效: {exc}") from exc
+    return {}
 
 
-REQUIRED_LORAS = _load_required_loras()
+REQUIRED_LORAS: dict[str, int] = _load_required_loras()
 
 
 def check_gpu_and_sdpa() -> None:
@@ -101,32 +103,89 @@ def download_anima_base() -> None:
         )
 
 
+def _is_strict_lora_mode() -> bool:
+    """判定是否开启个人增强版私训 LoRA 强制校验（`ANIMA_STRICT_LORAS=1` 或 `COLAB_PET_EDITION=personal`）。"""
+    raw_strict = os.environ.get("ANIMA_STRICT_LORAS")
+    if raw_strict is not None and raw_strict.strip() != "":
+        return raw_strict.strip().lower() in ("1", "true", "yes", "on")
+    edition = str(os.environ.get("COLAB_PET_EDITION") or "").strip().lower()
+    return edition in ("personal", "enhanced", "pro", "private")
+
+
 def pull_loras_from_gdrive() -> None:
-    """若已上传 rclone.conf，则从 Google Drive 拉取自训 LoRA 与备份工作流（可选）。"""
-    print("=== [5/7] 同步 Google Drive LoRA 与工作流（可选） ===", flush=True)
+    """按运行模式从 Google Drive 拉取自训 LoRA 与云盘工作流（公开基础版无 rclone.conf 时平滑跳过）。"""
+    print("=== [5/7] 从 Google Drive 拉取自训 LoRA ===", flush=True)
+    strict_mode = _is_strict_lora_mode()
+    loras_dir = COMFY_DIR / "models" / "loras"
+    loras_dir.mkdir(parents=True, exist_ok=True)
+    wf_dir = COMFY_DIR / "user" / "default" / "workflows"
+    wf_dir.mkdir(parents=True, exist_ok=True)
+
     if not RCLONE_CONF.is_file():
+        if strict_mode:
+            raise FileNotFoundError(
+                f"未找到 {RCLONE_CONF}，个人增强模式要求先在本机通过 colab upload 上传 rclone.conf"
+            )
         print(
-            f"未检测到 {RCLONE_CONF}，跳过 Google Drive LoRA/工作流拉取（将仅使用公共底座模型启动 ComfyUI）。",
+            f"[公开基础版] 未检测到 {RCLONE_CONF}，跳过 Google Drive 私训 LoRA 与云盘工作流拉取，将直接使用 Anima 公开底座启动 ComfyUI。",
             flush=True,
         )
         return
 
-    loras_dir = COMFY_DIR / "models" / "loras"
-    loras_dir.mkdir(parents=True, exist_ok=True)
     rclone_bin = shutil.which("rclone") or "/usr/local/bin/rclone"
-    run_cmd([rclone_bin, "copy", "--config", str(RCLONE_CONF), "--disable-http2", GDRIVE_LORA_REMOTE, str(loras_dir), "--include", "*.safetensors", "--transfers", "4"], check=False)
+    run_cmd(
+        [
+            rclone_bin,
+            "copy",
+            "--config",
+            str(RCLONE_CONF),
+            GDRIVE_LORA_REMOTE,
+            str(loras_dir),
+            "--include",
+            "*.safetensors",
+            "--transfers",
+            "4",
+        ],
+        check=strict_mode,
+    )
 
-    for name, expected_size in REQUIRED_LORAS.items():
-        fpath = loras_dir / name
-        if not fpath.is_file():
-            raise FileNotFoundError(f"主力 LoRA 缺失: {fpath}")
-        if fpath.stat().st_size != expected_size:
-            raise ValueError(f"主力 LoRA 字节数不符: {name} 实际={fpath.stat().st_size} B, 预期={expected_size} B")
-        print(f"LoRA 就绪: {name} ({expected_size} B)", flush=True)
+    if strict_mode:
+        for name, expected_size in REQUIRED_LORAS.items():
+            fpath = loras_dir / name
+            if not fpath.is_file():
+                raise FileNotFoundError(f"主力 LoRA 缺失: {fpath}")
+            if fpath.stat().st_size != expected_size:
+                raise ValueError(
+                    f"主力 LoRA 字节数不符: {name} 实际={fpath.stat().st_size} B, 预期={expected_size} B"
+                )
+            print(f"LoRA 就绪: {name} ({expected_size} B)", flush=True)
+    else:
+        found_loras = sorted(p.name for p in loras_dir.glob("*.safetensors"))
+        if found_loras:
+            print(
+                f"[公开基础版] 已拉取可选 LoRA 共 {len(found_loras)} 个（未开启 ANIMA_STRICT_LORAS=1，跳过私训 LoRA 强制校验）: {', '.join(found_loras)}",
+                flush=True,
+            )
+        else:
+            print(
+                "[公开基础版] 未发现私训 LoRA，跳过私训校验并直接使用 Anima 公开底座启动 ComfyUI。",
+                flush=True,
+            )
 
-    wf_dir = COMFY_DIR / "user" / "default" / "workflows"
-    wf_dir.mkdir(parents=True, exist_ok=True)
-    run_cmd([rclone_bin, "copy", "--config", str(RCLONE_CONF), "--disable-http2", GDRIVE_WF_REMOTE, str(wf_dir), "--include", "*.json"], check=False)
+    run_cmd(
+        [
+            rclone_bin,
+            "copy",
+            "--config",
+            str(RCLONE_CONF),
+            "--disable-http2",
+            GDRIVE_WF_REMOTE,
+            str(wf_dir),
+            "--include",
+            "*.json",
+        ],
+        check=False,
+    )
     print(f"云盘随行工作流就绪，共 {sum(1 for _ in wf_dir.glob('*.json'))} 个", flush=True)
 
 
@@ -145,7 +204,10 @@ def main() -> None:
         wait_timeout_sec=90,
     )
     loras = sorted(p.name for p in (COMFY_DIR / "models" / "loras").glob("*.safetensors"))
-    print(f"ComfyUI 与 LoRA 已就绪，共 {len(loras)} 个: {', '.join(loras)}", flush=True)
+    if loras:
+        print(f"ComfyUI 与 LoRA 已就绪，共 {len(loras)} 个: {', '.join(loras)}", flush=True)
+    else:
+        print("ComfyUI 已就绪（公开基础版纯 Anima 底座模式，当前未加载私训 LoRA）", flush=True)
     start_comfy_tunnel_standard()
     write_runtime_versions_record(
         "anima",

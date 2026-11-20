@@ -7,17 +7,25 @@ import json
 import mimetypes
 import os
 import re
+import struct
+import sys
 import tarfile
 import tempfile
 import time
 import uuid
+import zlib
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable
+from typing import Any
 
-from PIL import Image
+_PKG_DIR = Path(__file__).resolve().parents[1]
+if str(_PKG_DIR) not in sys.path:
+    sys.path.insert(0, str(_PKG_DIR))
+
+from colab_core.exec_runner import get_diag_logger, suppress_logged  # noqa: E402
 
 _CST_TZ = timezone(timedelta(hours=8))
 _TS_SUFFIX_RE = re.compile(r"_\d{8}-\d{6}(?:-\d+)?$")
@@ -26,11 +34,10 @@ _WORKFLOW_UUID_RE = re.compile(
     re.IGNORECASE,
 )
 
-_RCLONE_REMOTE = (os.environ.get("COLAB_RCLONE_REMOTE") or "gdrive_save").strip().rstrip(":") or "gdrive_save"
-GDRIVE_LORA_REMOTE = f"{_RCLONE_REMOTE}:Colab_ComfyUI_Models/loras"
-GDRIVE_DRAMA3_REFS_REMOTE = f"{_RCLONE_REMOTE}:Colab_ComfyUI_Models/drama3/refs"
-GDRIVE_OUT_REMOTE = f"{_RCLONE_REMOTE}:Colab_ComfyUI_Output"
-GDRIVE_WF_REMOTE = f"{_RCLONE_REMOTE}:Colab_ComfyUI_Models/workflows"
+GDRIVE_LORA_REMOTE = "gdrive_save:Colab_ComfyUI_Models/loras"
+GDRIVE_DRAMA3_REFS_REMOTE = "gdrive_save:Colab_ComfyUI_Models/drama3/refs"
+GDRIVE_OUT_REMOTE = "gdrive_save:Colab_ComfyUI_Output"
+GDRIVE_WF_REMOTE = "gdrive_save:Colab_ComfyUI_Models/workflows"
 REMOTE_OUT_ROOT = "/root/comfy_out"
 REMOTE_RCLONE_CONF = "/tmp/rclone.conf"
 REMOTE_PULL_TAR = "/tmp/comfy_pull.tar.gz"
@@ -48,7 +55,7 @@ LLM_TEXT_EXTS = {
 }
 LLM_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 
-# 可选 LoRA 清单默认留空，公开环境下通过 loras_manifest.json 或扫描目录内 *.safetensors 自动发现
+# 可选生产级 Anima LoRA 清单：(LoRA备份下相对路径, 精确字节数, SHA256)；公开仓库默认留空按目录自动发现
 ANIMA_LORAS: list[tuple[str, int | None, str | None]] = []
 
 
@@ -316,7 +323,7 @@ def parse_http_mtime(last_modified: str | None) -> float | None:
     try:
         dt = parsedate_to_datetime(last_modified.strip())
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return dt.timestamp()
     except Exception:
         return None
@@ -344,17 +351,17 @@ class StreamingMultipartFile:
             head_parts.append(
                 f"--{self.boundary}\r\n"
                 f'Content-Disposition: form-data; name="{k}"\r\n\r\n'
-                f"{v}\r\n".encode("utf-8")
+                f"{v}\r\n".encode()
             )
         ctype = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
         safe_name = sanitize_filename(file_path.name).replace('"', "_")
         head_parts.append(
             f"--{self.boundary}\r\n"
             f'Content-Disposition: form-data; name="{field_name}"; filename="{safe_name}"\r\n'
-            f"Content-Type: {ctype}\r\n\r\n".encode("utf-8")
+            f"Content-Type: {ctype}\r\n\r\n".encode()
         )
         self._head = b"".join(head_parts)
-        self._tail = f"\r\n--{self.boundary}--\r\n".encode("utf-8")
+        self._tail = f"\r\n--{self.boundary}--\r\n".encode()
         self._file_size = file_path.stat().st_size
         self._total_len = len(self._head) + self._file_size + len(self._tail)
         self._fp = open(file_path, "rb")
@@ -411,24 +418,105 @@ class StreamingMultipartFile:
             self._on_progress(pct)
 
     def close(self) -> None:
-        try:
+        with suppress_logged("file_sync", throttled_key="multipart_close_err", interval_sec=30.0):
             self._fp.close()
-        except Exception:
-            pass
 
-    def __enter__(self) -> "StreamingMultipartFile":
+    def __enter__(self) -> StreamingMultipartFile:
         return self
 
     def __exit__(self, *_exc: Any) -> None:
         self.close()
 
 
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_MAX_PNG_CHUNK_BYTES = 16 * 1024 * 1024
+_PNG_TEXT_CHUNK_TYPES = (b"tEXt", b"zTXt", b"iTXt")
+
+
+def _safe_zlib_decompress(raw: bytes, max_bytes: int = _MAX_PNG_CHUNK_BYTES) -> bytes | None:
+    """安全解压 PNG 压缩文本载荷，并限制最大输出体积以防异常膨胀。"""
+    try:
+        dec = zlib.decompressobj()
+        out = dec.decompress(raw, max_bytes + 1)
+        if len(out) > max_bytes or not dec.eof:
+            return None
+        return out
+    except zlib.error:
+        return None
+
+
+def _decode_png_text(raw: bytes) -> str:
+    """优先按 UTF-8 解码 PNG 文本块内容，遇到非 UTF-8 字节回退 latin-1。"""
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw.decode("latin-1", errors="replace")
+
+
+def _read_png_text_chunks(path: Path) -> dict[str, str]:
+    """使用标准库 struct 与 zlib 读取 PNG 文件的 tEXt / zTXt / iTXt 文本元数据块。"""
+    chunks: dict[str, str] = {}
+    try:
+        with open(path, "rb") as fp:
+            if fp.read(8) != _PNG_SIGNATURE:
+                return chunks
+            while True:
+                header = fp.read(8)
+                if len(header) != 8:
+                    break
+                length, chunk_type = struct.unpack(">I4s", header)
+                if chunk_type in (b"IDAT", b"IEND"):
+                    break
+                if length > _MAX_PNG_CHUNK_BYTES or chunk_type not in _PNG_TEXT_CHUNK_TYPES:
+                    fp.seek(length + 4, os.SEEK_CUR)
+                    continue
+                data = fp.read(length)
+                crc = fp.read(4)
+                if len(data) != length or len(crc) != 4:
+                    break
+                if b"\x00" not in data:
+                    continue
+                k_raw, rest = data.split(b"\x00", 1)
+                key = k_raw.decode("latin-1", errors="replace")
+                if not key:
+                    continue
+                if chunk_type == b"tEXt":
+                    chunks[key] = _decode_png_text(rest)
+                elif chunk_type == b"zTXt":
+                    if not rest or rest[0] != 0:
+                        continue
+                    raw_val = _safe_zlib_decompress(rest[1:])
+                    if raw_val is not None:
+                        chunks[key] = _decode_png_text(raw_val)
+                elif chunk_type == b"iTXt":
+                    if len(rest) < 2:
+                        continue
+                    comp_flag, comp_method, tail = rest[0], rest[1], rest[2:]
+                    parts = tail.split(b"\x00", 2)
+                    if len(parts) != 3:
+                        continue
+                    text_raw = parts[2]
+                    if comp_flag == 1:
+                        if comp_method != 0:
+                            continue
+                        decompressed = _safe_zlib_decompress(text_raw)
+                        if decompressed is None:
+                            continue
+                        text_raw = decompressed
+                    elif comp_flag != 0:
+                        continue
+                    chunks[key] = _decode_png_text(text_raw)
+    except Exception:
+        return chunks
+    return chunks
+
+
 def extract_png_comfy_workflow(path: Path) -> str | None:
     """检查 PNG 元数据中是否内嵌合法 ComfyUI `workflow` 或 API `prompt`。"""
     try:
-        with Image.open(path) as img:
-            raw_wf = img.info.get("workflow")
-            raw_prompt = img.info.get("prompt")
+        chunks = _read_png_text_chunks(path)
+        raw_wf = chunks.get("workflow")
+        raw_prompt = chunks.get("prompt")
     except Exception:
         return None
 
@@ -437,8 +525,13 @@ def extract_png_comfy_workflow(path: Path) -> str | None:
             parsed_wf = json.loads(raw_wf)
             if isinstance(parsed_wf, dict) and ("nodes" in parsed_wf or "links" in parsed_wf):
                 return raw_wf
-        except Exception:
-            pass
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            get_diag_logger().debug_throttled(
+                "file_sync",
+                "png_workflow_json_err",
+                f"解析 PNG workflow 元数据失败: {exc}",
+                interval_sec=30.0,
+            )
 
     if isinstance(raw_prompt, str) and raw_prompt.strip():
         try:
@@ -450,8 +543,13 @@ def extract_png_comfy_workflow(path: Path) -> str | None:
                 for node in parsed_prompt.values()
             ):
                 return raw_prompt
-        except Exception:
-            pass
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            get_diag_logger().debug_throttled(
+                "file_sync",
+                "png_prompt_json_err",
+                f"解析 PNG prompt 元数据失败: {exc}",
+                interval_sec=30.0,
+            )
 
     return None
 
@@ -542,11 +640,10 @@ def ensure_workflow_uuid(wf_dict: dict[str, Any]) -> bool:
     return True
 
 
-def api_prompt_to_ui_workflow(
+def _collect_valid_prompt_nodes(
     prompt_dict: dict[str, Any],
-    object_info: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """将 ComfyUI API `prompt` 字典转换为标准网页画布 LiteGraph 工作流。"""
+) -> tuple[dict[str, dict[str, Any]], dict[str, int]]:
+    """筛选合法 ComfyUI API 节点并记录其原始声明顺序。"""
     valid_nodes: dict[str, dict[str, Any]] = {}
     orig_order: dict[str, int] = {}
     for idx, (raw_key, node_val) in enumerate(prompt_dict.items()):
@@ -559,21 +656,14 @@ def api_prompt_to_ui_workflow(
             key_str = str(raw_key)
             valid_nodes[key_str] = node_val
             orig_order[key_str] = idx
+    return valid_nodes, orig_order
 
-    ordered_keys = list(valid_nodes.keys())
-    if not ordered_keys:
-        return {
-            "id": str(uuid.uuid4()),
-            "last_node_id": 0,
-            "last_link_id": 0,
-            "nodes": [],
-            "links": [],
-            "groups": [],
-            "config": {},
-            "extra": {},
-            "version": 0.4,
-        }
 
+def _compute_prompt_node_depths(
+    valid_nodes: dict[str, dict[str, Any]],
+    ordered_keys: list[str],
+) -> dict[str, int]:
+    """根据节点间连线依赖迭代计算每个节点的拓扑深度（列层级）。"""
     depths: dict[str, int] = {k: 0 for k in ordered_keys}
     for _ in range(len(ordered_keys)):
         changed = False
@@ -589,152 +679,113 @@ def api_prompt_to_ui_workflow(
                 changed = True
         if not changed:
             break
+    return depths
 
-    sorted_keys = sorted(ordered_keys, key=lambda k: (depths[k], orig_order[k]))
-    str_to_int_id: dict[str, int] = {k: idx + 1 for idx, k in enumerate(sorted_keys)}
 
-    depth_rows: dict[int, int] = {}
-    ui_nodes_by_key: dict[str, dict[str, Any]] = {}
-    ui_nodes: list[dict[str, Any]] = []
-    pending_links: list[tuple[str, int, str, int, str]] = []
+def _default_ui_node_size(class_type: str) -> list[int]:
+    """根据 ComfyUI 节点类名返回画布默认显示宽高。"""
+    if "TextEncode" in class_type:
+        return [400, 260]
+    if "KSampler" in class_type:
+        return [330, 290]
+    if class_type in ("SaveImage", "PreviewImage"):
+        return [330, 270]
+    return [330, 150]
 
-    for order_idx, k in enumerate(sorted_keys):
-        node_data = valid_nodes[k]
-        class_type = node_data["class_type"]
-        node_inputs_data: dict[str, Any] = node_data["inputs"]
-        node_info = (
-            object_info.get(class_type)
-            if isinstance(object_info, dict) and isinstance(object_info.get(class_type), dict)
-            else None
+
+def _build_ui_node_slots_with_info(
+    node_key: str,
+    node_inputs_data: dict[str, Any],
+    node_info: dict[str, Any],
+    valid_nodes: dict[str, dict[str, Any]],
+    pending_links: list[tuple[str, int, str, int, str]],
+) -> tuple[list[dict[str, Any]], list[Any], list[dict[str, Any]]]:
+    """在具备 `object_info` 节点元数据时，构造输入槽、控件值与输出槽定义。"""
+    ui_inputs: list[dict[str, Any]] = []
+    widgets_values: list[Any] = []
+    specs = _ordered_node_input_specs(node_info)
+    known_names = {name for name, _, _ in specs}
+
+    for inp_name, raw_type, cfg in specs:
+        is_combo = isinstance(raw_type, list) or raw_type == "COMBO"
+        slot_type = "COMBO" if is_combo else (str(raw_type) if isinstance(raw_type, str) else "*")
+        is_widget = (not bool(cfg.get("forceInput"))) and (
+            is_combo or raw_type in ("INT", "FLOAT", "STRING", "BOOLEAN")
         )
+        has_val = inp_name in node_inputs_data
+        raw_val = node_inputs_data.get(inp_name)
+        is_linked = has_val and _is_prompt_link_ref(raw_val, valid_nodes)
 
-        depth = depths[k]
-        row_idx = depth_rows.get(depth, 0)
-        depth_rows[depth] = row_idx + 1
-
-        if "TextEncode" in class_type:
-            size = [400, 260]
-        elif "KSampler" in class_type:
-            size = [330, 290]
-        elif class_type in ("SaveImage", "PreviewImage"):
-            size = [330, 270]
+        if is_widget:
+            if is_linked:
+                target_slot = len(ui_inputs)
+                ui_inputs.append({"name": inp_name, "type": slot_type, "widget": {"name": inp_name}, "link": None})
+                pending_links.append((str(raw_val[0]), int(raw_val[1]), node_key, target_slot, slot_type))
+                widgets_values.append(_default_widget_value(raw_type, cfg))
+            else:
+                widgets_values.append(raw_val if has_val else _default_widget_value(raw_type, cfg))
+            if _should_append_seed_control(inp_name, raw_type, cfg):
+                widgets_values.append("fixed")
         else:
-            size = [330, 150]
+            target_slot = len(ui_inputs)
+            ui_inputs.append({"name": inp_name, "type": slot_type, "link": None})
+            if is_linked:
+                pending_links.append((str(raw_val[0]), int(raw_val[1]), node_key, target_slot, slot_type))
 
-        ui_inputs: list[dict[str, Any]] = []
-        widgets_values: list[Any] = []
+    for extra_name, extra_val in node_inputs_data.items():
+        if extra_name not in known_names and _is_prompt_link_ref(extra_val, valid_nodes):
+            target_slot = len(ui_inputs)
+            ui_inputs.append({"name": extra_name, "type": "*", "link": None})
+            pending_links.append((str(extra_val[0]), int(extra_val[1]), node_key, target_slot, "*"))
 
-        if node_info is not None:
-            specs = _ordered_node_input_specs(node_info)
-            known_names = {name for name, _, _ in specs}
-            for inp_name, raw_type, cfg in specs:
-                is_combo = isinstance(raw_type, list) or raw_type == "COMBO"
-                slot_type = "COMBO" if is_combo else (str(raw_type) if isinstance(raw_type, str) else "*")
-                force_input = bool(cfg.get("forceInput"))
-                is_widget = (not force_input) and (
-                    is_combo or raw_type in ("INT", "FLOAT", "STRING", "BOOLEAN")
-                )
-                has_val = inp_name in node_inputs_data
-                raw_val = node_inputs_data.get(inp_name)
-                is_linked = has_val and _is_prompt_link_ref(raw_val, valid_nodes)
-
-                if is_widget:
-                    if is_linked:
-                        src_key = str(raw_val[0])
-                        src_slot = int(raw_val[1])
-                        target_slot = len(ui_inputs)
-                        ui_inputs.append(
-                            {
-                                "name": inp_name,
-                                "type": slot_type,
-                                "widget": {"name": inp_name},
-                                "link": None,
-                            }
-                        )
-                        pending_links.append((src_key, src_slot, k, target_slot, slot_type))
-                        widgets_values.append(_default_widget_value(raw_type, cfg))
-                    else:
-                        val = raw_val if has_val else _default_widget_value(raw_type, cfg)
-                        widgets_values.append(val)
-                    if _should_append_seed_control(inp_name, raw_type, cfg):
-                        widgets_values.append("fixed")
-                else:
-                    target_slot = len(ui_inputs)
-                    ui_inputs.append({"name": inp_name, "type": slot_type, "link": None})
-                    if is_linked:
-                        src_key = str(raw_val[0])
-                        src_slot = int(raw_val[1])
-                        pending_links.append((src_key, src_slot, k, target_slot, slot_type))
-
-            for extra_name, extra_val in node_inputs_data.items():
-                if extra_name not in known_names and _is_prompt_link_ref(extra_val, valid_nodes):
-                    target_slot = len(ui_inputs)
-                    ui_inputs.append({"name": extra_name, "type": "*", "link": None})
-                    pending_links.append(
-                        (str(extra_val[0]), int(extra_val[1]), k, target_slot, "*")
-                    )
-
-            out_types = node_info.get("output") if isinstance(node_info.get("output"), list) else []
-            out_names = (
-                node_info.get("output_name")
-                if isinstance(node_info.get("output_name"), list)
-                else out_types
-            )
-            ui_outputs = [
-                {
-                    "name": str(out_names[idx] if idx < len(out_names) else out_t),
-                    "type": str(out_t),
-                    "links": [],
-                    "slot_index": idx,
-                }
-                for idx, out_t in enumerate(out_types)
-            ]
-        else:
-            for inp_name, raw_val in node_inputs_data.items():
-                if _is_prompt_link_ref(raw_val, valid_nodes):
-                    target_slot = len(ui_inputs)
-                    ui_inputs.append({"name": inp_name, "type": "*", "link": None})
-                    pending_links.append(
-                        (str(raw_val[0]), int(raw_val[1]), k, target_slot, "*")
-                    )
-                else:
-                    widgets_values.append(raw_val)
-                    if (
-                        inp_name in ("seed", "noise_seed")
-                        and isinstance(raw_val, int)
-                        and not isinstance(raw_val, bool)
-                    ):
-                        widgets_values.append("fixed")
-            ui_outputs = []
-
-        ui_node: dict[str, Any] = {
-            "id": str_to_int_id[k],
-            "type": class_type,
-            "pos": [80 + depth * 420, 80 + row_idx * 320],
-            "size": size,
-            "flags": {},
-            "order": order_idx,
-            "mode": 0,
-            "inputs": ui_inputs,
-            "outputs": ui_outputs,
-            "properties": {"Node name for S&R": class_type},
-            "widgets_values": widgets_values,
+    out_types = node_info.get("output") if isinstance(node_info.get("output"), list) else []
+    out_names = node_info.get("output_name") if isinstance(node_info.get("output_name"), list) else out_types
+    ui_outputs = [
+        {
+            "name": str(out_names[idx] if idx < len(out_names) else out_t),
+            "type": str(out_t),
+            "links": [],
+            "slot_index": idx,
         }
-        ui_nodes_by_key[k] = ui_node
-        ui_nodes.append(ui_node)
+        for idx, out_t in enumerate(out_types)
+    ]
+    return ui_inputs, widgets_values, ui_outputs
 
+
+def _build_ui_node_slots_fallback(
+    node_key: str,
+    node_inputs_data: dict[str, Any],
+    valid_nodes: dict[str, dict[str, Any]],
+    pending_links: list[tuple[str, int, str, int, str]],
+) -> tuple[list[dict[str, Any]], list[Any], list[dict[str, Any]]]:
+    """在缺少 `object_info` 元数据时按输入值形态兜底构造输入槽与控件列表。"""
+    ui_inputs: list[dict[str, Any]] = []
+    widgets_values: list[Any] = []
+    for inp_name, raw_val in node_inputs_data.items():
+        if _is_prompt_link_ref(raw_val, valid_nodes):
+            target_slot = len(ui_inputs)
+            ui_inputs.append({"name": inp_name, "type": "*", "link": None})
+            pending_links.append((str(raw_val[0]), int(raw_val[1]), node_key, target_slot, "*"))
+        else:
+            widgets_values.append(raw_val)
+            if inp_name in ("seed", "noise_seed") and isinstance(raw_val, int) and not isinstance(raw_val, bool):
+                widgets_values.append("fixed")
+    return ui_inputs, widgets_values, []
+
+
+def _wire_ui_workflow_links(
+    pending_links: list[tuple[str, int, str, int, str]],
+    ui_nodes_by_key: dict[str, dict[str, Any]],
+) -> list[list[Any]]:
+    """根据待连线清单补齐缺失输出槽、回填槽位类型并生成 LiteGraph `links` 数组。"""
     ui_links: list[list[Any]] = []
-    for link_idx, (src_key, src_slot, dst_key, dst_slot, target_slot_type) in enumerate(
-        pending_links, start=1
-    ):
+    for link_idx, (src_key, src_slot, dst_key, dst_slot, target_slot_type) in enumerate(pending_links, start=1):
         src_node = ui_nodes_by_key[src_key]
         dst_node = ui_nodes_by_key[dst_key]
         while len(src_node["outputs"]) <= src_slot:
             idx = len(src_node["outputs"])
             inferred_t = target_slot_type if idx == src_slot else "*"
-            src_node["outputs"].append(
-                {"name": inferred_t, "type": inferred_t, "links": [], "slot_index": idx}
-            )
+            src_node["outputs"].append({"name": inferred_t, "type": inferred_t, "links": [], "slot_index": idx})
         src_out = src_node["outputs"][src_slot]
         src_out["links"].append(link_idx)
         link_type = src_out.get("type", "*")
@@ -746,10 +797,100 @@ def api_prompt_to_ui_workflow(
         if dst_node["inputs"][dst_slot]["type"] == "*" and link_type != "*":
             dst_node["inputs"][dst_slot]["type"] = link_type
         dst_node["inputs"][dst_slot]["link"] = link_idx
-        ui_links.append(
-            [link_idx, src_node["id"], src_slot, dst_node["id"], dst_slot, link_type]
-        )
+        ui_links.append([link_idx, src_node["id"], src_slot, dst_node["id"], dst_slot, link_type])
+    return ui_links
 
+
+def _build_single_ui_node(
+    *,
+    node_key: str,
+    node_int_id: int,
+    order_idx: int,
+    depth: int,
+    row_idx: int,
+    node_data: dict[str, Any],
+    object_info: dict[str, Any] | None,
+    valid_nodes: dict[str, dict[str, Any]],
+    pending_links: list[tuple[str, int, str, int, str]],
+) -> dict[str, Any]:
+    """构造单个 LiteGraph UI 节点字典（自动按 `object_info` 可用性选择槽位构建器）。"""
+    class_type = node_data["class_type"]
+    node_info = (
+        object_info.get(class_type)
+        if isinstance(object_info, dict) and isinstance(object_info.get(class_type), dict)
+        else None
+    )
+    if node_info is not None:
+        ui_inputs, widgets_values, ui_outputs = _build_ui_node_slots_with_info(
+            node_key, node_data["inputs"], node_info, valid_nodes, pending_links
+        )
+    else:
+        ui_inputs, widgets_values, ui_outputs = _build_ui_node_slots_fallback(
+            node_key, node_data["inputs"], valid_nodes, pending_links
+        )
+    return {
+        "id": node_int_id,
+        "type": class_type,
+        "pos": [80 + depth * 420, 80 + row_idx * 320],
+        "size": _default_ui_node_size(class_type),
+        "flags": {},
+        "order": order_idx,
+        "mode": 0,
+        "inputs": ui_inputs,
+        "outputs": ui_outputs,
+        "properties": {"Node name for S&R": class_type},
+        "widgets_values": widgets_values,
+    }
+
+
+def api_prompt_to_ui_workflow(
+    prompt_dict: dict[str, Any],
+    object_info: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """将 ComfyUI API `prompt` 字典转换为标准网页画布 LiteGraph 工作流。"""
+    valid_nodes, orig_order = _collect_valid_prompt_nodes(prompt_dict)
+    ordered_keys = list(valid_nodes.keys())
+    if not ordered_keys:
+        return {
+            "id": str(uuid.uuid4()),
+            "last_node_id": 0,
+            "last_link_id": 0,
+            "nodes": [],
+            "links": [],
+            "groups": [],
+            "config": {},
+            "extra": {},
+            "version": 0.4,
+        }
+
+    depths = _compute_prompt_node_depths(valid_nodes, ordered_keys)
+    sorted_keys = sorted(ordered_keys, key=lambda k: (depths[k], orig_order[k]))
+    str_to_int_id = {k: idx + 1 for idx, k in enumerate(sorted_keys)}
+
+    depth_rows: dict[int, int] = {}
+    ui_nodes_by_key: dict[str, dict[str, Any]] = {}
+    ui_nodes: list[dict[str, Any]] = []
+    pending_links: list[tuple[str, int, str, int, str]] = []
+
+    for order_idx, k in enumerate(sorted_keys):
+        depth = depths[k]
+        row_idx = depth_rows.get(depth, 0)
+        depth_rows[depth] = row_idx + 1
+        ui_node = _build_single_ui_node(
+            node_key=k,
+            node_int_id=str_to_int_id[k],
+            order_idx=order_idx,
+            depth=depth,
+            row_idx=row_idx,
+            node_data=valid_nodes[k],
+            object_info=object_info,
+            valid_nodes=valid_nodes,
+            pending_links=pending_links,
+        )
+        ui_nodes_by_key[k] = ui_node
+        ui_nodes.append(ui_node)
+
+    ui_links = _wire_ui_workflow_links(pending_links, ui_nodes_by_key)
     return {
         "id": str(uuid.uuid4()),
         "last_node_id": len(ui_nodes),
@@ -818,33 +959,6 @@ def _rclone_mkdir_and_lsl(rclone_exe: Path, rclone_conf: Path, remote_dir: str, 
     return sizes
 
 
-def _discover_local_loras(lora_dir: Path) -> list[tuple[str, int | None, str | None]]:
-    """优先加载可选 loras_manifest.json 清单，否则自动扫描目录下的 *.safetensors 文件。"""
-    if ANIMA_LORAS:
-        return list(ANIMA_LORAS)
-    manifest_file = Path(__file__).resolve().parents[1] / "loras_manifest.json"
-    if manifest_file.is_file():
-        try:
-            raw = json.loads(manifest_file.read_text(encoding="utf-8"))
-            items = []
-            for entry in (raw if isinstance(raw, list) else []):
-                if isinstance(entry, dict) and entry.get("path"):
-                    sz = int(entry["size"]) if entry.get("size") is not None else None
-                    sha = str(entry["sha256"]).strip() if entry.get("sha256") else None
-                    items.append((str(entry["path"]), sz, sha))
-            if items:
-                return items
-        except Exception:
-            pass
-    if not lora_dir.is_dir():
-        return []
-    return [
-        (p.relative_to(lora_dir).as_posix(), None, None)
-        for p in sorted(lora_dir.rglob("*.safetensors"))
-        if p.is_file()
-    ]
-
-
 def sync_anima_loras_cli(
     *,
     rclone_exe: Path,
@@ -852,32 +966,36 @@ def sync_anima_loras_cli(
     lora_backup_dir: Path,
     run_fn: Callable[..., Any],
 ) -> None:
-    """零 GPU 消耗：核对并上传本地 LoRA 至存储号 Google Drive。"""
+    """零 GPU 消耗：核对并上传 7 个生产级 Anima LoRA 至存储号 Google Drive。"""
     if not rclone_exe.is_file():
         raise FileNotFoundError(f"未找到rclone.exe: {rclone_exe}")
     if not rclone_conf.is_file():
         raise FileNotFoundError(f"未找到rclone.conf: {rclone_conf}")
 
-    entries = _discover_local_loras(lora_backup_dir)
-    if not entries:
-        raise FileNotFoundError(
-            f"未在目录中找到任何 .safetensors LoRA 文件: {lora_backup_dir}（可通过 --src 或 COLAB_LORA_DIR 指定）"
-        )
-
-    print(f"=== [1/4] 校验本地 {len(entries)} 个 LoRA 完整性 ===", flush=True)
+    print("=== [1/4] 校验本地 Anima LoRA 完整性 ===", flush=True)
     verified = []
-    for rel_path, expected_size, expected_sha in entries:
-        src = lora_backup_dir / rel_path
-        if not src.is_file():
-            raise FileNotFoundError(f"本地 LoRA 缺失: {src}")
-        actual_size = src.stat().st_size
-        if expected_size is not None and actual_size != expected_size:
-            raise ValueError(f"LoRA 字节数不符: {src.name} 实际={actual_size} B, 预期={expected_size} B")
-        actual_sha = sha256_file(src)
-        if expected_sha is not None and actual_sha != expected_sha:
-            raise ValueError(f"LoRA SHA256 不符: {src.name} 实际={actual_sha}, 预期={expected_sha}")
-        verified.append((src, actual_size, actual_sha))
-        print(f"  [OK] {src.name} ({actual_size} B)", flush=True)
+    if ANIMA_LORAS:
+        for rel_path, expected_size, expected_sha in ANIMA_LORAS:
+            src = lora_backup_dir / rel_path
+            if not src.is_file():
+                raise FileNotFoundError(f"本地 LoRA 缺失: {src}")
+            actual_size = src.stat().st_size
+            if expected_size is not None and actual_size != expected_size:
+                raise ValueError(f"LoRA 字节数不符: {src.name} 实际={actual_size} B, 预期={expected_size} B")
+            actual_sha = sha256_file(src)
+            if expected_sha and actual_sha != expected_sha:
+                raise ValueError(f"LoRA SHA256 不符: {src.name} 实际={actual_sha}, 预期={expected_sha}")
+            verified.append((src, actual_size, actual_sha))
+            print(f"  [OK] {src.name} ({actual_size} B)", flush=True)
+    else:
+        candidates = sorted(p for p in lora_backup_dir.rglob("*.safetensors") if p.is_file())
+        if not candidates:
+            raise FileNotFoundError(f"未在目录中找到任何 .safetensors LoRA 文件: {lora_backup_dir}（可通过 --src 或 COLAB_LORA_DIR 指定）")
+        for src in candidates:
+            actual_size = src.stat().st_size
+            actual_sha = sha256_file(src)
+            verified.append((src, actual_size, actual_sha))
+            print(f"  [OK] {src.name} ({actual_size} B)", flush=True)
 
     print("=== [2/4] 预检远端目录并增量并发上传 LoRA (HTTP/1.1 + 8M 分块 + 抗限流退避) ===", flush=True)
     existing_sizes = _rclone_mkdir_and_lsl(rclone_exe, rclone_conf, GDRIVE_LORA_REMOTE, run_fn)
@@ -904,7 +1022,7 @@ def sync_anima_loras_cli(
             for fut in as_completed([pool.submit(_upload_one, src) for src, _, _ in todo]):
                 fut.result()
     else:
-        print(f"  所有 {len(verified)} 个 LoRA 均已存在于远端，无需重复上传。", flush=True)
+        print("  所有 7 个 LoRA 均已存在于远端，无需重复上传。", flush=True)
 
     print("=== [3/4] 生成并上传 sha256sums.txt ===", flush=True)
     with tempfile.TemporaryDirectory(prefix="lora_sums_") as tmp_dir:

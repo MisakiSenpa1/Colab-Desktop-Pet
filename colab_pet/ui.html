@@ -381,6 +381,15 @@
 
     .cu-number-wrap { display: flex; align-items: baseline; gap: 5px; }
 
+    .cu-sigma {
+      font-size: 20px;
+      font-weight: 800;
+      color: #7c3aed;
+      line-height: 1;
+    }
+
+    .cu-sigma.hidden { display: none; }
+
     .cu-number {
       font-size: 30px;
       font-weight: 800;
@@ -893,6 +902,14 @@
     .mini-chip.locked:active { scale: 1; }
 
     .mini-chip.hidden { display: none; }
+
+    /* 双号异构切换与自带高存并排时的紧凑布局，不改变单模/单号高度 */
+    .boot-row.split-ready { gap: 4px; }
+    .boot-row.split-ready .wf-trigger-btn { padding: 0 5px 0 6.5px; gap: 3px; }
+    .boot-row.split-ready .mini-chip { padding: 0 5.5px; font-size: 10.5px; }
+    #chip-cluster-split.active { background: linear-gradient(135deg, #7c3aed, #6366f1); border-color: #5b21b6; color: #ffffff; }
+    .boot-spec-hint.split-hint { padding: 5px 6.5px; gap: 4px; font-size: 10px; }
+    .boot-spec-hint.split-hint .spec-rate-badge { padding: 1px 5px; font-size: 9.5px; }
 
     /* 气泡内滑出式毛玻璃工作流抽屉（严格约束于 2.5px 纯色抗磨损边框内侧） */
     .wf-drawer-layer {
@@ -1655,6 +1672,7 @@
       align-items: center;
       gap: 6px;
       min-width: 0;
+      overflow: hidden;
       flex: 1;
     }
 
@@ -1670,7 +1688,7 @@
 
     .acct-card.running .acct-dot { background: #10b981; box-shadow: 0 0 0 2.5px rgba(16, 185, 129, 0.22); }
 
-    .acct-info { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+    .acct-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1.5px; }
 
     .acct-name-row { display: flex; align-items: center; gap: 3px; min-width: 0; }
 
@@ -1697,13 +1715,51 @@
 
     .acct-edit-btn:hover { background: #ede9fe; color: #5b21b6; }
 
+    .acct-sub-row {
+      display: flex;
+      align-items: center;
+      gap: 3.5px;
+      min-width: 0;
+    }
+
     .acct-email {
       font-size: 9.5px;
       color: var(--ink-muted);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      min-width: 0;
+      flex: 0 1 auto;
     }
+
+    /* 账号权益等级、卡池配额徽章与异构分槽角标（单行紧凑防撑爆） */
+    .acct-tier-tag,
+    .acct-pool-tag,
+    .acct-role-tag {
+      font-size: 9px;
+      font-weight: 800;
+      line-height: 12px;
+      padding: 0.5px 4.5px;
+      border-radius: 999px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .acct-tier-tag.ultra { background: #ede9fe; border: 1px solid #c4b5fd; color: #5b21b6; }
+    .acct-tier-tag.pro_plus { background: #e0e7ff; border: 1px solid #a5b4fc; color: #3730a3; }
+    .acct-tier-tag.pro { background: #e0f2fe; border: 1px solid #7dd3fc; color: #0369a1; }
+    .acct-tier-tag.free { background: #f1f5f9; border: 1px solid #cbd5e1; color: #475569; }
+    .acct-tier-tag.unknown { background: #f5f3ff; border: 1px solid #ddd6fe; color: #6d28d9; }
+
+    .acct-pool-tag.high { background: #ede9fe; border: 1px solid #c4b5fd; color: #5b21b6; }
+
+    .acct-pool-tag.mid { background: #e0f2fe; border: 1px solid #bae6fd; color: #0369a1; }
+
+    .acct-pool-tag.t4only { background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; }
+
+    .acct-role-tag.llm { background: #dcfce7; border: 1px solid #86efac; color: #166534; }
+
+    .acct-role-tag.comfy { background: #fce7f3; border: 1px solid #f9a8d4; color: #9d174d; }
 
     .acct-card-right { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
 
@@ -1788,9 +1844,50 @@
 
     .acct-empty-sub { font-size: 10.5px; line-height: 15px; color: var(--ink-muted); }
 
-    .acct-vault-foot { flex-shrink: 0; }
+    /* 第 5 页多账号底栏：主按钮 + 刷新全池 + 智能寻优单行紧凑条，保持零纵向溢出 */
+    .acct-vault-foot {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
 
-    .acct-vault-foot .boot-start-btn { padding: 7.5px 10px; font-size: 11.5px; }
+    .acct-vault-foot .boot-start-btn {
+      flex: 1;
+      min-width: 0;
+      width: auto;
+      height: 31px;
+      padding: 0 8px;
+      font-size: 11px;
+      line-height: 28px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .acct-foot-tool {
+      height: 31px;
+      padding: 0 7px;
+      border-radius: 10px;
+      border: 1.5px solid #c4b5fd;
+      background: #ffffff;
+      color: #4c1d95;
+      font-size: 10.5px;
+      font-weight: 800;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.14s, border-color 0.14s, color 0.14s, transform 0.1s;
+    }
+
+    .acct-foot-tool:hover { background: #f5f3ff; border-color: #8b5cf6; }
+
+    .acct-foot-tool:active { transform: scale(0.96); }
+
+    .acct-foot-tool.active { background: #7c3aed; border-color: #6d28d9; color: #ffffff; }
 
     .env-cards-stack {
       flex: 1;
@@ -2247,7 +2344,8 @@
         <!-- Page 1: 状态总览 -->
         <div class="page-body active" data-page="0">
           <div class="hero-row">
-            <div class="cu-number-wrap">
+            <div class="cu-number-wrap" id="cu-number-wrap">
+              <span class="cu-sigma hidden" id="cu-sigma" aria-hidden="true">Σ</span>
               <span class="cu-number" id="cu-balance">--.--</span>
               <span class="cu-unit">CU</span>
             </div>
@@ -2259,7 +2357,7 @@
 
           <div class="bar-group">
             <div class="bar-label">
-              <span>余额水位</span>
+              <span id="balance-label-k">余额水位</span>
               <span id="balance-pct-text">--% (-- / --)</span>
             </div>
             <div class="bar-track">
@@ -2300,7 +2398,7 @@
           <div class="ledger-grid">
             <div class="stat-card primary-bal">
               <div class="stat-k stat-k-row" id="ledger-start-k">
-                <span class="stat-badge">现有余额</span>
+                <span class="stat-badge" id="ledger-start-badge">现有余额</span>
                 <span class="stat-sub" id="ledger-start-sub">起始 --</span>
               </div>
               <div class="stat-v" id="ledger-start">--.-- CU</div>
@@ -2335,7 +2433,7 @@
           <!-- 子视图 A: 选卡配置与 7 步直播 -->
           <div class="console-pane active" id="boot-pane">
             <div class="boot-subview active" id="boot-config-pane">
-              <div class="boot-row">
+              <div class="boot-row" id="boot-row">
                 <button
                   class="wf-trigger-btn"
                   id="wf-trigger-btn"
@@ -2356,6 +2454,7 @@
                     <svg class="wf-trig-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
                   </span>
                 </button>
+                <button class="mini-chip hidden" id="chip-cluster-split" type="button" title="切换多账号双号异构分担 / 单号同驻运行">🔀 双号异构</button>
                 <button class="mini-chip" id="chip-hm" title="申请 High-RAM 高内存规格（L4 原生高存）">高内存</button>
               </div>
 
@@ -2520,7 +2619,9 @@
           <div class="acct-pane active" id="acct-vault-pane">
             <div class="acct-vault-list" id="acct-vault-list"></div>
             <div class="acct-vault-foot">
-              <button class="boot-start-btn" id="btn-acct-add" type="button">➕ 新增 Google 账号（多 Ultra 秒切）</button>
+              <button class="boot-start-btn" id="btn-acct-add" type="button">➕ 新增账号</button>
+              <button class="acct-foot-tool" id="btn-pool-refresh" type="button" title="并发探测号池全部账号余额、可用卡池与在线实例">🔄 刷新全池</button>
+              <button class="acct-foot-tool active" id="btn-pool-auto-schedule" type="button" aria-pressed="true" title="开机自动优选最充裕/未紧缺账号，缺卡时自动换号重试">🤖 智能寻优</button>
             </div>
           </div>
 
@@ -2616,6 +2717,9 @@
     <!-- 下方人物立绘与常驻操作胶囊 -->
     <div class="pet-zone">
       <div class="side-tools" id="side-tools">
+        <button class="tool-pill" id="tool-studio" type="button" title="左键打开 Colab Studio 工作台 · 右键直达 AI 副驾" aria-label="打开 Colab Studio 工作台">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2.5"/><path d="M8 20h8"/><path d="M12 16v4"/></svg>
+        </button>
         <button class="tool-pill" id="tool-bubble" title="展开/收起信息气泡">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </button>
@@ -2626,7 +2730,7 @@
       <div class="pet-hit" id="pet-hit" title="点我刷新/互动 · 按住可拖动 · 双击切换气泡">
         <div class="pet-breathe">
           <div class="pet-squash" id="pet-squash">
-            <img id="pet-img" src="/assets/idle.png" alt="Colab 桌宠" draggable="false" />
+            <img id="pet-img" src="/assets/idle.webp" alt="Colab 桌宠" draggable="false" />
           </div>
         </div>
       </div>
@@ -2674,23 +2778,66 @@
     let proudOverrideUntil = 0;
     let dragOverrideUntil = 0;
     let dragResetTimer = null;
-    let stopArmedUntil = 0;
-    let stopResetTimer = null;
-    let stopModePending = "session";
-    let bootArmedUntil = 0;
-    let bootResetTimer = null;
-    let cancelArmedUntil = 0;
-    let cancelResetTimer = null;
+    // 通用二次点击确认守卫：统一收敛 4 秒确认计时与到期回调状态机
+    function createArmGuard(defaultMs = 4000) {
+      let armedUntil = 0;
+      let armedKey = "";
+      let timer = null;
+      let expireCb = null;
+
+      function disarm(runExpire = false) {
+        clearTimeout(timer);
+        timer = null;
+        const wasArmed = armedUntil > 0;
+        armedUntil = 0;
+        armedKey = "";
+        const cb = expireCb;
+        expireCb = null;
+        if (runExpire && wasArmed && typeof cb === "function") cb();
+      }
+
+      function isArmed(key) {
+        if (Date.now() > armedUntil) {
+          if (armedUntil > 0) disarm(false);
+          return false;
+        }
+        return key === undefined ? true : armedKey === String(key);
+      }
+
+      function arm(key = "default", onExpire = null, ms = defaultMs) {
+        clearTimeout(timer);
+        armedKey = String(key);
+        armedUntil = Date.now() + ms;
+        expireCb = typeof onExpire === "function" ? onExpire : null;
+        timer = setTimeout(() => {
+          const cb = expireCb;
+          armedUntil = 0;
+          armedKey = "";
+          timer = null;
+          expireCb = null;
+          if (typeof cb === "function") cb();
+        }, ms);
+      }
+
+      return {
+        arm,
+        disarm,
+        isArmed,
+        key: () => (isArmed() ? armedKey : "")
+      };
+    }
+
+    const stopArm = createArmGuard(4000);
+    const bootArm = createArmGuard(4000);
+    const cancelArm = createArmGuard(4000);
+    const acctDelArm = createArmGuard(4000);
+    const cfClearArm = createArmGuard(4000);
     let activeConsoleTab = "boot";
     let consoleTabPinned = false;
     let activeAcctTab = "vault";
     let acctDrawerOpen = false;
     let acctDrawerMode = "oauth";
     let acctRenameTarget = null;
-    let acctDelArmedId = "";
-    let acctDelResetTimer = null;
-    let cfClearArmedUntil = 0;
-    let cfClearResetTimer = null;
     let wfDrawerOpen = false;
     let wfDraftProfiles = null;
     let wfActiveCategory = "all";
@@ -2700,6 +2847,7 @@
     let dualCopyResetTimer = null;
     let lastAnnouncedStatus = "";
     let statusNbspToggle = false;
+    let userTouchedBootPrefs = false;
     const bootState = {
       profile: "anima",
       profiles: ["anima"],
@@ -2713,17 +2861,10 @@
       llm27_quant: "UD-Q4_K_XL",
       llm27_ctx: 65536,
       llm27_mmproj: true,
+      clusterSplitMode: true,
       gpuManual: false,
       prefsSynced: false
     };
-    const WORKFLOW_CATEGORIES = [
-      { id: "all", label: "全部" },
-      { id: "image", label: "🎨生图" },
-      { id: "video", label: "🎬视频" },
-      { id: "audio", label: "🎙️语音" },
-      { id: "llm", label: "🧠对话" },
-      { id: "custom", label: "🔧其他" }
-    ];
     // 声明式工作流注册表：新增工作流仅需追加一项配置，即可自动联动选择舱、抽屉卡片与开机参数
     const WORKFLOW_CATALOG = [
       {
@@ -2977,6 +3118,40 @@
       }
     };
 
+    // 收到后端快照后按 stack_manifest.json 权威目录原地同步显卡顺序与默认费率（保留上方常量作首屏兜底）
+    function applyCatalogFromSnap(snap) {
+      const cat = snap && snap.catalog;
+      if (!cat || typeof cat !== "object") return;
+      if (Array.isArray(cat.gpu_order) && cat.gpu_order.length > 0) {
+        const nextOrder = cat.gpu_order.map((g) => String(g || "").toUpperCase()).filter(Boolean);
+        if (nextOrder.length > 0) {
+          GPU_ORDER.splice(0, GPU_ORDER.length, ...nextOrder);
+        }
+      }
+      const rawSpecs = cat.gpu_specs;
+      if (rawSpecs && typeof rawSpecs === "object") {
+        for (const [rawKey, item] of Object.entries(rawSpecs)) {
+          const g = String(rawKey || "").toUpperCase();
+          if (!g || !item || typeof item !== "object") continue;
+          const prev = GPU_SPECS[g] || {};
+          const stdRate = Number(item.default_rate_std);
+          const hmRate = Number(item.default_rate_hm);
+          const cuVal = Number.isFinite(stdRate) && stdRate > 0 ? stdRate : (prev.cu || 0);
+          const cuHmVal = Number.isFinite(hmRate) && hmRate > 0 ? hmRate : (cuVal || prev.cuHm || 0);
+          GPU_SPECS[g] = {
+            vram: String(item.vram ?? prev.vram ?? ""),
+            vramHm: String(item.vram_hm ?? prev.vramHm ?? item.vram ?? ""),
+            ram: String(item.ram ?? prev.ram ?? ""),
+            ramHm: String(item.ram_hm ?? prev.ramHm ?? item.ram ?? ""),
+            cu: cuVal,
+            cuHm: item.hm_locked ? cuVal : cuHmVal,
+            note: String(item.note ?? prev.note ?? ""),
+            hmLock: Boolean(item.hm_locked)
+          };
+        }
+      }
+    }
+
     function resolveGpuRate(gpu, highMem, snap) {
       const g = String(gpu || "L4").toUpperCase();
       const spec = GPU_SPECS[g] || GPU_SPECS.L4;
@@ -3008,6 +3183,7 @@
     let regionRaf = null;
     let regionInFlight = false;
     let regionPending = false;
+    let lastRegionKey = "";
     let petAnimFrame = null;
     let bubbleAnimFrame = null;
     let bubbleAnimScale = 1.0;
@@ -3057,7 +3233,7 @@
       // 必须追踪真实缩放/轻跃中的 #pet-img，而非静止外框 #pet-hit
       const petBox = toRectObj(petImg);
       if (petBox) {
-        petBox.blink = petImg.src.includes("blink.png");
+        petBox.blink = petImg.src.includes("blink.");
       }
       const uiScale = Number(getComputedStyle(document.documentElement).getPropertyValue("--pet-scale") || 1) || 1;
       const bubbleBox = bubbleOpen ? toRectObj(el("bubble-box")) : null;
@@ -3087,7 +3263,13 @@
       try {
         do {
           regionPending = false;
-          await window.pywebview.api.sync_region(buildRegionLayout());
+          const layout = buildRegionLayout();
+          const regionKey = JSON.stringify(layout);
+          if (regionKey === lastRegionKey) {
+            continue;
+          }
+          lastRegionKey = regionKey;
+          await window.pywebview.api.sync_region(layout);
         } while (regionPending);
       } finally {
         regionInFlight = false;
@@ -3234,6 +3416,7 @@
           btn.type = "button";
           btn.className = `toast-choice-btn${ch.primary ? " primary" : ""}`;
           btn.textContent = ch.label;
+          if (ch.title) btn.title = ch.title;
           btn.addEventListener("click", (ev) => {
             ev.stopPropagation();
             if (typeof ch.onClick === "function") {
@@ -3347,11 +3530,90 @@
       scheduleSyncRegion();
     }
 
+    function inferTierClientFallback(acct, balVal, eligGpus, ineligGpus) {
+      const explicitKey = String((acct && acct.tier) || "").trim().toLowerCase();
+      if (["ultra", "pro_plus", "pro", "free"].includes(explicitKey)) {
+        const lblMap = { ultra: "Ultra", pro_plus: "Pro+", pro: "Pro", free: "Free" };
+        const baseMap = { ultra: 1000, pro_plus: 500, pro: 200, free: 100 };
+        return {
+          tier: explicitKey,
+          label: String((acct && acct.tier_label) || lblMap[explicitKey]),
+          baseline: Number((acct && acct.baseline_balance) || baseMap[explicitKey] || 1000),
+        };
+      }
+      const eg = Array.isArray(eligGpus) ? eligGpus.map((g) => String(g || "").toUpperCase()) : [];
+      const ig = Array.isArray(ineligGpus) ? ineligGpus.map((g) => String(g || "").toUpperCase()) : [];
+      const numBal = (typeof balVal === "number" && !Number.isNaN(balVal)) ? balVal : null;
+      const hasH100 = eg.includes("H100") && !ig.includes("H100");
+      if ((numBal !== null && numBal > 550) || (hasH100 && (numBal === null || numBal > 0))) {
+        return { tier: "ultra", label: "Ultra", baseline: Math.max(1000, Math.ceil((numBal || 1000) / 100) * 100) };
+      }
+      if (numBal !== null && numBal > 250) {
+        return { tier: "pro_plus", label: "Pro+", baseline: 500 };
+      }
+      if ((numBal !== null && numBal > 0) || eg.some((g) => ["G4", "A100", "L4"].includes(g))) {
+        return { tier: "pro", label: "Pro", baseline: (numBal !== null && numBal <= 100) ? 100 : 200 };
+      }
+      if (eg.length > 0 && numBal !== null && numBal <= 0) {
+        return { tier: "free", label: "Free", baseline: 100 };
+      }
+      return { tier: "unknown", label: "Colab", baseline: 1000 };
+    }
+
+    function resolvePetPoolMetrics(snap) {
+      const s = snap || {};
+      const ob = s.onboarding || {};
+      const cluster = s.cluster || {};
+      const accounts = Array.isArray(ob.accounts) ? ob.accounts : [];
+      const activeId = String(ob.active_account_id || "");
+      const isMultiPool = accounts.length >= 2;
+      if (!isMultiPool) {
+        return {
+          isMultiPool: false,
+          acctCount: accounts.length,
+          balance: typeof s.balance === "number" && !Number.isNaN(s.balance) ? s.balance : null,
+          baseline: Math.max(100, Number(s.baseline_balance || 1000)),
+          pct: Number(s.balance_pct || 0),
+          tierSummary: "",
+        };
+      }
+      let totalBal = Number(cluster.total_pool_balance);
+      if (!Number.isFinite(totalBal)) {
+        totalBal = accounts.reduce((acc, a) => {
+          const aid = String((a && a.id) || "");
+          const v = (aid && aid === activeId && typeof s.balance === "number")
+            ? s.balance
+            : Number(a && a.last_balance);
+          return acc + (Number.isFinite(v) ? v : 0);
+        }, 0);
+      }
+      let totalBase = Number(cluster.total_pool_baseline);
+      if (!Number.isFinite(totalBase) || totalBase <= 0) {
+        totalBase = accounts.reduce((acc, a) => {
+          const aid = String((a && a.id) || "");
+          const curBal = (aid && aid === activeId && typeof s.balance === "number")
+            ? s.balance
+            : (typeof (a && a.last_balance) === "number" ? a.last_balance : null);
+          const tInfo = inferTierClientFallback(a, curBal, a && a.eligible_gpus, a && a.ineligible_gpus);
+          return acc + Math.max(curBal || 0, Number((a && a.baseline_balance) || tInfo.baseline || 0));
+        }, 0);
+      }
+      totalBase = Math.max(100, totalBase);
+      const pct = Number.isFinite(Number(cluster.pool_balance_pct))
+        ? Number(cluster.pool_balance_pct)
+        : Math.max(0, Math.min(100, (totalBal / totalBase) * 100));
+      return {
+        isMultiPool: true,
+        acctCount: accounts.length,
+        balance: totalBal,
+        baseline: totalBase,
+        pct,
+        tierSummary: String(cluster.pool_tier_summary || ""),
+      };
+    }
+
     function writeBalanceDigits(val) {
-      const text = val.toFixed(2);
-      el("cu-balance").textContent = text;
-      const ledgerEl = el("ledger-start");
-      if (ledgerEl) ledgerEl.textContent = `${text} CU`;
+      el("cu-balance").textContent = val.toFixed(2);
     }
 
     function animateBalance(targetVal) {
@@ -3391,19 +3653,22 @@
 
     function updateSpriteFrame() {
       const img = el("pet-img");
+      if (!img) return;
       const now = Date.now();
+      let nextSrc = "/assets/idle.webp";
       if (now < proudOverrideUntil || now < dragOverrideUntil) {
-        img.src = "/assets/proud.png";
-        return;
-      }
-      const hasComfyErr = Boolean(latestSnap && latestSnap.comfy && latestSnap.comfy.has_error);
-      const mood = hasComfyErr ? "sad" : (latestSnap ? latestSnap.mood : "idle");
-      if (mood === "sad") {
-        img.src = "/assets/sad.png";
-      } else if (mood === "proud") {
-        img.src = "/assets/proud.png";
+        nextSrc = "/assets/proud.webp";
       } else {
-        img.src = "/assets/idle.png";
+        const hasComfyErr = Boolean(latestSnap && latestSnap.comfy && latestSnap.comfy.has_error);
+        const mood = hasComfyErr ? "sad" : (latestSnap ? latestSnap.mood : "idle");
+        if (mood === "sad") {
+          nextSrc = "/assets/sad.webp";
+        } else if (mood === "proud") {
+          nextSrc = "/assets/proud.webp";
+        }
+      }
+      if (img.getAttribute("src") !== nextSrc) {
+        img.src = nextSrc;
       }
     }
 
@@ -3411,16 +3676,21 @@
       clearTimeout(blinkTimer);
       const wait = 3200 + Math.random() * 3600;
       blinkTimer = setTimeout(() => {
-        const now = Date.now();
-        const hasComfyErr = Boolean(latestSnap && latestSnap.comfy && latestSnap.comfy.has_error);
-        const mood = hasComfyErr ? "sad" : (latestSnap ? latestSnap.mood : "idle");
-        if (now >= proudOverrideUntil && now >= dragOverrideUntil && mood === "idle") {
-          el("pet-img").src = "/assets/blink.png";
-          flushSyncRegion();
-          setTimeout(() => {
-            updateSpriteFrame();
+        if (!edgePeekHidden && !document.hidden) {
+          const now = Date.now();
+          const hasComfyErr = Boolean(latestSnap && latestSnap.comfy && latestSnap.comfy.has_error);
+          const mood = hasComfyErr ? "sad" : (latestSnap ? latestSnap.mood : "idle");
+          if (now >= proudOverrideUntil && now >= dragOverrideUntil && (mood === "idle" || mood === "proud")) {
+            const img = el("pet-img");
+            if (img && img.getAttribute("src") !== "/assets/blink.webp") {
+              img.src = "/assets/blink.webp";
+            }
             flushSyncRegion();
-          }, 140);
+            setTimeout(() => {
+              updateSpriteFrame();
+              flushSyncRegion();
+            }, 140);
+          }
         }
         scheduleBlink();
       }, wait);
@@ -3485,10 +3755,6 @@
         return g;
       }
       return recFallback;
-    }
-
-    function pickBestGpuForProfile(profile, snap) {
-      return pickBestGpuForProfiles([profile], snap);
     }
 
     function ensureSegGlider(container) {
@@ -3582,7 +3848,7 @@
         if (accounts.length === 0) {
           listEl.appendChild(h("div", { cls: "acct-empty-card" },
             h("div", { cls: "acct-empty-title", txt: ob.auth_expired ? "🔑 Google 登录已失效，请重新授权" : "🔑 尚未绑定 Google Colab 账号" }),
-            h("div", { cls: "acct-empty-sub", txt: "支持绑定多个 Google Ultra 账号，一键秒切并隔离各自账本与会话" })
+            h("div", { cls: "acct-empty-sub", txt: "支持绑定多个 Colab Pro / Ultra 账号，一键秒切并隔离各自账本与会话" })
           ));
         } else {
           accounts.forEach((acct) => {
@@ -3591,15 +3857,59 @@
             const liveRunning = isCur ? Boolean(s.is_running) : Boolean(acct.last_is_running);
             const balNum = isCur && typeof s.balance === "number" ? s.balance : acct.last_balance;
             const balTxt = (typeof balNum === "number" && !Number.isNaN(balNum)) ? `${!isCur && liveRunning ? "⚡" : ""}${balNum.toFixed(1)} CU` : "-- CU";
+
+            const rawElig = Array.isArray(acct.eligible_gpus)
+              ? acct.eligible_gpus
+              : (isCur && Array.isArray(s.eligible_gpus) ? s.eligible_gpus : null);
+            const rawInelig = Array.isArray(acct.ineligible_gpus) ? acct.ineligible_gpus : null;
+            const tierInfo = inferTierClientFallback(acct, balNum, rawElig, rawInelig);
+            const tierBadge = tierInfo.tier !== "unknown"
+              ? h("span", { cls: `acct-tier-tag ${tierInfo.tier}`, title: `账号权益: Colab ${tierInfo.label}`, txt: tierInfo.label })
+              : null;
+
+            // 已解锁卡池徽章（高卡优先突出 H100池 / G4池 / A100池，仅 T4 显示橙色提醒）
+            let poolBadge = null;
+            if (Array.isArray(rawElig) && rawElig.length > 0) {
+              const upper = rawElig.map((g) => String(g || "").toUpperCase());
+              if (upper.includes("H100")) {
+                poolBadge = h("span", { cls: "acct-pool-tag high", title: `已解锁卡池: ${upper.join("/")}`, txt: "H100池" });
+              } else if (upper.includes("G4")) {
+                poolBadge = h("span", { cls: "acct-pool-tag high", title: `已解锁卡池: ${upper.join("/")}`, txt: "G4池" });
+              } else if (upper.includes("A100")) {
+                poolBadge = h("span", { cls: "acct-pool-tag high", title: `已解锁卡池: ${upper.join("/")}`, txt: "A100池" });
+              } else if (upper.includes("L4")) {
+                poolBadge = h("span", { cls: "acct-pool-tag mid", title: `已解锁卡池: ${upper.join("/")}`, txt: "L4池" });
+              } else {
+                poolBadge = h("span", { cls: "acct-pool-tag t4only", title: `配额受限，仅可用: ${upper.join("/")}`, txt: "仅T4" });
+              }
+            }
+
+            // 异构集群分槽角色角标（llm -> 💬LLM / comfy -> 🎨画布）
+            let cRole = String(acct.cluster_role || "").toLowerCase();
+            if (!cRole && s.cluster && s.cluster.active && s.cluster.slots) {
+              if (s.cluster.slots.llm && String(s.cluster.slots.llm.account_id || "") === aid) cRole = "llm";
+              else if (s.cluster.slots.comfy && String(s.cluster.slots.comfy.account_id || "") === aid) cRole = "comfy";
+            }
+            const roleBadge = cRole === "llm"
+              ? h("span", { cls: "acct-role-tag llm", title: "当前正承担异构集群 LLM 对话槽位", txt: "💬LLM" })
+              : (cRole === "comfy"
+                  ? h("span", { cls: "acct-role-tag comfy", title: "当前正承担异构集群 ComfyUI 画布槽位", txt: "🎨画布" })
+                  : null);
+
             listEl.appendChild(h("div", { cls: `acct-card${isCur ? " active" : ""}${liveRunning ? " running" : ""}`, data: { id: aid } },
               h("div", { cls: "acct-card-left" },
                 h("span", { cls: "acct-dot" }),
                 h("div", { cls: "acct-info" },
                   h("div", { cls: "acct-name-row" },
-                    h("span", { cls: "acct-label", txt: acct.label || "Ultra 账号" }),
+                    h("span", { cls: "acct-label", txt: acct.label || "Colab 账号" }),
+                    tierBadge,
                     h("button", { type: "button", cls: "acct-edit-btn", title: "修改备注名", txt: "✎", data: { action: "rename", id: aid } })
                   ),
-                  h("div", { cls: "acct-email", txt: acct.email_masked || "***" })
+                  h("div", { cls: "acct-sub-row" },
+                    h("span", { cls: "acct-email", txt: acct.email_masked || "***" }),
+                    poolBadge,
+                    roleBadge
+                  )
                 )
               ),
               h("div", { cls: "acct-card-right" },
@@ -3609,9 +3919,9 @@
                   : h("button", { type: "button", cls: "acct-switch-btn", txt: "秒切", data: { action: "switch", id: aid } }),
                 h("button", {
                   type: "button",
-                  cls: `acct-del-btn${acctDelArmedId === aid ? " armed" : ""}`,
+                  cls: `acct-del-btn${acctDelArm.isArmed(aid) ? " armed" : ""}`,
                   title: isCur ? "解绑当前账号" : "移除该账号",
-                  txt: acctDelArmedId === aid ? "移除?" : "×",
+                  txt: acctDelArm.isArmed(aid) ? "移除?" : "×",
                   data: { action: "remove", id: aid }
                 })
               )
@@ -3620,9 +3930,15 @@
         }
       }
       if (addBtn) {
-        addBtn.textContent = ob.oauth_awaiting_code
-          ? "📋 粘贴 Google 授权码完成绑定 ›"
-          : "➕ 新增 Google 账号（多 Ultra 秒切）";
+        addBtn.textContent = (ob.pending_oauth || ob.oauth_awaiting_code)
+          ? "📋 粘贴授权码"
+          : "➕ 新增账号";
+      }
+      const autoSchedBtn = el("btn-pool-auto-schedule");
+      if (autoSchedBtn) {
+        const autoOn = !(s.prefs && s.prefs.auto_pool_schedule === false);
+        autoSchedBtn.classList.toggle("active", autoOn);
+        autoSchedBtn.setAttribute("aria-pressed", String(autoOn));
       }
 
       // 渲染子视图 B：云盘 / 隧道 / 组件
@@ -3829,9 +4145,38 @@
       syncConsoleTopPills(latestSnap);
     }
 
+    // 解析双栖工作流下的双号异构分卡预览（与后端 plan_split_cluster 默认分槽规则对齐）
+    function _resolveSplitPlanPreview(profs, snap) {
+      const s = snap || latestSnap || {};
+      const dualStack = isDualProfileSet(profs);
+      const cluster = s.cluster || {};
+      const canSplit = Boolean(dualStack && cluster.can_split);
+      const useSplit = Boolean(canSplit && bootState.clusterSplitMode);
+      if (!useSplit) {
+        return { canSplit, useSplit: false, llmGpu: "", comfyGpu: "", llmRate: null, comfyRate: null, totalRate: 0 };
+      }
+      const llmProf = getActiveLlmProfile(profs);
+      const comfyProfs = profs.filter((p) => ["anima", "minimax", "drama3"].includes(p));
+      const llmGpu = String(
+        cluster.preview_llm_gpu || (llmProf === "qwen_llm" ? "G4" : "L4")
+      ).toUpperCase();
+      const defaultComfyGpu = (comfyProfs.includes("minimax") || comfyProfs.includes("drama3")) ? "G4" : "L4";
+      const comfyGpu = String(cluster.preview_comfy_gpu || defaultComfyGpu).toUpperCase();
+      const llmRate = resolveGpuRate(llmGpu, false, s);
+      const comfyRate = resolveGpuRate(comfyGpu, false, s);
+      return {
+        canSplit,
+        useSplit: true,
+        llmGpu,
+        comfyGpu,
+        llmRate,
+        comfyRate,
+        totalRate: Number((llmRate.rate + comfyRate.rate).toFixed(2)),
+      };
+    }
+
     function clearBootArm() {
-      clearTimeout(bootResetTimer);
-      bootArmedUntil = 0;
+      bootArm.disarm(false);
       const btn = el("btn-boot-start");
       if (btn) btn.classList.remove("armed");
     }
@@ -3878,6 +4223,7 @@
       const wf = getWorkflowMeta(profs[0]);
       const llmProf = getActiveLlmProfile(profs);
       const dualStack = isDualProfileSet(profs);
+      const splitPrev = _resolveSplitPlanPreview(profs, s);
       const recGpu = dualStack || profs.includes("qwen_llm") || profs.includes("minimax") || profs.includes("drama3")
         ? (profs.length === 1 && wf.recGpu ? wf.recGpu : "G4")
         : (wf.recGpu || "L4");
@@ -3904,10 +4250,28 @@
       }
 
       const spec = GPU_SPECS[bootState.gpu] || GPU_SPECS.L4;
+      const bootRowEl = el("boot-row");
+      const splitChip = el("chip-cluster-split");
+      if (splitChip) {
+        splitChip.classList.toggle("hidden", !splitPrev.canSplit);
+        splitChip.classList.toggle("active", splitPrev.useSplit);
+        splitChip.setAttribute("aria-pressed", String(splitPrev.useSplit));
+        splitChip.textContent = splitPrev.useSplit ? "🔀 双号异构" : "🔗 单号同驻";
+        splitChip.title = splitPrev.useSplit
+          ? "当前为双账号异构分担模式（点此切回单号同驻）"
+          : "当前为单号同驻模式（点此开启多账号双号异构分担）";
+      }
+      if (bootRowEl) {
+        bootRowEl.classList.toggle("split-ready", splitPrev.canSplit);
+      }
+
       const hmChip = el("chip-hm");
-      hmChip.classList.remove("active", "locked");
+      hmChip.classList.remove("active", "locked", "hidden");
       hmChip.setAttribute("aria-disabled", spec.hmLock ? "true" : "false");
-      if (spec.hmLock) {
+      if (splitPrev.useSplit) {
+        // 双号异构模式下由分槽策略自动决定各卡内存规格，隐藏高存胶囊以完整展示双栖组合名称
+        hmChip.classList.add("hidden");
+      } else if (spec.hmLock) {
         hmChip.textContent = "自带高存";
         hmChip.classList.add("locked");
       } else {
@@ -3945,7 +4309,7 @@
         }
       });
 
-      // 结构化规格摘要与显存门槛/高内存/双栖磁盘/实测费率提示
+      // 结构化规格摘要与双号异构分卡预估 / 显存门槛提示
       const hintEl = el("boot-spec-hint");
       hintEl.className = "boot-spec-hint";
       hintEl.innerHTML = "";
@@ -3955,7 +4319,20 @@
       const selHm = !spec.hmLock && hmOn;
       const selRate = resolveGpuRate(bootState.gpu, selHm, s);
 
-      if (llmProf === "qwen_llm" && (bootState.gpu === "T4" || bootState.gpu === "L4")) {
+      if (splitPrev.useSplit) {
+        hintEl.classList.add("split-hint");
+        const mainSpan = document.createElement("span");
+        mainSpan.className = "spec-main";
+        mainSpan.textContent = `LLM(${splitPrev.llmGpu} ${splitPrev.llmRate.shortLabel}) + 画布(${splitPrev.comfyGpu} ${splitPrev.comfyRate.shortLabel}) · 双号分担`;
+        const rateSpan = document.createElement("span");
+        rateSpan.className = "spec-rate-badge";
+        if (splitPrev.llmRate.measured && splitPrev.comfyRate.measured) {
+          rateSpan.classList.add("measured");
+        }
+        rateSpan.textContent = `${splitPrev.totalRate.toFixed(2)}/h`;
+        hintEl.appendChild(mainSpan);
+        hintEl.appendChild(rateSpan);
+      } else if (llmProf === "qwen_llm" && (bootState.gpu === "T4" || bootState.gpu === "L4")) {
         hintEl.classList.add("danger");
         hintEl.textContent = "显存不足：180B 模型无法在 T4/L4 运行，请选 G4★";
       } else if (dualStack && (bootState.gpu === "T4" || bootState.gpu === "L4")) {
@@ -4024,12 +4401,14 @@
         : (wf.name || "Anima");
       const hmBtnTag = selHm ? (bootState.gpu === "A100" ? "(80G高存)" : "(高存)") : "";
 
-      if (Date.now() <= bootArmedUntil) {
+      if (bootArm.isArmed()) {
         startBtn.classList.add("armed");
         startBtn.textContent = `⚠️ 再点确认停旧卡(${runGpu})并换 ${bootState.gpu}${hmBtnTag}`;
       } else {
         startBtn.classList.remove("armed");
-        if (!running) {
+        if (splitPrev.useSplit) {
+          startBtn.textContent = `⚡ 双号异构部署 ${profLabel}`;
+        } else if (!running) {
           startBtn.textContent = `⚡ 一键开机部署 ${profLabel} · ${bootState.gpu}${hmBtnTag}`;
         } else if (sameGpu && !needUpgradeHm) {
           startBtn.textContent = `🔄 在当前 ${runGpu} 实例增量部署 ${profLabel}`;
@@ -4067,8 +4446,14 @@
 
     function isDualOpsMode(snap) {
       const s = snap || latestSnap;
+      const c = s && s.cluster;
+      const cActive = Boolean(c && c.active);
+      if (s && (s.is_running || cActive) && cActive) {
+        const slots = c.slots || {};
+        if (slots.llm && slots.comfy) return true;
+      }
       return Boolean(
-        s && s.is_running
+        s && (s.is_running || cActive)
           ? (s.comfy && s.comfy.service_kind === "dual")
           : isDualProfileSet(bootState.profiles)
       );
@@ -4078,8 +4463,15 @@
     function isLlmOpsMode(snap) {
       if (isDualOpsMode(snap)) return false;
       const s = snap || latestSnap;
+      const c = s && s.cluster;
+      const cActive = Boolean(c && c.active);
+      if (s && (s.is_running || cActive) && cActive) {
+        const slots = c.slots || {};
+        if (slots.llm && !slots.comfy) return true;
+        if (slots.comfy && !slots.llm) return false;
+      }
       return Boolean(
-        s && s.is_running
+        s && (s.is_running || cActive)
           ? (s.comfy && s.comfy.service_kind === "llm")
           : Boolean(getActiveLlmProfile(bootState.profiles))
       );
@@ -4166,15 +4558,26 @@
       const barEl = el("comfy-bar");
       const miniStateEl = el("mini-state");
       const obState = latestSnap && latestSnap.onboarding;
-      const running = Boolean(latestSnap && latestSnap.is_running);
+      const clusterObj = latestSnap && latestSnap.cluster;
+      const clusterActive = Boolean(clusterObj && clusterObj.active);
+      const running = Boolean(latestSnap && (latestSnap.is_running || clusterActive));
       const deploy = latestSnap && latestSnap.deploy;
       const isDeploying = Boolean(deploy && deploy.active);
+      const clusterSlots = (clusterObj && clusterObj.slots) || {};
+      const slotLlmOn = Boolean(clusterSlots.llm && clusterSlots.llm.online);
+      const slotComfyOn = Boolean(clusterSlots.comfy && clusterSlots.comfy.online);
       const sk = String((comfy && comfy.service_kind) || "comfy");
-      const isDualMode = sk === "dual";
-      const isLlmOnline = Boolean(comfy && sk === "llm" && comfy.online);
-      const comfyOn = Boolean(comfy && (comfy.comfy_online !== undefined ? comfy.comfy_online : (comfy.online && sk !== "llm")));
-      const llmOn = Boolean(comfy && (comfy.llm_online !== undefined ? comfy.llm_online : (comfy.online && sk === "llm")));
-      const anyDualOn = isDualMode && Boolean(comfy && (comfy.online || comfyOn || llmOn));
+      const isDualMode = sk === "dual" || (clusterActive && (Boolean(clusterSlots.llm) || Boolean(clusterSlots.comfy)));
+      const isLlmOnline = !isDualMode && Boolean(comfy && sk === "llm" && comfy.online);
+      const comfyOn = Boolean(
+        (comfy && (comfy.comfy_online !== undefined ? comfy.comfy_online : (comfy.online && sk !== "llm")))
+        || slotComfyOn
+      );
+      const llmOn = Boolean(
+        (comfy && (comfy.llm_online !== undefined ? comfy.llm_online : (comfy.online && sk === "llm")))
+        || slotLlmOn
+      );
+      const anyDualOn = isDualMode && Boolean((comfy && comfy.online) || comfyOn || llmOn);
       const hasDeployErr = Boolean(!isDeploying && running && !(comfy && comfy.online) && deploy && deploy.error_msg);
       const prefHasLlm = Boolean(getActiveLlmProfile(bootState.profiles));
       const deployHasLlm = Boolean(
@@ -4188,6 +4591,7 @@
         running
         && !(comfy && comfy.online)
         && !hasDeployErr
+        && !clusterActive
         && (sk === "llm" || sk === "dual" || deployHasLlm || (!comfy?.tunnel_url && prefHasLlm && !isDualProfileSet(bootState.profiles)))
       );
 
@@ -4263,34 +4667,39 @@
           miniText = `· 🟢 ${mShort} 在线`;
         }
       } else if (anyDualOn) {
-        const runCnt = Number(comfy.running_count || 0);
-        const pendingCnt = Number(comfy.pending_count || 0);
-        const llmRun = Number(comfy.llm_running_count || 0);
-        const pendPull = Number(comfy.pending_pull_count || 0);
-        const llmShort = String(comfy.model_name || "").includes("27B") ? "27B" : "LLM";
-        const tps = Number(comfy.tps || 0);
+        const cObj = comfy || {};
+        const runCnt = Number(cObj.running_count || 0);
+        const pendingCnt = Number(cObj.pending_count || 0);
+        const llmRun = Number(cObj.llm_running_count ?? cObj.running_cnt ?? 0);
+        const pendPull = Number(cObj.pending_pull_count || 0);
+        const llmShort = String(cObj.model_name || "").includes("27B") ? "27B" : "LLM";
+        const tps = Number(cObj.tps || 0);
         const tpsTxt = Number.isFinite(tps) && tps > 0 ? ` · ${tps.toFixed(1)}t/s` : "";
-        const vramTxt = comfy.vram_total_gb > 0
-          ? `VRAM ${Number(comfy.vram_used_gb).toFixed(1)}/${Number(comfy.vram_total_gb).toFixed(1)}G (${Math.round(comfy.vram_pct)}%)`
-          : (comfyOn && llmOn ? "双端已通" : "在线");
-        const vp = Number(comfy.vram_pct || 0);
+        const hasVram = Number(cObj.vram_total_gb || 0) > 0;
+        const vramTxt = hasVram
+          ? (clusterActive
+              ? `VRAM ${Number(cObj.vram_used_gb).toFixed(1)}/${Number(cObj.vram_total_gb).toFixed(1)}G`
+              : `VRAM ${Number(cObj.vram_used_gb).toFixed(1)}/${Number(cObj.vram_total_gb).toFixed(1)}G (${Math.round(cObj.vram_pct)}%)`)
+          : (comfyOn && llmOn ? "双端已通" : (comfyOn ? "画布在线" : (llmOn ? "LLM在线" : "在线")));
+        const vp = Number(cObj.vram_pct || 0);
 
         if (runCnt > 0 || pendingCnt > 0) {
-          const hasStep = Number(comfy.step_max || 0) > 0;
-          const pct = Math.round(Number(comfy.step_pct || 0));
+          const hasStep = Number(cObj.step_max || 0) > 0;
+          const pct = Math.round(Number(cObj.step_pct || 0));
           const stepLabel = hasStep ? `⚡ 采样 ${pct}%` : "⚡ 出图准备中";
-          leftEl.textContent = `${stepLabel} ${runCnt}/${runCnt + pendingCnt}${llmOn ? ` · ${llmShort}待命` : ""}`;
-          vramEl.textContent = comfy.vram_total_gb > 0
-            ? `VRAM ${Number(comfy.vram_used_gb).toFixed(1)}/${Number(comfy.vram_total_gb).toFixed(1)}G`
-            : "双栖采样中";
+          const llmTail = llmRun > 0 ? ` · ${llmShort}对话(${llmRun})` : (llmOn ? ` · ${llmShort}在线` : "");
+          leftEl.textContent = `${stepLabel} ${runCnt}/${runCnt + pendingCnt}${llmTail}`;
+          vramEl.textContent = hasVram
+            ? `VRAM ${Number(cObj.vram_used_gb).toFixed(1)}/${Number(cObj.vram_total_gb).toFixed(1)}G`
+            : (clusterActive ? `画布采样 · LLM${llmOn ? "在线" : "待通"}` : "双栖采样中");
           barEl.classList.add("sampling");
           barEl.style.width = `${hasStep ? Math.max(8, pct) : 24}%`;
           miniText = hasStep ? `· ⚡ 采样 ${pct}%` : "· ⚡ 出图中";
         } else if (llmRun > 0) {
           leftEl.textContent = `⚡ ${llmShort}对话中(${llmRun}${tpsTxt})${comfyOn ? " · Comfy闲" : ""}`;
-          vramEl.textContent = comfy.vram_total_gb > 0
-            ? `VRAM ${Number(comfy.vram_used_gb).toFixed(1)}/${Number(comfy.vram_total_gb).toFixed(1)}G`
-            : "对话中";
+          vramEl.textContent = hasVram
+            ? `VRAM ${Number(cObj.vram_used_gb).toFixed(1)}/${Number(cObj.vram_total_gb).toFixed(1)}G`
+            : (comfyOn ? "画布闲 · 对话中" : "对话中");
           barEl.classList.add("sampling");
           barEl.style.width = "100%";
           miniText = `· ⚡ ${llmShort}对话中${tpsTxt}`;
@@ -4302,16 +4711,19 @@
           barEl.style.width = `${Math.max(8, Math.min(100, vp || 100))}%`;
           miniText = `· 📥 待拉图 ${pendPull} 份`;
         } else {
-          const dualCtxTag = formatShortCtxTag(comfy.ctx_size);
+          const dualCtxTag = formatShortCtxTag(cObj.ctx_size);
           const llmTag = dualCtxTag ? `${llmShort}(${dualCtxTag})` : llmShort;
           if (comfyOn && llmOn) {
-            leftEl.textContent = `🟢 ComfyUI + ${llmTag} 双在线`;
-            miniText = "· 🟢 双栖双在线";
+            // 下方徽章已标明分槽卡型，此处精简文案防止 392px 窄窗与显存数值相互挤压截断
+            leftEl.textContent = clusterActive
+              ? `🟢 Comfy闲 + ${llmTag}在线`
+              : `🟢 ComfyUI + ${llmTag} 双在线`;
+            miniText = clusterActive ? "· 🟢 异构双在线" : "· 🟢 双栖双在线";
           } else if (comfyOn) {
-            leftEl.textContent = `🟡 Comfy就绪 · ${llmShort}重连中`;
+            leftEl.textContent = clusterSlots.llm ? `🟡 Comfy闲 · ${llmShort}重连中` : "🟢 ComfyUI 就绪 · 队列空闲";
             miniText = "· 🟡 Comfy在线";
           } else {
-            leftEl.textContent = `🟡 ${llmTag}就绪 · Comfy未通`;
+            leftEl.textContent = clusterSlots.comfy ? `🟡 ${llmTag}在线 · 画布重连中` : `🟢 ${llmTag} 在线 · 点此对话`;
             miniText = `· 🟡 ${llmShort}在线`;
           }
           vramEl.textContent = vramTxt;
@@ -4346,6 +4758,12 @@
         if (vp >= 93) barEl.classList.add("danger");
         else if (vp >= 85) barEl.classList.add("warn");
         barEl.style.width = `${Math.max(4, Math.min(100, vp))}%`;
+      } else if (clusterActive) {
+        leftEl.textContent = "⏳ 异构双槽运行中 · 等待隧道连通";
+        vramEl.textContent = "双号在线";
+        barEl.classList.add("offline");
+        barEl.style.width = "45%";
+        miniText = "· ⏳ 双槽连通中";
       } else if (isLlmOfflineBoot) {
         leftEl.textContent = "⏳ 正在唤醒 Qwen3.8 引擎…";
         vramEl.textContent = "--";
@@ -4382,7 +4800,7 @@
       }
     }
 
-    function applyPrefsToUI(prefs) {
+    function applyPrefsToUI(prefs, snap) {
       if (!prefs) return;
       const scale = Number(prefs.scale || 1.0);
       document.documentElement.style.setProperty("--pet-scale", String(scale));
@@ -4409,7 +4827,10 @@
       setSegActive("seg-archive-policy", archPol, firstSync);
       setSegActive("seg-edge", prefs.edge_auto_hide === false ? "0" : "1", firstSync);
 
-      if (!bootState.prefsSynced) {
+      const s = snap || latestSnap || {};
+      const isBusy = Boolean(s.is_running || (s.deploy && s.deploy.active));
+      // 首次同步必走初始化；在用户未主动修改开机偏好且未处于运行/部署态时允许后端新偏好覆盖同步，消除冷启动竞态
+      if (firstSync || (!userTouchedBootPrefs && !isBusy)) {
         bootState.prefsSynced = true;
         const fbProf = prefs.boot_profile && WORKFLOW_CATALOG.some((item) => item.id === String(prefs.boot_profile).toLowerCase())
           ? String(prefs.boot_profile).toLowerCase()
@@ -4440,7 +4861,10 @@
           bootState.llm27_ctx = Number(prefs.boot_llm27_ctx);
         }
         bootState.llm27_mmproj = prefs.boot_llm27_mmproj !== false;
-        requestAnimationFrame(() => syncAllSegGliders(true));
+        bootState.clusterSplitMode = prefs.cluster_split_mode !== false;
+        if (firstSync) {
+          requestAnimationFrame(() => syncAllSegGliders(true));
+        }
       }
     }
 
@@ -4470,7 +4894,31 @@
       const badges = el("session-badges");
       if (badges) {
         badges.innerHTML = "";
-        if (snap.sessions && snap.sessions.length > 0) {
+        const clusterObj = snap.cluster || null;
+        const clusterActive = Boolean(clusterObj && clusterObj.active);
+        const clusterSlots = (clusterObj && clusterObj.slots) || {};
+        if (clusterActive && (clusterSlots.llm || clusterSlots.comfy)) {
+          const singleSlot = !(clusterSlots.llm && clusterSlots.comfy);
+          const up = snap.is_running ? ` · ${formatMinutes(liveMins)}` : "";
+          if (clusterSlots.llm) {
+            const lGpu = String(clusterSlots.llm.gpu || "L4").toUpperCase();
+            const lLbl = clusterSlots.llm.label ? `${clusterSlots.llm.label} ` : "";
+            const span = document.createElement("span");
+            span.className = "session-tag";
+            span.title = `LLM 槽位: ${lLbl}${lGpu}`;
+            span.textContent = `💬LLM(${lGpu})${singleSlot ? up : ""}`;
+            badges.appendChild(span);
+          }
+          if (clusterSlots.comfy) {
+            const cGpu = String(clusterSlots.comfy.gpu || "G4").toUpperCase();
+            const cLbl = clusterSlots.comfy.label ? `${clusterSlots.comfy.label} ` : "";
+            const span = document.createElement("span");
+            span.className = "session-tag";
+            span.title = `画布槽位: ${cLbl}${cGpu}`;
+            span.textContent = `🎨画布(${cGpu})${singleSlot ? up : ""}`;
+            badges.appendChild(span);
+          }
+        } else if (snap.sessions && snap.sessions.length > 0) {
           snap.sessions.forEach((s) => {
             const span = document.createElement("span");
             span.className = `session-tag${s.orphan ? " orphan" : ""}`;
@@ -4505,40 +4953,87 @@
 
     window.renderState = function (snap) {
       if (!snap) return;
+      applyCatalogFromSnap(snap);
       latestSnap = snap;
-      applyPrefsToUI(snap.prefs);
+      applyPrefsToUI(snap.prefs, snap);
 
-      animateBalance(snap.balance);
-      el("mini-cu").textContent = snap.balance !== null ? `${snap.balance.toFixed(2)} CU` : "--.-- CU";
+      const poolMetrics = resolvePetPoolMetrics(snap);
+      const displayBal = poolMetrics.balance;
+      const sigmaEl = el("cu-sigma");
+      if (sigmaEl) sigmaEl.classList.toggle("hidden", !poolMetrics.isMultiPool);
+
+      const numWrap = el("cu-number-wrap");
+      if (numWrap) {
+        if (poolMetrics.isMultiPool) {
+          const curTxt = typeof snap.balance === "number" ? `${snap.balance.toFixed(2)} CU` : "--";
+          const sumTxt = poolMetrics.tierSummary ? `${poolMetrics.tierSummary} · ` : "";
+          numWrap.title = `${sumTxt}全池总计 ${displayBal.toFixed(2)} CU · 当前激活号 ${curTxt}`;
+        } else {
+          numWrap.title = "";
+        }
+      }
+
+      if (el("bubble-area").classList.contains("collapsed")) {
+        cancelAnimationFrame(animFrame);
+        if (displayBal === null || displayBal === undefined || Number.isNaN(displayBal)) {
+          el("cu-balance").textContent = "--.--";
+        } else {
+          shownBalance = displayBal;
+          writeBalanceDigits(displayBal);
+        }
+      } else {
+        animateBalance(displayBal);
+      }
+      el("mini-cu").textContent = displayBal !== null ? `${poolMetrics.isMultiPool ? "Σ " : ""}${displayBal.toFixed(2)} CU` : "--.-- CU";
       el("mini-state").textContent = `· ${snap.status_label || "待机"}`;
 
       const pill = el("status-pill");
       pill.className = `status-pill ${snap.status_level || "idle"}`;
       el("status-label").textContent = snap.status_label || "未知状态";
 
-      const balPct = Number(snap.balance_pct || 0);
+      const balPct = Number(poolMetrics.pct || 0);
       const balBar = el("balance-bar");
       balBar.style.width = `${balPct}%`;
       balBar.className = "bar-fill";
       if (balPct <= 10 || snap.low_balance) balBar.classList.add("danger");
       else if (balPct <= 30) balBar.classList.add("warn");
 
-      const baseCap = Math.round(Number(snap.baseline_balance || 1000));
-      const balText = snap.balance !== null && snap.balance !== undefined
-        ? `${balPct.toFixed(1)}% (${snap.balance.toFixed(2)}/${baseCap})`
+      const balLabelK = el("balance-label-k");
+      if (balLabelK) {
+        balLabelK.textContent = poolMetrics.isMultiPool ? `全池水位 (${poolMetrics.acctCount}号)` : "余额水位";
+      }
+      const baseCap = Math.round(Number(poolMetrics.baseline || 1000));
+      const balText = displayBal !== null && displayBal !== undefined
+        ? `${balPct.toFixed(1)}% (${displayBal.toFixed(2)}/${baseCap})`
         : "--";
       el("balance-pct-text").textContent = balText;
 
-      const rate = Number(snap.rate_hourly || 0);
+      const clusterObj = snap.cluster || null;
+      const clusterActive = Boolean(clusterObj && clusterObj.active);
+      const rawClusterRate = clusterActive && clusterObj.total_rate_hourly !== undefined && clusterObj.total_rate_hourly !== null
+        ? Number(clusterObj.total_rate_hourly)
+        : null;
+      const rate = (rawClusterRate !== null && Number.isFinite(rawClusterRate))
+        ? rawClusterRate
+        : Number(snap.rate_hourly || 0);
       el("rate-text").textContent = rate > 0.01
-        ? `耗速: ${rate.toFixed(2)} CU/hr`
+        ? `${clusterActive ? "跨号总耗速" : "耗速"}: ${rate.toFixed(2)} CU/hr`
         : "耗速: 0.00 CU/hr (零计费)";
-      el("eta-text").textContent = snap.remaining_hours !== null
-        ? `约 ${snap.remaining_hours.toFixed(1)}h`
+      let etaHrs = snap.remaining_hours;
+      if (rate > 0.01 && displayBal !== null && displayBal > 0 && poolMetrics.isMultiPool) {
+        etaHrs = displayBal / rate;
+      } else if ((etaHrs === null || etaHrs === undefined) && clusterActive && Number(clusterObj.total_pool_balance || 0) > 0 && rate > 0.01) {
+        etaHrs = Number(clusterObj.total_pool_balance) / rate;
+      }
+      el("eta-text").textContent = etaHrs !== null && etaHrs !== undefined
+        ? `约 ${Number(etaHrs).toFixed(1)}h`
         : "续航: 无限";
 
       const rateBar = el("rate-bar");
-      rateBar.style.width = `${rate > 0.01 ? Math.max(8, snap.rate_pct) : 100}%`;
+      const rateBarPct = clusterActive
+        ? (rate > 0.01 ? Math.max(8, Math.min(100, Math.round((rate / 15.0) * 100))) : 100)
+        : (rate > 0.01 ? Math.max(8, snap.rate_pct) : 100);
+      rateBar.style.width = `${rateBarPct}%`;
       rateBar.className = "bar-fill";
       if (rate <= 0.01) rateBar.classList.add("idle");
       else if (rate >= 10) rateBar.classList.add("danger");
@@ -4551,14 +5046,24 @@
         ? "网络缓存"
         : (snap.updated_str || "--:--:--");
 
-      el("ledger-start-sub").textContent = (snap.day_start_balance !== null && snap.day_start_balance !== undefined)
-        ? `起始 ${snap.day_start_balance.toFixed(2)}`
-        : "起始 --";
-      const curBalEl = el("ledger-start");
-      if (snap.balance === null || snap.balance === undefined) {
-        curBalEl.textContent = "--.-- CU";
+      const ledgerBadge = el("ledger-start-badge");
+      if (ledgerBadge) {
+        ledgerBadge.textContent = poolMetrics.isMultiPool ? "全池总余额" : "现有余额";
       }
-      curBalEl.classList.toggle("warn", Boolean(snap.low_balance));
+      if (poolMetrics.isMultiPool) {
+        el("ledger-start-sub").textContent = (typeof snap.balance === "number")
+          ? `当前 ${snap.balance.toFixed(2)}`
+          : "当前 --";
+      } else {
+        el("ledger-start-sub").textContent = (snap.day_start_balance !== null && snap.day_start_balance !== undefined)
+          ? `起始 ${snap.day_start_balance.toFixed(2)}`
+          : "起始 --";
+      }
+      const curBalEl = el("ledger-start");
+      if (curBalEl) {
+        curBalEl.textContent = (displayBal === null || displayBal === undefined) ? "--.-- CU" : `${displayBal.toFixed(2)} CU`;
+        curBalEl.classList.toggle("warn", Boolean(snap.low_balance));
+      }
 
       if (snap.is_running) {
         el("ledger-consumed-k").textContent = `今日实耗 (本次 ${Number(snap.session_consumed_cu || 0).toFixed(2)})`;
@@ -4567,7 +5072,10 @@
       } else {
         el("ledger-consumed-k").textContent = "今日累计实耗";
       }
-      el("ledger-consumed").textContent = `${Number(snap.day_consumed_cu || 0).toFixed(2)} CU`;
+      const effDayConsumed = (poolMetrics.isMultiPool && Number.isFinite(Number(clusterObj && clusterObj.total_day_consumed_cu)) && Number(clusterObj.total_day_consumed_cu) > Number(snap.day_consumed_cu || 0))
+        ? Number(clusterObj.total_day_consumed_cu)
+        : Number(snap.day_consumed_cu || 0);
+      el("ledger-consumed").textContent = `${effDayConsumed.toFixed(2)} CU`;
 
       syncLiveUptimeUI(snap);
 
@@ -4622,7 +5130,7 @@
     window.canEdgeAutoHide = function () {
       if (wfDrawerOpen || acctDrawerOpen) return false;
       const ob = latestSnap && latestSnap.onboarding;
-      if (ob && (ob.oauth_awaiting_code || ob.gdrive_binding)) return false;
+      if (ob && (ob.pending_oauth || ob.oauth_awaiting_code || ob.gdrive_binding)) return false;
       if (el("stage").classList.contains("drag-over")) return false;
       const toastEl = el("speech-toast");
       if (toastEl && toastEl.classList.contains("show") && toastEl.querySelector(".toast-choice-btn")) {
@@ -4838,6 +5346,28 @@
 
     el("btn-collapse").addEventListener("click", () => toggleBubble(false));
     el("mini-pill").addEventListener("click", () => toggleBubble(true));
+    if (el("tool-studio")) {
+      el("tool-studio").addEventListener("click", async () => {
+        if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.open_studio_window === "function") {
+          const res = await window.pywebview.api.open_studio_window("");
+          if (res && res.ok === false && res.message) {
+            showToast(res.message, { duration: 2800, isError: true });
+          }
+        }
+      });
+      // 右键直达 Colab Studio AI 副驾抽屉
+      el("tool-studio").addEventListener("contextmenu", async (e) => {
+        e.preventDefault();
+        announceActionStatus("正在直达 Colab Studio AI 副驾...");
+        showToast("正在直达 Colab Studio AI 副驾...", 2400);
+        if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.open_studio_window === "function") {
+          const res = await window.pywebview.api.open_studio_window("copilot");
+          if (res && res.ok === false && res.message) {
+            showToast(res.message, { duration: 2800, isError: true });
+          }
+        }
+      });
+    }
     el("tool-bubble").addEventListener("click", () => toggleBubble());
     el("tool-quit").addEventListener("click", () => {
       if (window.pywebview && window.pywebview.api) {
@@ -4873,9 +5403,6 @@
         ? await window.pywebview.api.copy_llm_api_config()
         : await window.pywebview.api.sync_outputs();
       if (res && res.ok) {
-        if (res.clipboard_text && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
-          navigator.clipboard.writeText(res.clipboard_text).catch(() => {});
-        }
         if (timerKey === "dual") clearTimeout(dualCopyResetTimer);
         else clearTimeout(copyResetTimer);
         btn.setAttribute("data-copied", "true");
@@ -4958,28 +5485,65 @@
     });
 
     function armStopConfirm(btn, mode) {
-      stopModePending = mode === "all" ? "all" : "session";
-      stopArmedUntil = Date.now() + 4000;
+      const targetMode = mode === "all" ? "all" : "session";
       btn.classList.add("armed");
-      btn.textContent = stopModePending === "all" ? "⚠️ 再点停全部卡" : "⚠️ 再点停当前卡";
+      btn.textContent = targetMode === "all" ? "⚠️ 再点停全部卡" : "⚠️ 再点停当前卡";
       announceActionStatus(
-        stopModePending === "all"
+        targetMode === "all"
           ? "请 4 秒内再次点击以关停当前账号全部实例"
           : "再点释放当前绑定实例（右键可停止全部）"
       );
-      clearTimeout(stopResetTimer);
-      stopResetTimer = setTimeout(() => {
-        stopArmedUntil = 0;
+      stopArm.arm(targetMode, () => {
         btn.classList.remove("armed");
         btn.textContent = "🛑 一键停卡";
-      }, 4000);
+      });
+    }
+
+    // 异构集群分槽停卡执行器（支持仅停画布保留 L4 LLM 给 Magpie、仅停 LLM 或全停）
+    async function runClusterSlotStop(slot) {
+      if (!window.pywebview || !window.pywebview.api) return;
+      hideToast();
+      const btn = el("act-stop");
+      if (btn) btn.textContent = "⏳ 正在停机...";
+      const slotLabel = slot === "comfy"
+        ? "画布槽位(保留LLM给Magpie)"
+        : (slot === "llm" ? "LLM对话槽位" : "双号全部实例");
+      announceActionStatus(`正在关停${slotLabel}...`);
+      showToast(`⏳ 正在关停${slotLabel}...`, 4000);
+      let res = null;
+      try {
+        if (typeof window.pywebview.api.stop_cluster_slot === "function") {
+          res = await window.pywebview.api.stop_cluster_slot(slot);
+        } else if (slot === "all" && typeof window.pywebview.api.stop_all_instances === "function") {
+          res = await window.pywebview.api.stop_all_instances();
+        } else if (typeof window.pywebview.api.stop_session_instance === "function") {
+          res = await window.pywebview.api.stop_session_instance(slot === "llm" ? "llm" : "comfy");
+        }
+      } finally {
+        if (btn) btn.textContent = "🛑 一键停卡";
+      }
+      if (res && res.snapshot) window.renderState(res.snapshot);
+      const msg = (res && res.message) || "停机执行完毕";
+      announceActionStatus(msg);
+      if (res && res.ok) {
+        proudOverrideUntil = Date.now() + 2600;
+        updateSpriteFrame();
+      }
+      showToast(msg, {
+        duration: (res && !res.ok) ? 4500 : 3200,
+        isError: Boolean(res && !res.ok)
+      });
     }
 
     async function executeStopConfirm(btn, mode) {
-      clearTimeout(stopResetTimer);
-      stopArmedUntil = 0;
+      stopArm.disarm(false);
       btn.classList.remove("armed");
       btn.textContent = "⏳ 正在停机...";
+      const clusterActive = Boolean(latestSnap && latestSnap.cluster && latestSnap.cluster.active);
+      if (mode === "all" && clusterActive && typeof window.pywebview.api.stop_cluster_slot === "function") {
+        await runClusterSlotStop("all");
+        return;
+      }
       const useAll = mode === "all" || typeof window.pywebview.api.stop_session_instance !== "function";
       announceActionStatus(useAll ? "正在下发 down --all 停机省积分..." : "正在定向释放当前绑定实例并核实...");
       const res = useAll
@@ -5001,8 +5565,39 @@
     el("act-stop").addEventListener("click", async () => {
       if (!window.pywebview || !window.pywebview.api) return;
       const btn = el("act-stop");
-      const now = Date.now();
-      if (now > stopArmedUntil) {
+      const clusterObj = latestSnap && latestSnap.cluster;
+      if (clusterObj && clusterObj.active) {
+        stopArm.disarm(false);
+        btn.classList.remove("armed");
+        btn.textContent = "🛑 一键停卡";
+        const llmGpu = String((clusterObj.slots && clusterObj.slots.llm && clusterObj.slots.llm.gpu) || "L4").toUpperCase();
+        announceActionStatus("请选择停卡范围：仅停画布、仅停LLM 或 全停");
+        showToast(`留${llmGpu}给Magpie:`, {
+          duration: 12000,
+          choices: [
+            {
+              label: "仅停画布",
+              primary: true,
+              title: `仅停画布槽位，保留 ${llmGpu} LLM 给 Magpie 继续使用`,
+              onClick: () => runClusterSlotStop("comfy")
+            },
+            {
+              label: "仅停LLM",
+              primary: false,
+              title: "仅停 LLM 对话槽位，保留 ComfyUI 画布",
+              onClick: () => runClusterSlotStop("llm")
+            },
+            {
+              label: "全停",
+              primary: false,
+              title: "同时停止双号全部活跃实例",
+              onClick: () => runClusterSlotStop("all")
+            }
+          ]
+        });
+        return;
+      }
+      if (!stopArm.isArmed()) {
         const sessions = Array.isArray(latestSnap && latestSnap.sessions) ? latestSnap.sessions : [];
         const hasNamed = sessions.some((s) => s && s.name && s.name !== "?");
         const orphanOnly = sessions.length > 0 && !hasNamed;
@@ -5012,14 +5607,14 @@
         armStopConfirm(btn, targetMode);
         return;
       }
-      await executeStopConfirm(btn, stopModePending);
+      await executeStopConfirm(btn, stopArm.key());
     });
 
     el("act-stop").addEventListener("contextmenu", async (e) => {
       if (!window.pywebview || !window.pywebview.api) return;
       e.preventDefault();
       const btn = el("act-stop");
-      if (Date.now() <= stopArmedUntil && stopModePending === "all") {
+      if (stopArm.isArmed("all")) {
         await executeStopConfirm(btn, "all");
         return;
       }
@@ -5044,6 +5639,7 @@
       if (!GPU_ORDER.includes(g)) return;
       const profs = normalizeWorkflowProfiles(bootState.profiles, bootState.profile);
       const anyAutoHm = profs.some((p) => getWorkflowMeta(p).autoHmOnA100);
+      userTouchedBootPrefs = true;
       bootState.gpu = g;
       bootState.gpuManual = true;
       if (GPU_SPECS[g] && GPU_SPECS[g].hmLock) bootState.high_mem = false;
@@ -5141,6 +5737,7 @@
       const nextStr = nextProfs.join(",");
       const changed = prevStr !== nextStr;
       if (changed || opts.forceGpuReset) {
+        userTouchedBootPrefs = true;
         bootState.profiles = nextProfs;
         bootState.profile = nextProfs[0];
         bootState.gpuManual = false;
@@ -5561,6 +6158,7 @@
         } else {
           nextVal = !Boolean(bootState[modMeta.key]);
         }
+        userTouchedBootPrefs = true;
         bootState[modMeta.key] = nextVal;
         if (latestSnap && latestSnap.prefs && modMeta.prefKey) {
           latestSnap.prefs[modMeta.prefKey] = nextVal;
@@ -5598,6 +6196,7 @@
       if (!GPU_ORDER.includes(g)) return;
       const profs = normalizeWorkflowProfiles(bootState.profiles, bootState.profile);
       const anyAutoHm = profs.some((p) => getWorkflowMeta(p).autoHmOnA100);
+      userTouchedBootPrefs = true;
       bootState.gpu = g;
       bootState.gpuManual = true;
       if (GPU_SPECS[g] && GPU_SPECS[g].hmLock) bootState.high_mem = false;
@@ -5612,6 +6211,21 @@
       }
     });
 
+    if (el("chip-cluster-split")) {
+      el("chip-cluster-split").addEventListener("click", () => {
+        userTouchedBootPrefs = true;
+        bootState.clusterSplitMode = !bootState.clusterSplitMode;
+        if (latestSnap && latestSnap.prefs) {
+          latestSnap.prefs.cluster_split_mode = bootState.clusterSplitMode;
+        }
+        clearBootArm();
+        renderBootPanel(latestSnap);
+        if (window.pywebview && window.pywebview.api) {
+          window.pywebview.api.save_prefs({ cluster_split_mode: bootState.clusterSplitMode });
+        }
+      });
+    }
+
     el("chip-hm").addEventListener("click", () => {
       const spec = GPU_SPECS[bootState.gpu] || {};
       if (spec.hmLock) {
@@ -5621,6 +6235,7 @@
         showToast(lockTip, 2200);
         return;
       }
+      userTouchedBootPrefs = true;
       bootState.high_mem = !bootState.high_mem;
       clearBootArm();
       renderBootPanel(latestSnap);
@@ -5640,27 +6255,22 @@
       const sameGpu = running && runGpu === bootState.gpu;
       const curSpec = GPU_SPECS[bootState.gpu] || {};
       const needUpgradeHm = sameGpu && !curSpec.hmLock && bootState.high_mem && runShape !== "HIGH_RAM";
-      const recreate = running && (!sameGpu || needUpgradeHm);
+      const profs = normalizeWorkflowProfiles(bootState.profiles, bootState.profile);
+      const splitPrev = _resolveSplitPlanPreview(profs, s);
+      const recreate = !splitPrev.useSplit && running && (!sameGpu || needUpgradeHm);
 
-      if (recreate) {
-        const now = Date.now();
-        if (now > bootArmedUntil) {
-          bootArmedUntil = now + 4000;
-          const selHm = !curSpec.hmLock && Boolean(bootState.high_mem);
-          const hmBtnTag = selHm ? (bootState.gpu === "A100" ? "(80G高存)" : "(高存)") : "";
-          el("btn-boot-start").classList.add("armed");
-          el("btn-boot-start").textContent = `⚠️ 再点确认停旧卡(${runGpu})并换 ${bootState.gpu}${hmBtnTag}`;
-          clearTimeout(bootResetTimer);
-          bootResetTimer = setTimeout(() => {
-            bootArmedUntil = 0;
-            renderBootPanel(latestSnap);
-          }, 4000);
-          return;
-        }
+      if (recreate && !bootArm.isArmed()) {
+        const selHm = !curSpec.hmLock && Boolean(bootState.high_mem);
+        const hmBtnTag = selHm ? (bootState.gpu === "A100" ? "(80G高存)" : "(高存)") : "";
+        el("btn-boot-start").classList.add("armed");
+        el("btn-boot-start").textContent = `⚠️ 再点确认停旧卡(${runGpu})并换 ${bootState.gpu}${hmBtnTag}`;
+        bootArm.arm("recreate", () => renderBootPanel(latestSnap));
+        return;
       }
       clearBootArm();
 
-      const profs = normalizeWorkflowProfiles(bootState.profiles, bootState.profile);
+      const bootBtn = el("btn-boot-start");
+      if (bootBtn && bootBtn.disabled) return;
       const payload = {
         profile: profs[0],
         profiles: profs,
@@ -5674,57 +6284,68 @@
         llm27_quant: String(bootState.llm27_quant || "UD-Q4_K_XL"),
         llm27_ctx: Number(bootState.llm27_ctx || 65536),
         llm27_mmproj: Boolean(bootState.llm27_mmproj),
+        cluster_mode: splitPrev.useSplit ? "split" : "cohost",
         recreate: recreate
       };
-      const res = await window.pywebview.api.start_instance(payload);
-      if (res && res.deploy) {
-        if (latestSnap) latestSnap.deploy = res.deploy;
-        setConsoleTab("boot", true);
-        renderBootPanel(latestSnap);
-        renderOpsPanel(latestSnap);
-        renderComfyState(latestSnap ? latestSnap.comfy : null);
+      if (bootBtn) {
+        bootBtn.disabled = true;
+        bootBtn.setAttribute("aria-busy", "true");
+        bootBtn.textContent = "正在提交部署...";
       }
-      if (res && res.needs_onboarding) {
-        const targetTab = res.target_tab || "vault";
-        showToast(res.message || "需先完成账号或云盘接入", {
-          duration: 6000,
-          isError: true,
-          choices: [
-            {
-              label: "去绑定",
-              primary: true,
-              onClick: () => {
-                hideToast();
-                setAcctTab(targetTab, true);
-                setPage(4);
+      let startedActive = false;
+      try {
+        const res = await window.pywebview.api.start_instance(payload);
+        if (res && res.deploy) {
+          startedActive = Boolean(res.deploy.active);
+          if (latestSnap) latestSnap.deploy = res.deploy;
+          setConsoleTab("boot", true);
+          renderBootPanel(latestSnap);
+          renderOpsPanel(latestSnap);
+          renderComfyState(latestSnap ? latestSnap.comfy : null);
+        }
+        if (res && res.needs_onboarding) {
+          const targetTab = res.target_tab || "vault";
+          showToast(res.message || "需先完成账号或云盘接入", {
+            duration: 6000,
+            isError: true,
+            choices: [
+              {
+                label: "去绑定",
+                primary: true,
+                onClick: () => {
+                  hideToast();
+                  setAcctTab(targetTab, true);
+                  setPage(4);
+                }
               }
-            }
-          ]
-        });
-        return;
-      }
-      if (res && res.message) {
-        showToast(res.message, { duration: 2800, isError: !res.ok });
+            ]
+          });
+          return;
+        }
+        if (res && res.message) {
+          showToast(res.message, { duration: 2800, isError: !res.ok });
+        }
+      } finally {
+        if (bootBtn) {
+          bootBtn.disabled = false;
+          bootBtn.removeAttribute("aria-busy");
+          if (!startedActive) renderBootPanel(latestSnap);
+        }
       }
     });
 
     el("btn-boot-cancel").addEventListener("click", async () => {
       const btn = el("btn-boot-cancel");
-      const now = Date.now();
-      if (now > cancelArmedUntil) {
-        cancelArmedUntil = now + 4000;
+      if (!cancelArm.isArmed()) {
         btn.classList.add("armed");
         btn.textContent = "再点中止";
-        clearTimeout(cancelResetTimer);
-        cancelResetTimer = setTimeout(() => {
-          cancelArmedUntil = 0;
+        cancelArm.arm("cancel", () => {
           btn.classList.remove("armed");
           btn.textContent = "✕ 中止";
-        }, 4000);
+        });
         return;
       }
-      clearTimeout(cancelResetTimer);
-      cancelArmedUntil = 0;
+      cancelArm.disarm(false);
       btn.classList.remove("armed");
       btn.textContent = "中止中...";
       if (window.pywebview && window.pywebview.api) {
@@ -5897,10 +6518,8 @@
         spawnPetSparkles();
         proudOverrideUntil = Date.now() + 4500;
         updateSpriteFrame();
-        flushSyncRegion();
         setTimeout(() => {
           updateSpriteFrame();
-          flushSyncRegion();
         }, 4550);
         showToast(evt.summary || "✨ 新出图完成！点我查看", {
           duration: 8000,
@@ -5995,10 +6614,8 @@
         spawnPetSparkles();
         proudOverrideUntil = Date.now() + 2600;
         updateSpriteFrame();
-        flushSyncRegion();
         setTimeout(() => {
           updateSpriteFrame();
-          flushSyncRegion();
         }, 2650);
         const act = evt.action || null;
         const holdMs = act && String(act).startsWith("open_comfy_wf:") ? 7500 : 5500;
@@ -6029,10 +6646,8 @@
         spawnPetSparkles();
         proudOverrideUntil = Date.now() + 4500;
         updateSpriteFrame();
-        flushSyncRegion();
         setTimeout(() => {
           updateSpriteFrame();
-          flushSyncRegion();
         }, 4550);
         showToast(evt.summary || "🎉 部署完成！点我打开", {
           duration: 10000,
@@ -6135,8 +6750,7 @@
 
     /* 第 5 页：账号保险箱、云盘与环境配置交互 & 毛玻璃抽屉 */
     function clearCfResetArm() {
-      clearTimeout(cfClearResetTimer);
-      cfClearArmedUntil = 0;
+      cfClearArm.disarm(false);
     }
 
     function openAccountDrawer(mode, opts = {}) {
@@ -6197,15 +6811,12 @@
           id: "btn-oauth-paste-submit", type: "button", cls: "boot-start-btn", txt: "📋 一键读取剪贴板并绑定",
           on: {
             click: async () => {
-              if (!api()) return;
-              let rawCode = String(fCode.inp.value || "").trim();
-              if (!rawCode) {
-                const clip = await apiCall("read_clipboard_text");
-                if (clip) { rawCode = String(clip).trim(); fCode.inp.value = rawCode; }
-              }
-              if (!rawCode) return showToast("剪贴板为空，请先在浏览器复制 Google 授权码", { duration: 2400, isError: true });
+              if (!window.pywebview || !window.pywebview.api) return;
+              const rawCode = String(fCode.inp.value || "").trim();
+              const label = String(fLabel.inp.value || "").trim();
               submitBtn.textContent = "⏳ 正在验证授权并同步余额...";
-              const res = await apiCall("complete_colab_oauth", rawCode, String(fLabel.inp.value || "").trim());
+              // 输入框留空时直接传 "" 给后端安全读取本地剪贴板并校验授权码
+              const res = await window.pywebview.api.complete_colab_oauth(rawCode, label);
               submitBtn.textContent = "📋 一键读取剪贴板并绑定";
               applySnap(res);
               if (res && res.ok) { closeAccountDrawer(); showToast(res.message || "✅ 账号绑定成功", 3000); }
@@ -6256,15 +6867,13 @@
           id: "btn-cf-clear", type: "button", cls: "env-btn", txt: "切回免费隧道",
           on: {
             click: async () => {
-              const now = Date.now();
-              if (now > cfClearArmedUntil) {
-                cfClearArmedUntil = now + 4000;
+              if (!cfClearArm.isArmed()) {
                 clearCfBtn.className = "env-btn warn";
                 clearCfBtn.textContent = "⚠️ 再点确认";
-                clearTimeout(cfClearResetTimer);
-                cfClearResetTimer = setTimeout(() => {
-                  cfClearArmedUntil = 0; clearCfBtn.className = "env-btn"; clearCfBtn.textContent = "切回免费隧道";
-                }, 4000);
+                cfClearArm.arm("cf", () => {
+                  clearCfBtn.className = "env-btn";
+                  clearCfBtn.textContent = "切回免费隧道";
+                });
                 return;
               }
               clearCfResetArm();
@@ -6365,18 +6974,12 @@
       }
 
       if (act === "remove") {
-        if (acctDelArmedId !== aid) {
-          acctDelArmedId = aid;
+        if (!acctDelArm.isArmed(aid)) {
+          acctDelArm.arm(aid, () => renderAccountEnvPage(latestSnap));
           renderAccountEnvPage(latestSnap);
-          clearTimeout(acctDelResetTimer);
-          acctDelResetTimer = setTimeout(() => {
-            acctDelArmedId = "";
-            renderAccountEnvPage(latestSnap);
-          }, 4000);
           return;
         }
-        clearTimeout(acctDelResetTimer);
-        acctDelArmedId = "";
+        acctDelArm.disarm(false);
         const res = await window.pywebview.api.remove_colab_account(aid);
         if (res && res.snapshot) window.renderState(res.snapshot);
         showToast((res && res.message) || "已移除账号", { duration: 2600, isError: !(res && res.ok) });
@@ -6386,7 +6989,7 @@
     el("btn-acct-add").addEventListener("click", async () => {
       if (!window.pywebview || !window.pywebview.api) return;
       const ob = (latestSnap && latestSnap.onboarding) || {};
-      if (ob.oauth_awaiting_code) {
+      if (ob.pending_oauth || ob.oauth_awaiting_code) {
         openAccountDrawer("oauth");
         return;
       }
@@ -6399,6 +7002,51 @@
         showToast((res && res.message) || "拉起授权失败", { duration: 3000, isError: true });
       }
     });
+
+    // 第 5 页底部工具按钮：并发刷新全号池状态 + 切换智能寻优偏好
+    let poolRefreshing = false;
+    if (el("btn-pool-refresh")) {
+      el("btn-pool-refresh").addEventListener("click", async () => {
+        if (poolRefreshing || !window.pywebview || !window.pywebview.api) return;
+        const btn = el("btn-pool-refresh");
+        const topRefresh = el("btn-refresh");
+        poolRefreshing = true;
+        btn.textContent = "⏳ 探测中";
+        if (topRefresh) topRefresh.classList.add("spin");
+        try {
+          const res = typeof window.pywebview.api.refresh_account_pool === "function"
+            ? await window.pywebview.api.refresh_account_pool()
+            : await window.pywebview.api.refresh_now();
+          if (res && res.snapshot) {
+            window.renderState(res.snapshot);
+          } else if (res && res.onboarding) {
+            window.renderState(res);
+          }
+          showToast((res && res.message) || "已刷新号池全部账号状态", {
+            duration: 2800,
+            isError: Boolean(res && res.ok === false)
+          });
+        } catch (err) {
+          showToast("号池并发探测失败，请稍后重试", { duration: 2800, isError: true });
+        } finally {
+          poolRefreshing = false;
+          btn.textContent = "🔄 刷新全池";
+          if (topRefresh) topRefresh.classList.remove("spin");
+        }
+      });
+    }
+
+    if (el("btn-pool-auto-schedule")) {
+      el("btn-pool-auto-schedule").addEventListener("click", () => {
+        const curOn = !(latestSnap && latestSnap.prefs && latestSnap.prefs.auto_pool_schedule === false);
+        const nextOn = !curOn;
+        savePref({ auto_pool_schedule: nextOn });
+        const btn = el("btn-pool-auto-schedule");
+        btn.classList.toggle("active", nextOn);
+        btn.setAttribute("aria-pressed", String(nextOn));
+        showToast(nextOn ? "🤖 已开启智能号池寻优调度" : "已关闭智能寻优（仅用当前账号）", 2400);
+      });
+    }
 
     el("btn-gdrive-bind").addEventListener("click", async () => {
       if (!window.pywebview || !window.pywebview.api) return;
@@ -6479,10 +7127,8 @@
           spawnPetSparkles();
           proudOverrideUntil = Date.now() + 1100;
           updateSpriteFrame();
-          flushSyncRegion();
           setTimeout(() => {
             updateSpriteFrame();
-            flushSyncRegion();
           }, 1150);
 
           showToast(pickRandomLine(latestSnap));

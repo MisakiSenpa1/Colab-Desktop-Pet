@@ -1,34 +1,39 @@
 # 运行期状态、日志与私密凭据（禁止提交）
 .cf_tunnel_secret.json
 colab_pet/pet_state.json
+colab_pet/pet_state.corrupt-*.json
+colab_pet/agent_sessions.json
 colab_pet/pet_error.log
 loras_manifest.json
 rclone.conf
 .env
 *.log
 
-# 默认内置 Q 版四表情透明立绘 PNG；临时测试图与其他格式图片保持忽略
+# 静态立绘现已切换为轻量化 .webp 与预置 .ico/.json，忽略源大图 PNG/JPG 与临时图
+colab_pet/assets/*.png
 colab_pet/assets/*.jpg
 colab_pet/assets/*.jpeg
-colab_pet/assets/*.webp
 
 # 本地模型、参考音频与拉回的输出缓存
 _downloads/
 loras/
 drama3_refs/
 
-# Python 与系统临时文件
-__pycache__/
-.pytest_cache/
+# Python 与工具临时缓存
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
 *.py[cod]
 *$py.class
 .DS_Store
 Thumbs.db
 
-# 诊断日志与打包构建产物
+# 诊断日志与打包构建产物（仅放行内置应用图标 colab_pet/assets/pet.ico）
 colab_pet/logs/
 build/
 dist/
+dist_ci/
 _pyinstaller_work/
 *.zip
 *.ico
+!colab_pet/assets/pet.ico

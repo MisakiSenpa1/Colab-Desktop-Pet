@@ -32,6 +32,7 @@ import colab_ctl  # noqa: E402
 import colab_backend as cb  # noqa: E402
 import colab_security as csec  # noqa: E402
 import build_windows_package as win_pkg  # noqa: E402
+from colab_core import agent_tools as core_agent_tools  # noqa: E402
 from colab_core import health as core_health  # noqa: E402
 from colab_core import runtime as core_runtime  # noqa: E402
 core_deploy = core_runtime
@@ -242,7 +243,7 @@ def test_dual_minimax_qwen27b_orphan_adoption_and_traceback_classification(
     fake_py314_tb = [
         "[本机执行] colab.exe new -s comfy --gpu G4",
         "Traceback (most recent call last):",
-        '  File "C:\\Workspace\\Colab-Desktop-Pet\\colab_ctl.py", line 347, in _run',
+        '  File "C:\\colab_pet\\colab_ctl.py", line 347, in _run',
         "    raise subprocess.CalledProcessError(",
         "        res.returncode,",
         "        cmd,",
@@ -686,17 +687,13 @@ def test_diagnostic_bundle_and_windows_portable_package(
 def test_sse_anthropic_error_frame_and_live_llm_reconfigure(
     isolated_env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import re
     import socket
     import urllib.request
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-    # 7a. 验证 SSE 网关在发出 : keepalive 后上游返回 400 上下文超限，对 /v1/messages 输出 Anthropic event: error
-    boot_src = (PKG_DIR / "colab_bootstrap_qwen_llm.py").read_text(encoding="utf-8")
-    m_gw = re.search(r"_SSE_GATEWAY_SCRIPT\s*=\s*r'''(.*?)'''", boot_src, flags=re.S)
-    assert m_gw is not None
-    gw_script = isolated_env.tmp / "llm_sse_gateway_test.py"
-    gw_script.write_text(m_gw.group(1).lstrip("\n"), encoding="utf-8")
+    # 7a. 验证独立 SSE 网关模块在发出 : keepalive 后上游返回 400 上下文超限，对 /v1/messages 输出 Anthropic event: error
+    gw_script = PKG_DIR / "colab_sse_gateway.py"
+    assert gw_script.is_file()
 
     err_payload = json.dumps(
         {
@@ -821,6 +818,12 @@ def test_sse_anthropic_error_frame_and_live_llm_reconfigure(
     )
     comfy_url = "https://comfy.example.com"
     llm_url = "https://llm.example.com"
+    csec.save_cf_tunnel_settings(
+        isolated_env.cf_file,
+        comfy_url=comfy_url,
+        llm_url=llm_url,
+        tunnel_token="eyJhIjoiZHVtbXkiLCJ0IjoiZHVtbXkiLCJzIjoiZHVtbXkifQ==",
+    )
     ep_id = "ep-g4-dual-live"
     with backend._lock:
         backend.state["account_profiles"] = [{"id": "a1", "label": "U1", "email_masked": "u***1@g.com"}]
@@ -959,12 +962,13 @@ def test_hardened_safety_and_lightweight_boundaries(
 
     asyncio.run(_check_fail_closed())
 
-    # 8c. SSE 网关 OPTIONS 预检与 /v1/models 合成响应必须保留 CORS 头
-    qwen_src = (PKG_DIR / "colab_bootstrap_qwen_llm.py").read_text(encoding="utf-8")
-    m_gw = qwen_src.split("_SSE_GATEWAY_SCRIPT = r'''", 1)[1].split("'''", 1)[0]
-    assert "_cors_header_block" in m_gw and 'if method == "OPTIONS":' in m_gw
+    # 8c. 独立 SSE 网关模块 OPTIONS 预检与 /v1/models 合成响应必须保留 CORS 头
+    import colab_sse_gateway as sse_gw
 
-    # 直接启动临时 SSE 网关实测真实 TCP HTTP OPTIONS 与 /v1/models CORS 响应头
+    gw_src = (PKG_DIR / "colab_sse_gateway.py").read_text(encoding="utf-8")
+    assert "_cors_header_block" in gw_src and 'if method == "OPTIONS":' in gw_src
+
+    # 直接导入 colab_sse_gateway 实测真实 TCP HTTP OPTIONS 与 /v1/models CORS 响应头
     async def _run_sse_cors_check() -> None:
         import socket
 
@@ -994,13 +998,11 @@ def test_hardened_safety_and_lightweight_boundaries(
         await runner.setup()
         await web.TCPSite(runner, "127.0.0.1", up_port).start()
 
-        ns: dict[str, Any] = {}
-        exec(compile(m_gw.split("if __name__ ==")[0], "<sse_gw>", "exec"), ns)
-        ns["LISTEN_PORT"] = gw_port
-        ns["UPSTREAM_PORT"] = up_port
-        ns["BASE_MODEL"] = "Qwen3.8-27B-abliterated"
-        ns["HEARTBEAT_SEC"] = 0.08
-        gw_srv = await asyncio.start_server(ns["_handle_client"], "127.0.0.1", gw_port)
+        monkeypatch.setattr(sse_gw, "LISTEN_PORT", gw_port)
+        monkeypatch.setattr(sse_gw, "UPSTREAM_PORT", up_port)
+        monkeypatch.setattr(sse_gw, "BASE_MODEL", "Qwen3.8-27B-abliterated")
+        monkeypatch.setattr(sse_gw, "HEARTBEAT_SEC", 0.08)
+        gw_srv = await asyncio.start_server(sse_gw._handle_client, "127.0.0.1", gw_port)
         try:
             def _do_opts() -> tuple[int, dict[str, str]]:
                 req = urllib.request.Request(
@@ -1030,19 +1032,49 @@ def test_hardened_safety_and_lightweight_boundaries(
                 with urllib.request.urlopen(req, timeout=5.0) as resp:
                     return resp.status, {k.lower(): v for k, v in resp.headers.items()}, resp.read().decode("utf-8", errors="replace")
 
+            # 默认未配置 SSE_ALLOWED_ORIGINS 时返回通配 * 且绝不附带 Allow-Credentials
+            monkeypatch.delenv("SSE_ALLOWED_ORIGINS", raising=False)
+            monkeypatch.delenv("SSE_CORS_ALLOW_CREDENTIALS", raising=False)
+
             st_opt, h_opt = await asyncio.to_thread(_do_opts)
             assert st_opt == 204
-            assert h_opt.get("access-control-allow-origin") == "https://chat.example.com"
+            assert h_opt.get("access-control-allow-origin") == "*"
+            assert "access-control-allow-credentials" not in h_opt
 
             st_mod, h_mod, body_mod = await asyncio.to_thread(_do_models)
             assert st_mod == 200
-            assert h_mod.get("access-control-allow-origin") == "https://chat.example.com"
+            assert h_mod.get("access-control-allow-origin") == "*"
+            assert "access-control-allow-credentials" not in h_mod
             assert any(m.get("id", "").endswith("-nothink") for m in body_mod.get("data") or [])
 
             st_sse, h_sse, body_sse = await asyncio.to_thread(_do_slow_stream)
             assert st_sse == 200
-            assert h_sse.get("access-control-allow-origin") == "https://chat.example.com"
+            assert h_sse.get("access-control-allow-origin") == "*"
+            assert "access-control-allow-credentials" not in h_sse
             assert ": keepalive" in body_sse and "data: [DONE]" in body_sse
+
+            # 配置 SSE_ALLOWED_ORIGINS 白名单后精确回显命中 Origin 与 Vary: Origin（默认仍不附带 Credentials）
+            monkeypatch.setenv("SSE_ALLOWED_ORIGINS", "https://chat.example.com")
+
+            st_opt_wl, h_opt_wl = await asyncio.to_thread(_do_opts)
+            assert st_opt_wl == 204
+            assert h_opt_wl.get("access-control-allow-origin") == "https://chat.example.com"
+            assert h_opt_wl.get("vary") == "Origin"
+            assert "access-control-allow-credentials" not in h_opt_wl
+
+            st_mod_wl, h_mod_wl, _ = await asyncio.to_thread(_do_models)
+            assert st_mod_wl == 200
+            assert h_mod_wl.get("access-control-allow-origin") == "https://chat.example.com"
+            assert h_mod_wl.get("vary") == "Origin"
+            assert "access-control-allow-credentials" not in h_mod_wl
+
+            st_sse_wl, h_sse_wl, body_sse_wl = await asyncio.to_thread(_do_slow_stream)
+            assert st_sse_wl == 200
+            assert h_sse_wl.get("access-control-allow-origin") == "https://chat.example.com"
+            assert h_sse_wl.get("vary") == "Origin"
+            assert "access-control-allow-credentials" not in h_sse_wl
+            assert ": keepalive" in body_sse_wl and "data: [DONE]" in body_sse_wl
+            monkeypatch.delenv("SSE_ALLOWED_ORIGINS", raising=False)
         finally:
             gw_srv.close()
             await gw_srv.wait_closed()
@@ -1069,18 +1101,24 @@ def test_hardened_safety_and_lightweight_boundaries(
         assert cb._ctl_available() is True
         assert cb._ctl_cmd_prefix() == [cb.sys.executable, "--internal-ctl"]
 
-    # 8f. collect_local_py_deps 自动携带 colab_remote_common.py 与 colab_pet_bridge_node.py（含来自 Temp 临时包装文件）
+    # 8f. collect_local_py_deps 自动携带独立 JS、SSE 网关与桥接节点（含来自 Temp 临时包装文件）
     deps_anima = colab_client.collect_local_py_deps(PKG_DIR / "colab_bootstrap_anima.py")
-    assert "colab_remote_common.py" in deps_anima and "colab_pet_bridge_node.py" in deps_anima
+    assert {
+        "colab_remote_common.py",
+        "colab_pet_bridge_node.py",
+        "colab_pet_direct_canvas.js",
+    }.issubset(deps_anima.keys())
+    deps_qwen = colab_client.collect_local_py_deps(PKG_DIR / "colab_bootstrap_qwen_llm.py")
+    assert "colab_sse_gateway.py" in deps_qwen
     temp_task = tmp / "remote_wrap.py"
     temp_task.write_text("from colab_remote_common import start_cloudflared_tunnel\n", encoding="utf-8")
     deps_tmp = colab_client.collect_local_py_deps(temp_task)
-    assert "colab_remote_common.py" in deps_tmp and "colab_pet_bridge_node.py" in deps_tmp
+    assert {"colab_remote_common.py", "colab_pet_bridge_node.py", "colab_pet_direct_canvas.js"}.issubset(deps_tmp.keys())
 
     # 8g. 模拟 REMOTE_RUNNER_TEMPLATE（无 __file__、依赖落于临时 /content 目录）执行全部 4 套自举脚本顶层代码不报 NameError
     remote_dir = tmp / "fake_content"
     remote_dir.mkdir(parents=True, exist_ok=True)
-    for dep_name, dep_txt in deps_anima.items():
+    for dep_name, dep_txt in deps_qwen.items():
         (remote_dir / dep_name).write_text(dep_txt, encoding="utf-8")
     canonical_bridge = (PKG_DIR / "colab_pet_bridge_node.py").read_text(encoding="utf-8").strip()
     old_cwd = Path.cwd()
@@ -1125,4 +1163,856 @@ def test_hardened_safety_and_lightweight_boundaries(
     assert cap_url == "https://my-comfy.customdom.example"
     assert be_custom._deploy_captured_llm_tunnel == "https://my-llm.customdom.example"
 
+    # 8i. 验证 PetBridgeApi 全部前端暴露方法的 pywebview 参数签名反射与表驱动透传零污染
+    import inspect
+    import re as _re
+    import pet_app as pa
 
+    ui_src = (PKG_DIR / "colab_pet" / "ui.html").read_text(encoding="utf-8")
+    ui_methods = sorted(set(_re.findall(r"window\.pywebview\.api\.([a-zA-Z0-9_]+)", ui_src)))
+    bridge = pa.PetBridgeApi(be_custom, threading.Event())
+    for m_name in ui_methods:
+        attr = getattr(bridge, m_name, None)
+        assert callable(attr) and inspect.ismethod(attr), f"UI 调用的方法缺失或非绑定方法: {m_name}"
+        arg_names = inspect.getfullargspec(attr).args
+        assert arg_names[0] == "self" and not any(a.startswith("_") for a in arg_names[1:]), (
+            f"pywebview 反射参数受内部参数污染: {m_name} -> {arg_names}"
+        )
+    assert inspect.getfullargspec(bridge.get_state).args == ["self"]
+    assert inspect.getfullargspec(bridge.start_instance).args == ["self", "config"]
+    assert inspect.getfullargspec(bridge.switch_colab_account).args == ["self", "acct_id"]
+    assert inspect.getfullargspec(bridge.stop_session_instance).args == ["self", "session"]
+
+    # 8j. 验证含空格路径在资源管理器精确定位时 `/select,` 绝不被包进引号内部（避免误打开“文档”目录）
+    spaced_dir = tmp / "Space Folder Test" / "outputs"
+    spaced_dir.mkdir(parents=True, exist_ok=True)
+    spaced_png = spaced_dir / "demo_00001_20261117-050000.png"
+    spaced_png.write_bytes(b"PNG")
+    cmdline = cb._build_explorer_select_cmdline(spaced_png)
+    assert cmdline.startswith('explorer.exe /select,"') and cmdline.endswith('"')
+    assert str(spaced_png.resolve()) in cmdline
+    revealed: list[Path] = []
+    with be_custom._comfy_lock:
+        be_custom._last_downloaded_files = [spaced_png]
+    with patch.object(cb, "_reveal_path_in_explorer", side_effect=lambda p: revealed.append(Path(p))):
+        pull_res = be_custom.pull_or_open_latest_outputs()
+    assert pull_res["ok"] is True and revealed == [spaced_png.resolve()]
+
+
+# =========================================================================
+# 9. Drama 3 伴随工作流收集加载、安全解压与 Qwen LLM 密钥文件防命令行泄露测试
+# =========================================================================
+
+
+def test_drama3_companion_deps_qwen_key_file_and_safe_extract(
+    isolated_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """验证 Drama 3 工作流按伴随资产收集与部署、公共安全解压及 llama-server --api-key-file 适配。"""
+    import io as _io
+    import tarfile
+
+    import colab_bootstrap_drama3 as boot_d3
+    import colab_bootstrap_qwen_llm as boot_llm
+    import colab_remote_common as rcom
+    from colab_core import colab_client
+
+    tmp = isolated_env.tmp
+
+    # 9a. collect_local_py_deps：Drama 3 自动携带两份 JSON，其他生态与敏感 JSON 绝不误收集
+    deps_d3 = colab_client.collect_local_py_deps(PKG_DIR / "colab_bootstrap_drama3.py")
+    assert {
+        "colab_remote_common.py",
+        "colab_pet_bridge_node.py",
+        "colab_pet_direct_canvas.js",
+        "drama3_voice_clone.json",
+        "drama3_text_to_speech.json",
+    }.issubset(deps_d3.keys())
+    deps_anima = colab_client.collect_local_py_deps(PKG_DIR / "colab_bootstrap_anima.py")
+    assert "drama3_voice_clone.json" not in deps_anima and "drama3_text_to_speech.json" not in deps_anima
+
+    evil_script = tmp / "evil_ref.py"
+    evil_script.write_text('a = ".cf_tunnel_secret.json"\nb = "pet_state.json"\n', encoding="utf-8")
+    deps_evil = colab_client.collect_local_py_deps(evil_script)
+    assert ".cf_tunnel_secret.json" not in deps_evil and "pet_state.json" not in deps_evil
+
+    # 9b. load_companion_text 兼容本地 workflows/drama3/ 与远端扁平 /content/ 目录，且每次返回独立解析对象
+    local_clone_txt = rcom.load_companion_text("drama3_voice_clone.json", PKG_DIR)
+    assert local_clone_txt and "Drama3Loader" in local_clone_txt
+
+    fake_comfy = tmp / "ComfyUI"
+    fake_out = tmp / "comfy_out"
+    (fake_comfy / "input").mkdir(parents=True, exist_ok=True)
+    (fake_comfy / "input" / "custom_ref_01.wav").write_bytes(b"RIFF")
+    monkeypatch.setattr(boot_d3, "COMFY_DIR", fake_comfy)
+    monkeypatch.setattr(boot_d3, "COMFY_OUT", fake_out)
+    monkeypatch.setattr(boot_d3, "RCLONE_CONF", tmp / "missing_rclone.conf")
+    boot_d3.install_workflows_and_refs()
+
+    wf_dir = fake_comfy / "user" / "default" / "workflows"
+    clone_deployed = json.loads((wf_dir / "drama3_voice_clone.json").read_text(encoding="utf-8"))
+    tts_deployed = json.loads((wf_dir / "drama3_text_to_speech.json").read_text(encoding="utf-8"))
+    ref_node = next(n for n in clone_deployed["nodes"] if n.get("type") == "Drama3LoadReferenceAudio")
+    assert ref_node["widgets_values"][0] == "custom_ref_01.wav"
+    assert "nodes" in tts_deployed
+
+    # 验证远端无 workflows/drama3 子目录时从同级平铺目录读取成功，且二次部署回默认音频不受上次修改污染
+    flat_dir = tmp / "flat_content"
+    flat_dir.mkdir(parents=True, exist_ok=True)
+    for jname in ("drama3_voice_clone.json", "drama3_text_to_speech.json"):
+        (flat_dir / jname).write_text(deps_d3[jname], encoding="utf-8")
+    (fake_comfy / "input" / "custom_ref_01.wav").unlink()
+    monkeypatch.setattr(boot_d3, "_BRIDGE_BASE_DIR", flat_dir)
+    boot_d3.install_workflows_and_refs()
+    clone_default = json.loads((wf_dir / "drama3_voice_clone.json").read_text(encoding="utf-8"))
+    ref_node_2 = next(n for n in clone_default["nodes"] if n.get("type") == "Drama3LoadReferenceAudio")
+    assert ref_node_2["widgets_values"][0].startswith("main_01_")
+
+    # 9c. safe_extract_tar_gz 支持正常文件与相对符号链接，拦截路径穿越与越界符号链接
+    good_tar = tmp / "good.tar.gz"
+    with tarfile.open(good_tar, "w:gz") as tf:
+        payload = b"bin-data"
+        ti = tarfile.TarInfo("bin/llama-server")
+        ti.size = len(payload)
+        ti.mode = 0o755
+        tf.addfile(ti, _io.BytesIO(payload))
+    good_dst = tmp / "extract_ok"
+    rcom.safe_extract_tar_gz(good_tar, good_dst)
+    assert (good_dst / "bin" / "llama-server").read_bytes() == b"bin-data"
+
+    bad_tar = tmp / "traversal.tar.gz"
+    with tarfile.open(bad_tar, "w:gz") as tf:
+        ti_bad = tarfile.TarInfo("../escape.txt")
+        ti_bad.size = 3
+        tf.addfile(ti_bad, _io.BytesIO(b"bad"))
+    with pytest.raises(RuntimeError, match="越界"):
+        rcom.safe_extract_tar_gz(bad_tar, tmp / "extract_bad")
+
+    bad_sym_tar = tmp / "bad_sym.tar.gz"
+    with tarfile.open(bad_sym_tar, "w:gz") as tf:
+        ti_sym = tarfile.TarInfo("bin/libx.so")
+        ti_sym.type = tarfile.SYMTYPE
+        ti_sym.linkname = "../../etc/passwd"
+        tf.addfile(ti_sym)
+    with pytest.raises(RuntimeError, match="越界"):
+        rcom.safe_extract_tar_gz(bad_sym_tar, tmp / "extract_bad_sym")
+
+    # 9d. build_auth_and_args：0600 落盘密钥文件 + --help 探测 --api-key-file 与回退
+    key_file = tmp / "llama_api_key"
+    meta_file = tmp / "service_meta.json"
+    fake_bin = tmp / "llama-server"
+    fake_bin.write_text("", encoding="utf-8")
+    fake_shard = tmp / "model.gguf"
+    fake_shard.write_bytes(b"GGUF")
+    monkeypatch.setattr(boot_llm, "LLAMA_API_KEY_FILE", key_file)
+    monkeypatch.setattr(boot_llm, "SERVICE_META_FILE", meta_file)
+    monkeypatch.setattr(boot_llm, "LLAMA_DIR", tmp)
+    monkeypatch.setattr(boot_llm, "RAW_API_KEY", "sk-pet-cmdline-guard-123456")
+
+    with patch.object(
+        boot_llm.subprocess,
+        "run",
+        return_value=subprocess.CompletedProcess([str(fake_bin), "--help"], 0, stdout="--api-key-file FNAME\n", stderr=""),
+    ):
+        api_key_1, cmd_1 = boot_llm.build_auth_and_args(fake_bin, fake_shard, None, "UD-Q4_K_XL", 96.0)
+    assert api_key_1 == "sk-pet-cmdline-guard-123456"
+    assert key_file.read_text(encoding="utf-8").strip() == api_key_1
+    assert "--api-key-file" in cmd_1 and str(key_file) in cmd_1
+    assert "--api-key" not in cmd_1 and api_key_1 not in cmd_1
+
+    with patch.object(
+        boot_llm.subprocess,
+        "run",
+        return_value=subprocess.CompletedProcess([str(fake_bin), "--help"], 0, stdout="--api-key KEY\n", stderr=""),
+    ):
+        api_key_2, cmd_2 = boot_llm.build_auth_and_args(fake_bin, fake_shard, None, "UD-Q4_K_XL", 96.0)
+    assert "--api-key" in cmd_2 and api_key_2 in cmd_2
+    assert "--api-key-file" not in cmd_2
+
+
+# =========================================================================
+# 10. 零 Pillow 运行态/打包、PNG 元数据解析、rclone 合并、损坏状态备份、路径注入拦截与脱敏回归
+# =========================================================================
+
+
+def test_lightweight_zero_pil_and_security_hardening_regressions(
+    isolated_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """覆盖零 PIL 导入、PNG tEXt/zTXt/iTXt 解析、rclone 节保留、损坏状态备份、prefs 路径拦截与脱敏增强。"""
+    import ast
+    import struct
+    import zlib
+
+    from colab_core import accounts as core_accounts
+    from colab_core import file_sync as core_file_sync
+
+    tmp = isolated_env.tmp
+
+    # 10a. 运行态与打包模块零 PIL 导入，且纯标准库 extract_png_comfy_workflow 兼容 tEXt / zTXt / iTXt
+    for rel_path in ("colab_core/file_sync.py", "colab_pet/pet_app.py", "build_windows_package.py"):
+        tree = ast.parse((PKG_DIR / rel_path).read_text(encoding="utf-8"), filename=rel_path)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    assert alias.name != "PIL" and not alias.name.startswith("PIL."), f"{rel_path} 禁止导入 PIL"
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                assert node.module != "PIL" and not node.module.startswith("PIL."), f"{rel_path} 禁止从 PIL 导入"
+
+    def _png_chunk(ctype: bytes, data: bytes) -> bytes:
+        crc = zlib.crc32(ctype + data) & 0xFFFFFFFF
+        return struct.pack(">I", len(data)) + ctype + data + struct.pack(">I", crc)
+
+    def _build_png(chunks: list[tuple[bytes, bytes]]) -> bytes:
+        ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0)
+        idat = zlib.compress(b"\x00\x00\x00\x00\x00")
+        parts = [b"\x89PNG\r\n\x1a\n", _png_chunk(b"IHDR", ihdr)]
+        parts.extend(_png_chunk(ct, dt) for ct, dt in chunks)
+        parts.extend([_png_chunk(b"IDAT", idat), _png_chunk(b"IEND", b"")])
+        return b"".join(parts)
+
+    wf_json = json.dumps({"nodes": [{"id": 1, "type": "KSampler"}], "links": []}, ensure_ascii=False)
+    wf_zh_json = json.dumps({"nodes": [{"id": 2, "title": "中文节点"}], "links": []}, ensure_ascii=False)
+    prompt_json = json.dumps({"1": {"class_type": "KSampler", "inputs": {"seed": 7}}}, ensure_ascii=False)
+
+    png_text = tmp / "meta_text.png"
+    png_text.write_bytes(_build_png([(b"tEXt", b"workflow\x00" + wf_json.encode("latin-1"))]))
+    assert core_file_sync.extract_png_comfy_workflow(png_text) == wf_json
+
+    png_ztxt = tmp / "meta_ztxt.png"
+    png_ztxt.write_bytes(_build_png([(b"zTXt", b"prompt\x00\x00" + zlib.compress(prompt_json.encode("utf-8")))]))
+    assert core_file_sync.extract_png_comfy_workflow(png_ztxt) == prompt_json
+
+    png_itxt_comp = tmp / "meta_itxt_comp.png"
+    png_itxt_comp.write_bytes(
+        _build_png([(b"iTXt", b"workflow\x00\x01\x00\x00\x00" + zlib.compress(wf_zh_json.encode("utf-8")))])
+    )
+    assert core_file_sync.extract_png_comfy_workflow(png_itxt_comp) == wf_zh_json
+
+    png_itxt_raw = tmp / "meta_itxt_raw.png"
+    png_itxt_raw.write_bytes(
+        _build_png([(b"iTXt", b"prompt\x00\x00\x00\x00\x00" + prompt_json.encode("utf-8"))])
+    )
+    assert core_file_sync.extract_png_comfy_workflow(png_itxt_raw) == prompt_json
+
+    not_png = tmp / "bad.png"
+    not_png.write_bytes(b"NOT_A_PNG_HEADER")
+    assert core_file_sync.extract_png_comfy_workflow(not_png) is None
+
+    # 10b. validate_and_import_rclone_conf 合并导入时保留原有 [other_remote] 并生成 .conf.bak
+    appdata_dir = tmp / "appdata"
+    dst_conf = appdata_dir / "rclone" / "rclone.conf"
+    dst_conf.parent.mkdir(parents=True, exist_ok=True)
+    orig_conf_txt = (
+        "[other_remote]\n"
+        "type = s3\n"
+        "provider = AWS\n\n"
+        "[gdrive_save]\n"
+        "type = drive\n"
+        'token = {"access_token":"old_tok"}\n'
+    )
+    dst_conf.write_text(orig_conf_txt, encoding="utf-8")
+    src_conf = tmp / "import_rclone.conf"
+    src_conf.write_text(
+        "[my_personal_drive]\n"
+        "type = drive\n"
+        "scope = drive\n"
+        'token = {"access_token":"new_tok"}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("APPDATA", str(appdata_dir))
+    ok_imp, out_conf, err_imp = core_accounts.validate_and_import_rclone_conf(src_conf, package_dir=tmp)
+    assert ok_imp is True, err_imp
+    assert out_conf == dst_conf
+    bak_conf = dst_conf.with_suffix(".conf.bak")
+    assert bak_conf.is_file() and bak_conf.read_text(encoding="utf-8") == orig_conf_txt
+    merged_txt = dst_conf.read_text(encoding="utf-8")
+    assert "[other_remote]" in merged_txt and "provider = AWS" in merged_txt
+    assert "[gdrive_save]" in merged_txt and "new_tok" in merged_txt and "old_tok" not in merged_txt
+
+    # 10c. load_pet_state_dict 遇到损坏 JSON 时自动生成 .corrupt-* 备份文件并写告警日志
+    bad_state_path = tmp / "pet_state_corrupt.json"
+    bad_state_path.write_text("{corrupt json !!!", encoding="utf-8")
+    loaded_def = core_runtime.load_pet_state_dict(
+        bad_state_path,
+        is_allowed_tunnel_fn=lambda _u: True,
+        sanitize_label_fn=lambda lbl, fb: lbl or fb,
+    )
+    assert isinstance(loaded_def, dict) and "prefs" in loaded_def
+    corrupt_backups = list(tmp.glob("pet_state_corrupt.corrupt-*.json"))
+    assert corrupt_backups and corrupt_backups[0].read_text(encoding="utf-8") == "{corrupt json !!!"
+    assert isolated_env.diag_log.is_file()
+
+    # 10d. update_prefs 严禁前端通过 save_prefs/update_prefs 注入可执行工具路径
+    tools = _prepare_fake_tools(tmp)
+    monkeypatch.setattr(cb, "COLAB_EXE_DEFAULT", tools.colab_exe)
+    monkeypatch.setattr(cb, "COLAB_PY", tools.colab_py)
+    monkeypatch.setattr(cb, "RCLONE_EXE", tools.rclone_exe)
+    monkeypatch.setattr(cb, "RCLONE_CONF", tools.rclone_conf)
+    sec_backend = cb.ColabPetBackend(
+        state_path=tmp / "prefs_guard_state.json",
+        download_root=tmp / "prefs_guard_dl",
+        cf_config_path=isolated_env.cf_file,
+    )
+    orig_tool_prefs = {
+        k: sec_backend.state["prefs"][k]
+        for k in ("colab_exe_path", "colab_py_path", "rclone_exe_path", "rclone_conf_path")
+    }
+    updated_prefs = sec_backend.update_prefs(
+        {
+            "colab_exe_path": "C:/evil/colab.exe",
+            "colab_py_path": "C:/evil/python.exe",
+            "rclone_exe_path": "C:/evil/rclone.exe",
+            "rclone_conf_path": "C:/evil/rclone.conf",
+            "on_top": False,
+        }
+    )
+    assert updated_prefs["on_top"] is False
+    for path_k, orig_v in orig_tool_prefs.items():
+        assert updated_prefs[path_k] == orig_v
+        assert sec_backend.state["prefs"][path_k] == orig_v
+
+    # 10e. redact_secrets 覆盖 JSON/dict Authorization Bearer、GOCSPX-... 与 URL ?api_key=/token=/access_token=
+    dirty_samples = (
+        '{"Authorization": "Bearer json_bearer_secret_987654"}',
+        "{'Authorization': 'Bearer py_bearer_secret_123456', 'access_token': 'py_acc_tok_secret_xyz', 'client_secret': 'py_cli_sec_secret_abc'}",
+        "oauth_client_secret=GOCSPX-AbCdEfGhIjKlMnOpQrStUvWx1234",
+        "https://api.example.com/v1/chat?foo=1&api_key=url_api_key_secret_999&bar=2",
+        "https://api.example.com/ws?token=url_tok_secret_888#sec",
+        "https://api.example.com/cb?access_token=url_acc_secret_777",
+    )
+    secret_fragments = (
+        "json_bearer_secret_987654",
+        "py_bearer_secret_123456",
+        "py_acc_tok_secret_xyz",
+        "py_cli_sec_secret_abc",
+        "GOCSPX-AbCdEfGhIjKlMnOpQrStUvWx1234",
+        "url_api_key_secret_999",
+        "url_tok_secret_888",
+        "url_acc_secret_777",
+    )
+    redacted_all = csec.redact_secrets("\n".join(dirty_samples))
+    for frag in secret_fragments:
+        assert frag not in redacted_all, f"redact_secrets 漏脱敏: {frag} -> {redacted_all}"
+    assert "foo=1" in redacted_all and "bar=2" in redacted_all
+
+
+# =========================================================================
+# 11. Cloudflare Token 自动剥离与校验、错误摘要防掩盖、凭据防污染与 cmd_exec 护栏回归
+# =========================================================================
+
+
+def test_cf_token_extract_preflight_guard_and_deploy_error_priority(
+    isolated_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dummy_cf_tok = "eyJhIjoiZHVtbXkiLCJ0IjoiZHVtbXkiLCJzIjoiZHVtbXkifQ=="
+    assert csec.extract_cf_tunnel_token(f"cloudflared.exe service install {dummy_cf_tok}") == dummy_cf_tok
+    assert csec.extract_cf_tunnel_token(f'cloudflared tunnel run --token="{dummy_cf_tok}"') == dummy_cf_tok
+    assert csec.is_valid_cf_tunnel_token(dummy_cf_tok) is True
+    assert csec.is_valid_cf_tunnel_token("eyJFake.Payload.Sig") is False
+    assert csec.is_valid_cf_tunnel_token("not-base64!") is False
+    assert csec.is_valid_cf_tunnel_token("eyJmb28iOiJiYXIifQ==") is False
+
+    # 保存时自动剥离前缀命令并入库
+    csec.save_cf_tunnel_settings(
+        isolated_env.cf_file,
+        comfy_url="https://comfy.safe-test.example",
+        tunnel_token=f"cloudflared.exe service install {dummy_cf_tok}",
+    )
+    loaded_cf = csec.load_cf_tunnel_settings(isolated_env.cf_file, include_secrets=True)
+    assert loaded_cf["tunnel_token"] == dummy_cf_tok
+
+    # Preflight 启动前阻断假 JWT Token，放行合法连接器 Token
+    tools = _prepare_fake_tools(isolated_env.tmp)
+    tp = core_preflight.ToolPaths(
+        colab_exe=tools.colab_exe,
+        colab_py=tools.colab_py,
+        rclone_exe=tools.rclone_exe,
+        rclone_conf=tools.rclone_conf,
+    )
+    ok_rep = core_preflight.run_preflight_checks(
+        mode="fast",
+        profiles=["anima"],
+        gpu="G4",
+        tool_paths=tp,
+        download_dir=isolated_env.tmp,
+        cf_config_path=isolated_env.cf_file,
+        pkg_dir=PKG_DIR,
+    )
+    assert ok_rep.ok is True, ok_rep.format_text()
+
+    csec.save_cf_tunnel_settings(
+        isolated_env.cf_file,
+        comfy_url="https://comfy.safe-test.example",
+        tunnel_token="eyJFake.Payload.Sig",
+    )
+    bad_tok_rep = core_preflight.run_preflight_checks(
+        mode="fast",
+        profiles=["anima"],
+        gpu="G4",
+        tool_paths=tp,
+        download_dir=isolated_env.tmp,
+        cf_config_path=isolated_env.cf_file,
+        pkg_dir=PKG_DIR,
+    )
+    assert bad_tok_rep.ok is False and "格式无效" in bad_tok_rep.first_blocking_message()
+
+    # deploy 失败归因不被尾部 "[错误] 子进程退出码 1 (...)" 掩盖
+    cf_fail = core_deploy.classify_deploy_failure(
+        [
+            "2026-11-18 ERR Provided Tunnel token is not valid.",
+            "RuntimeError: cloudflared 命名隧道异常退出",
+            "[错误] 子进程退出码 1 (C:\\Temp\\colab_runner.py)",
+        ],
+        "G4",
+        pre_assignments=0,
+        profile="Anima + MiniMax",
+        recreate=True,
+    )
+    assert cf_fail["kind"] == "error" and "Token 无效" in cf_fail["message"], cf_fail
+
+    gen_fail = core_deploy.classify_deploy_failure(
+        [
+            "RuntimeError: 远端下载权重 SHA256 校验失败",
+            "[错误] 子进程退出码 1 (C:\\Temp\\colab_runner.py)",
+        ],
+        "G4",
+        pre_assignments=0,
+        profile="Anima",
+        recreate=False,
+    )
+    assert "SHA256 校验失败" in gen_fail["reason"], gen_fail
+    assert core_runtime._pick_meaningful_tail_error(["[错误] 子进程退出码 2 (colab.exe status)"]) == "[错误] 子进程退出码 2 (colab.exe status)"
+
+    # pytest 未设沙箱时强拦截宿主机真实 Windows 凭据写入与删除
+    if os.name == "nt":
+        monkeypatch.delenv("COLAB_PET_MOCK_VAULT_PATH", raising=False)
+        with pytest.raises(RuntimeError, match="COLAB_PET_MOCK_VAULT_PATH"):
+            csec.VaultStore().set_secret("secret:test_guard", "should_block")
+        with pytest.raises(RuntimeError, match="COLAB_PET_MOCK_VAULT_PATH"):
+            csec.VaultStore().delete_secret("secret:test_guard")
+
+    # colab_service_meta 窥探在 agent_tools 与 colab_ctl.cmd_exec 双层拦截
+    assert core_agent_tools.check_remote_code_safety("cat /root/colab_service_meta.json", "bash")[0] is False
+    monkeypatch.setattr(
+        colab_ctl,
+        "_exec_remote_py",
+        lambda *_a, **_kw: (_ for _ in ()).throw(AssertionError("cmd_exec 拦截失败，意外触达远端执行")),
+    )
+    with pytest.raises(ValueError, match="安全护栏拦截"):
+        colab_ctl.cmd_exec(
+            argparse.Namespace(
+                session="comfy",
+                mode="bash",
+                code="cat /root/colab_service_meta.json",
+                timeout=30,
+                account="",
+            )
+        )
+
+
+# =========================================================================
+# 12. 锁文件安装、PyInstaller 冻结包目录/控制台对齐与深检宿主依赖核验回归
+# =========================================================================
+
+
+def test_packaging_lockfile_pyinstaller_and_preflight_alignment(
+    isolated_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """校验便携包锁文件安装、PyInstaller 批处理/spec 对齐、冻结路径解析及 deep preflight 宿主依赖核验。"""
+    import ast
+    import builtins
+    import importlib.util
+    import shutil
+
+    import pet_app as pa
+
+    tmp = isolated_env.tmp
+
+    # 12a. 便携包安装批处理必须按 requirements-lock.txt 安装，且整包通过清单校验
+    portable_dist = tmp / "portable_dist"
+    bundle_dir, _ = win_pkg.build_portable_package(PKG_DIR, portable_dist)
+    setup_bat = (bundle_dir / "一键环境自检与安装.bat").read_text(encoding="utf-8")
+    assert "python -m pip install -r requirements-lock.txt" in setup_bat
+    assert "requirements-lock.txt" in setup_bat
+    assert "-r requirements.txt" not in setup_bat
+    assert core_health.verify_manifest_and_assets(bundle_dir)["ok"] is True
+
+    # 12b. PyInstaller 辅助批处理必须使用 start "" /b /wait 调用 --doctor 与 --export-diag
+    pyi_dir = tmp / "pyi_bundle"
+    pyi_dir.mkdir(parents=True, exist_ok=True)
+    stale_setup = pyi_dir / "一键环境自检与安装.bat"
+    stale_setup.write_text("legacy", encoding="utf-8")
+    win_pkg.write_helper_scripts(pyi_dir, mode="pyinstaller")
+    assert not stale_setup.exists()
+    pyi_doctor = (pyi_dir / "一键环境自检.bat").read_text(encoding="utf-8")
+    pyi_diag = (pyi_dir / "导出排障诊断包.bat").read_text(encoding="utf-8")
+    assert 'start "" /b /wait "%~dp0Colab桌宠.exe" --doctor' in pyi_doctor
+    assert 'start "" /b /wait "%~dp0Colab桌宠.exe" --export-diag' in pyi_diag
+
+    # 12c. colab_pet.spec datas 必须覆盖 verify_manifest_and_assets 要求的全部顶层伴随文件
+    spec_src = (PKG_DIR / "colab_pet.spec").read_text(encoding="utf-8")
+    spec_tree = ast.parse(spec_src, filename="colab_pet.spec")
+    spec_top_files: set[str] = set()
+    for node in spec_tree.body:
+        if (
+            isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.List)
+            and any(isinstance(t, ast.Name) and t.id == "datas" for t in node.targets)
+        ):
+            for elt in node.value.elts:
+                if isinstance(elt, ast.Tuple) and len(elt.elts) == 2:
+                    src_expr, dst_expr = elt.elts
+                    if (
+                        isinstance(dst_expr, ast.Constant)
+                        and dst_expr.value == "."
+                        and isinstance(src_expr, ast.Call)
+                        and isinstance(src_expr.func, ast.Name)
+                        and src_expr.func.id == "str"
+                        and len(src_expr.args) == 1
+                    ):
+                        bin_op = src_expr.args[0]
+                        if (
+                            isinstance(bin_op, ast.BinOp)
+                            and isinstance(bin_op.op, ast.Div)
+                            and isinstance(bin_op.right, ast.Constant)
+                            and isinstance(bin_op.right.value, str)
+                        ):
+                            spec_top_files.add(bin_op.right.value)
+
+    manifest = core_health.load_stack_manifest(PKG_DIR / "stack_manifest.json")
+    expected_top_files = {
+        "stack_manifest.json",
+        str(manifest["host_baseline"]["requirements_file"]),
+        str(manifest["host_baseline"]["requirements_lock_file"]),
+        "colab_ctl.py",
+        "colab_security.py",
+        "colab_pet_bridge_node.py",
+        "colab_remote_common.py",
+        "colab_cli_bridge.py",
+        "colab_sse_gateway.py",
+        "colab_pet_direct_canvas.js",
+    }
+    for prof_spec in manifest["profiles"].values():
+        expected_top_files.add(str(prof_spec["bootstrap_script"]))
+        expected_top_files.add(str(prof_spec["smoke_script"]))
+    assert expected_top_files.issubset(spec_top_files), (
+        f"colab_pet.spec datas 缺失顶层伴随文件: {sorted(expected_top_files - spec_top_files)}"
+    )
+
+    fake_meipass = tmp / "fake_internal"
+    fake_meipass.mkdir(parents=True, exist_ok=True)
+    for rel_name in spec_top_files:
+        shutil.copy2(PKG_DIR / rel_name, fake_meipass / rel_name)
+    (fake_meipass / "colab_pet").mkdir(parents=True, exist_ok=True)
+    (fake_meipass / "colab_pet" / "ui.html").write_text("<html></html>", encoding="utf-8")
+    assert core_health.verify_manifest_and_assets(fake_meipass)["ok"] is True
+
+    # 核心伴随组件缺失时 verify_manifest_and_assets 必须报 fail
+    for critical_comp in ("colab_sse_gateway.py", "colab_pet_direct_canvas.js", "colab_security.py"):
+        comp_path = fake_meipass / critical_comp
+        comp_path.unlink()
+        bad_verify = core_health.verify_manifest_and_assets(fake_meipass)
+        assert bad_verify["ok"] is False
+        assert any(critical_comp in err for err in bad_verify["errors"])
+        shutil.copy2(PKG_DIR / critical_comp, comp_path)
+
+    # 12d. run_preflight_checks(mode="deep") 宿主桌面运行依赖与冻结态核验
+    tools = _prepare_fake_tools(tmp)
+    tp = core_preflight.ToolPaths(
+        colab_exe=tools.colab_exe,
+        colab_py=tools.colab_py,
+        rclone_exe=tools.rclone_exe,
+        rclone_conf=tools.rclone_conf,
+    )
+
+    def _fake_deep_run(cmd: list[str], **_kw: Any) -> subprocess.CompletedProcess[str]:
+        joined = " ".join(str(x) for x in cmd)
+        if "google-colab-cli" in joined:
+            return subprocess.CompletedProcess(cmd, 0, stdout="0.8.0\n", stderr="")
+        if "version" in joined:
+            return subprocess.CompletedProcess(cmd, 0, stdout="rclone v1.76.0\n", stderr="")
+        if "_get_token_from_keyring" in joined:
+            return subprocess.CompletedProcess(cmd, 0, stdout='{"has_token": true}\n', stderr="")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    deep_ok = core_preflight.run_preflight_checks(
+        mode="deep",
+        profiles=["anima"],
+        gpu="L4",
+        tool_paths=tp,
+        download_dir=tmp,
+        cf_config_path=isolated_env.cf_file,
+        pkg_dir=PKG_DIR,
+        gdrive_free_gb=20.0,
+        run_fn=_fake_deep_run,
+    )
+    dep_items_ok = [it for it in deep_ok.items if it.name == "桌面运行依赖"]
+    assert len(dep_items_ok) == 1
+    assert dep_items_ok[0].status == "ok" and dep_items_ok[0].summary == "Python 桌面运行依赖已就绪"
+
+    orig_find_spec = importlib.util.find_spec
+
+    def _missing_find_spec(name: str, package: str | None = None):
+        if name in ("webview", "clr"):
+            return None
+        return orig_find_spec(name, package)
+
+    with patch.object(importlib.util, "find_spec", side_effect=_missing_find_spec):
+        deep_missing = core_preflight.run_preflight_checks(
+            mode="deep",
+            profiles=["anima"],
+            gpu="L4",
+            tool_paths=tp,
+            download_dir=tmp,
+            cf_config_path=isolated_env.cf_file,
+            pkg_dir=PKG_DIR,
+            gdrive_free_gb=20.0,
+            run_fn=_fake_deep_run,
+        )
+    assert deep_missing.ok is False
+    dep_items_fail = [it for it in deep_missing.items if it.name == "桌面运行依赖"]
+    assert len(dep_items_fail) == 1
+    assert dep_items_fail[0].status == "fail"
+    assert "requirements-lock.txt" in dep_items_fail[0].fix_hint
+    assert "webview" in dep_items_fail[0].summary and "clr" in dep_items_fail[0].summary
+
+    with patch.object(core_health.sys, "frozen", True, create=True):
+        deep_frozen = core_preflight.run_preflight_checks(
+            mode="deep",
+            profiles=["anima"],
+            gpu="L4",
+            tool_paths=tp,
+            download_dir=tmp,
+            cf_config_path=isolated_env.cf_file,
+            pkg_dir=PKG_DIR,
+            gdrive_free_gb=20.0,
+            run_fn=_fake_deep_run,
+        )
+    dep_items_frozen = [it for it in deep_frozen.items if it.name == "桌面运行依赖"]
+    assert len(dep_items_frozen) == 1
+    assert dep_items_frozen[0].status == "ok" and dep_items_frozen[0].summary == "已内置独立运行时"
+
+    # 12e. 冻结态路径解析（含 _MEIPASS 与仅 mock sys.frozen 兼容）及 _ensure_std_streams 父控制台挂载
+    fake_exe_dir = tmp / "frozen_app"
+    fake_exe_dir.mkdir(parents=True, exist_ok=True)
+    fake_exe = fake_exe_dir / "Colab桌宠.exe"
+    fake_exe.write_bytes(b"")
+
+    monkeypatch.delenv("COLAB_PET_CF_CONFIG_PATH", raising=False)
+    with (
+        patch.object(cb.sys, "frozen", True, create=True),
+        patch.object(cb.sys, "_MEIPASS", str(fake_meipass), create=True),
+        patch.object(cb.sys, "executable", str(fake_exe)),
+    ):
+        pet_d, pkg_d, _ws_d, dl_d, ctl_d, state_d, cf_d = cb._resolve_backend_paths()
+        assert pkg_d == fake_meipass.resolve()
+        assert pet_d == (fake_meipass / "colab_pet").resolve()
+        assert ctl_d == fake_meipass.resolve() / "colab_ctl.py"
+        assert state_d == fake_exe_dir.resolve() / "pet_state.json"
+        assert cf_d == fake_exe_dir.resolve() / ".cf_tunnel_secret.json"
+        assert dl_d == fake_exe_dir.resolve() / "_downloads" / "all"
+
+        be_frozen = cb.ColabPetBackend()
+        assert be_frozen.state_path == fake_exe_dir.resolve() / "pet_state.json"
+        assert be_frozen.download_root == fake_exe_dir.resolve() / "_downloads" / "all"
+        assert be_frozen._resolve_cf_config_path() == fake_exe_dir.resolve() / ".cf_tunnel_secret.json"
+
+    with patch.object(cb.sys, "frozen", True, create=True):
+        assert cb._has_frozen_meipass() is False
+        assert cb._resolve_backend_paths()[1] == cb.PACKAGE_DIR
+
+    with (
+        patch.object(core_health.sys, "frozen", True, create=True),
+        patch.object(core_health.sys, "_MEIPASS", str(fake_meipass), create=True),
+    ):
+        assert core_health._resolve_pkg_dir() == fake_meipass.resolve()
+    with patch.object(core_health.sys, "frozen", True, create=True):
+        assert core_health._resolve_pkg_dir() == PKG_DIR
+
+    with (
+        patch.object(pa.sys, "frozen", True, create=True),
+        patch.object(pa.sys, "_MEIPASS", str(fake_meipass), create=True),
+    ):
+        assert pa._resolve_pet_dir() == (fake_meipass / "colab_pet").resolve()
+
+    opened_targets: list[tuple[str, str, str | None, str | None]] = []
+    orig_open = builtins.open
+    saved_handles_len = len(pa._DEVNULL_HANDLES)
+
+    def _fake_stream_open(file: Any, mode: str = "r", *args: Any, **kwargs: Any):
+        if str(file) in ("CONOUT$", os.devnull):
+            opened_targets.append((str(file), mode, kwargs.get("encoding"), kwargs.get("errors")))
+            return io.StringIO()
+        return orig_open(file, mode, *args, **kwargs)
+
+    fake_kernel32 = SimpleNamespace(AttachConsole=lambda _pid: 1)
+    fake_windll = SimpleNamespace(kernel32=fake_kernel32)
+    with (
+        patch.object(pa.os, "name", "nt"),
+        patch.object(pa.sys, "stdout", None),
+        patch.object(pa.sys, "stderr", None),
+        patch.object(pa.sys, "argv", ["Colab桌宠.exe", "--doctor"]),
+        patch.object(pa.ctypes, "windll", fake_windll, create=True),
+        patch.object(builtins, "open", side_effect=_fake_stream_open),
+    ):
+        pa._ensure_std_streams()
+        assert isinstance(pa.sys.stdout, io.StringIO)
+        assert isinstance(pa.sys.stderr, io.StringIO)
+    assert opened_targets == [
+        ("CONOUT$", "w", "utf-8", "replace"),
+        ("CONOUT$", "w", "utf-8", "replace"),
+    ]
+
+    opened_targets.clear()
+    fake_fail_windll = SimpleNamespace(kernel32=SimpleNamespace(AttachConsole=lambda _pid: 0))
+    with (
+        patch.object(pa.os, "name", "nt"),
+        patch.object(pa.sys, "stdout", None),
+        patch.object(pa.sys, "stderr", None),
+        patch.object(pa.sys, "argv", ["Colab桌宠.exe", "--doctor"]),
+        patch.object(pa.ctypes, "windll", fake_fail_windll, create=True),
+        patch.object(builtins, "open", side_effect=_fake_stream_open),
+    ):
+        pa._ensure_std_streams()
+    assert opened_targets == [
+        (os.devnull, "w", "utf-8", "replace"),
+        (os.devnull, "w", "utf-8", "replace"),
+    ]
+
+    opened_targets.clear()
+    with (
+        patch.object(pa.os, "name", "nt"),
+        patch.object(pa.sys, "stdout", None),
+        patch.object(pa.sys, "stderr", None),
+        patch.object(pa.sys, "argv", ["Colab桌宠.exe"]),
+        patch.object(builtins, "open", side_effect=_fake_stream_open),
+    ):
+        pa._ensure_std_streams()
+    assert opened_targets == [
+        (os.devnull, "w", "utf-8", "replace"),
+        (os.devnull, "w", "utf-8", "replace"),
+    ]
+    del pa._DEVNULL_HANDLES[saved_handles_len:]
+
+
+def test_sse_gateway_pre_auth_rejects_before_reading_and_bounds_decompress(
+    isolated_env: SimpleNamespace,
+) -> None:
+    """验证 SSE 网关在鉴权前零读体直接 401 拦截，并对合法口令下的高压缩比解压载荷做 413 限额。"""
+    import gzip
+    import socket
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    upstream_reqs: list[str] = []
+
+    class _MockUpstream(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, _fmt: str, *_args: Any) -> None:
+            return
+
+        def do_GET(self) -> None:  # noqa: N802
+            upstream_reqs.append(f"GET {self.path}")
+            body = b'{"status":"ok"}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self) -> None:  # noqa: N802
+            upstream_reqs.append(f"POST {self.path}")
+            body = b'{"choices":[{"message":{"content":"ok"}}]}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    up_srv = ThreadingHTTPServer(("127.0.0.1", 0), _MockUpstream)
+    up_port = int(up_srv.server_address[1])
+    up_thread = threading.Thread(target=up_srv.serve_forever, daemon=True)
+    up_thread.start()
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        gw_port = int(s.getsockname()[1])
+
+    secret_key = "sk-sse-preauth-secret-778899"
+    key_file = isolated_env.tmp / "sse_api_key"
+    key_file.write_text(secret_key + "\n", encoding="utf-8")
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "SSE_GW_HOST": "127.0.0.1",
+            "SSE_GW_PORT": str(gw_port),
+            "SSE_UPSTREAM_HOST": "127.0.0.1",
+            "SSE_UPSTREAM_PORT": str(up_port),
+            "SSE_API_KEY_FILE": str(key_file),
+            "SSE_REQUIRE_AUTH": "1",
+            "SSE_MAX_DECOMPRESSED_BYTES": "4096",
+        }
+    )
+    gw_proc = subprocess.Popen(
+        [sys.executable, str(PKG_DIR / "colab_sse_gateway.py")],
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        # 等待网关端口就绪（/health 保持免密可测）
+        deadline = time.monotonic() + 10.0
+        ready = False
+        while time.monotonic() < deadline:
+            try:
+                with socket.create_connection(("127.0.0.1", gw_port), timeout=0.5) as probe:
+                    probe.sendall(b"GET /health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+                    if b"200 OK" in probe.recv(1024):
+                        ready = True
+                        break
+            except OSError:
+                time.sleep(0.1)
+        assert ready, "SSE 网关未及时就绪"
+        upstream_reqs.clear()
+
+        # 1) 未带口令且宣称 10MB Content-Length 但暂不发请求体：网关必须在零读体、零解压前秒回 401
+        with socket.create_connection(("127.0.0.1", gw_port), timeout=2.0) as cli:
+            cli.sendall(
+                b"POST /v1/chat/completions HTTP/1.1\r\n"
+                b"Host: 127.0.0.1\r\n"
+                b"Content-Encoding: gzip\r\n"
+                b"Content-Length: 10485760\r\n"
+                b"Connection: close\r\n\r\n"
+            )
+            raw_resp = cli.recv(4096).decode("utf-8", errors="replace")
+        assert "401 Unauthorized" in raw_resp
+        assert upstream_reqs == []
+
+        # 2) 携带合法密钥但发送超限高压缩比 gzip 载荷 (>4096 B) -> 有界解压拦截并返回 413
+        bomb_json = json.dumps({"stream": True, "pad": "A" * 20000}).encode("utf-8")
+        gz_payload = gzip.compress(bomb_json)
+        assert len(gz_payload) < 512
+        with socket.create_connection(("127.0.0.1", gw_port), timeout=3.0) as cli_ok:
+            hdr = (
+                f"POST /v1/chat/completions HTTP/1.1\r\n"
+                f"Host: 127.0.0.1\r\n"
+                f"Authorization: Bearer {secret_key}\r\n"
+                f"Content-Encoding: gzip\r\n"
+                f"Content-Length: {len(gz_payload)}\r\n"
+                f"Connection: close\r\n\r\n"
+            ).encode("ascii")
+            cli_ok.sendall(hdr + gz_payload)
+            resp_413 = cli_ok.recv(4096).decode("utf-8", errors="replace")
+        assert "413 Payload Too Large" in resp_413
+        assert upstream_reqs == []
+    finally:
+        gw_proc.terminate()
+        try:
+            gw_proc.wait(timeout=4)
+        except subprocess.TimeoutExpired:
+            gw_proc.kill()
+        up_srv.shutdown()
+        up_srv.server_close()
+        up_thread.join(timeout=2.0)

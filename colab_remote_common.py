@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import http.client
 import json
 import os
 import re
@@ -13,12 +15,15 @@ import secrets
 import shutil
 import subprocess
 import sys
+import tarfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
-from pathlib import Path
-from typing import Any, Callable
+from collections.abc import Callable
+from pathlib import Path, PurePosixPath
+from typing import Any
 
 COMFY_DIR = Path(os.environ.get("COMFY_DIR", "/content/ComfyUI"))
 COMFY_OUT = Path(os.environ.get("COMFY_OUT", "/root/comfy_out"))
@@ -33,367 +38,62 @@ TUNNEL_URL_FILE = Path("/root/comfy_tunnel_url.txt")
 LLM_TUNNEL_URL_FILE = Path("/root/llm_tunnel_url.txt")
 SERVICE_META_FILE = Path("/root/colab_service_meta.json")
 AUTH_KEY_FILE_DEFAULT = Path("/root/comfy_auth_key")
+LLAMA_API_KEY_FILE = Path("/root/llama_api_key")
 
 BRIDGE_NODE_FILENAME = "colab_pet_bridge_node.py"
+DIRECT_CANVAS_JS_FILENAME = "colab_pet_direct_canvas.js"
 DEFAULT_TUNNEL_URL_RE = re.compile(
-    r"https://(?:(?!api\.)[a-z0-9-]+\.trycloudflare\.com)"
+    r"https://(?!api\.)[a-z0-9-]+\.trycloudflare\.com(?![a-z0-9.-])"
 )
 TORCH_SKIP_RE = re.compile(r"^(torch|torchvision|torchaudio)([=<>!~\[]|$)", re.IGNORECASE)
 
-# 唯一单源直铺画布前端扩展脚本（由桥接自定义节点挂载至 ComfyUI WEB_DIRECTORY=./js）
-DIRECT_CANVAS_JS = r"""/* colab_pet_direct_canvas v2 */
-(async function () {
-  if (window.__COLAB_PET_DIRECT_CANVAS_V2__) return;
-  window.__COLAB_PET_DIRECT_CANVAS_V2__ = true;
-  window.__COLAB_PET_DIRECT_CANVAS_V1__ = true;
+def load_companion_text(filename: str, base_dir: Path | None = None) -> str:
+    """从同目录、Drama 3 工作流子目录或当前工作目录读取伴随单源脚本/资产文本。"""
+    anchors = [base_dir] if base_dir is not None else []
+    mod_file = globals().get("__file__")
+    if mod_file:
+        anchors.append(Path(mod_file).resolve().parent)
+    anchors.append(Path.cwd())
+    for root in anchors:
+        root_p = Path(root)
+        for cand in (root_p / filename, root_p / "workflows" / "drama3" / filename):
+            if cand.is_file():
+                return cand.read_text(encoding="utf-8").strip()
+    return ""
 
-  let modApp = null;
-  let modApi = null;
-  try {
-    modApp = await import("../../scripts/app.js");
-  } catch (e) {}
-  try {
-    modApi = await import("../../scripts/api.js");
-  } catch (e) {}
 
-  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  // 后台/隐藏标签页下浏览器会暂停 requestAnimationFrame，改为限时降级避免队列永久卡死
-  const nextFrameSafe = () => {
-    if (typeof document !== "undefined" && document.hidden) {
-      return sleep(32);
-    }
-    if (typeof requestAnimationFrame !== "function") {
-      return sleep(32);
-    }
-    return Promise.race([
-      new Promise((resolve) => requestAnimationFrame(() => resolve())),
-      sleep(80)
-    ]);
-  };
+def safe_extract_tar_gz(tar_path: Path, dest_dir: Path) -> None:
+    """安全解压 tar.gz 归档至指定目录，防御路径穿越并保留可执行权限与同级安全符号链接。"""
+    dest_root = dest_dir.resolve()
+    dest_root.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(tar_path, "r:gz") as tf:
+        for member in tf.getmembers():
+            posix_p = PurePosixPath(member.name)
+            if posix_p.is_absolute() or ".." in posix_p.parts:
+                raise RuntimeError(f"归档中存在越界路径，拒绝解压: {member.name}")
+            member_resolved = (dest_root / member.name).resolve()
+            if member_resolved != dest_root and dest_root not in member_resolved.parents:
+                raise RuntimeError(f"归档中存在越界路径，拒绝解压: {member.name}")
+            if member.issym() or member.islnk():
+                link_p = PurePosixPath(member.linkname)
+                if link_p.is_absolute() or ".." in link_p.parts:
+                    raise RuntimeError(f"归档符号链接存在越界目标，拒绝解压: {member.linkname}")
+                link_base = dest_root if member.islnk() else (dest_root / member.name).parent
+                link_target = (link_base / member.linkname).resolve()
+                if link_target != dest_root and dest_root not in link_target.parents:
+                    raise RuntimeError(f"归档符号链接指向越界目标，拒绝解压: {member.linkname}")
+        if sys.version_info >= (3, 12):
+            tf.extractall(dest_root, filter="tar")
+        else:
+            tf.extractall(dest_root)
 
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const generateUuidV4 = () => {
-    try {
-      if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-        return crypto.randomUUID();
-      }
-    } catch (e) {}
-    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-      const r = (Math.random() * 16) | 0;
-      const v = c === "x" ? r : (r & 0x3) | 0x8;
-      return v.toString(16);
-    });
-  };
 
-  const ensureValidUuid = (graphData) => {
-    if (!graphData || typeof graphData !== "object") return graphData;
-    const rawId = typeof graphData.id === "string" ? graphData.id.trim() : "";
-    if (!rawId || !UUID_RE.test(rawId)) {
-      graphData.id = generateUuidV4();
-    }
-    return graphData;
-  };
+def load_direct_canvas_js(base_dir: Path | None = None) -> str:
+    """从同目录 `colab_pet_direct_canvas.js` 读取直铺画布前端扩展源码。"""
+    return load_companion_text(DIRECT_CANVAS_JS_FILENAME, base_dir)
 
-  const sanitizeWfName = (raw) => {
-    const clean = String(raw || "").trim().replace(/^workflows\//i, "").split("/").pop();
-    return clean ? (clean.toLowerCase().endsWith(".json") ? clean : `${clean}.json`) : "";
-  };
 
-  // 模块加载第一时间捕获并剥离 URL 中的一次性直铺参数，防止用户按 F5 覆盖画布修改
-  const initUrl = new URL(window.location.href);
-  let pendingWfName = sanitizeWfName(initUrl.searchParams.get("pet_wf") || "");
-  let pendingExtraNames = (initUrl.searchParams.get("pet_extra") || "")
-    .split(",")
-    .map(sanitizeWfName)
-    .filter((n) => n && n !== pendingWfName);
-  if (initUrl.searchParams.has("pet_wf") || initUrl.searchParams.has("pet_extra") || initUrl.searchParams.has("pet_ts")) {
-    initUrl.searchParams.delete("pet_wf");
-    initUrl.searchParams.delete("pet_extra");
-    initUrl.searchParams.delete("pet_ts");
-    try {
-      window.history.replaceState(null, "", initUrl.toString());
-    } catch (e) {}
-  }
-
-  function getApp() {
-    return (modApp && modApp.app) || window.comfyAPI?.app?.app || window.app || null;
-  }
-
-  function getApi() {
-    return (modApi && modApi.api) || window.comfyAPI?.api?.api || getApp()?.api || null;
-  }
-
-  async function waitForCanvasReady(timeoutMs = 30000) {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-      const app = getApp();
-      const splashEl = typeof document !== "undefined" ? document.getElementById("splash-loader") : null;
-      const spinnerBusy = Boolean(app?.extensionManager?.spinner);
-      const cfgBusy = Boolean(app?.configuringGraphLevel);
-      if (
-        app &&
-        app.rootGraph &&
-        typeof app.loadGraphData === "function" &&
-        !spinnerBusy &&
-        !splashEl &&
-        !cfgBusy
-      ) {
-        try {
-          if (app.graphLoadQueue) {
-            await Promise.resolve(app.graphLoadQueue);
-          }
-        } catch (e) {}
-        await nextFrameSafe();
-        await sleep(80);
-        const appAfter = getApp();
-        if (
-          appAfter &&
-          appAfter.rootGraph &&
-          !Boolean(appAfter.extensionManager?.spinner) &&
-          !Boolean(appAfter.configuringGraphLevel)
-        ) {
-          return true;
-        }
-      }
-      await sleep(100);
-    }
-    const appEnd = getApp();
-    return Boolean(appEnd && appEnd.rootGraph && typeof appEnd.loadGraphData === "function");
-  }
-
-  async function fetchWorkflowJson(wfPath) {
-    const encoded = encodeURIComponent(wfPath);
-    const urls = [
-      `/api/userdata/${encoded}?t=${Date.now()}`,
-      `/userdata/${encoded}?t=${Date.now()}`
-    ];
-    for (const u of urls) {
-      try {
-        const resp = await fetch(u, { cache: "no-store" });
-        if (resp.ok) {
-          return await resp.json();
-        }
-      } catch (e) {}
-    }
-    throw new Error(`无法读取工作流文件: ${wfPath}`);
-  }
-
-  const handledCmdIds = new Set();
-  let openQueue = Promise.resolve();
-
-  async function _doOpenWorkflowOntoCanvas(rawName, extraNames = [], showNotice = true) {
-    const cleanName = sanitizeWfName(rawName);
-    if (!cleanName) return false;
-    const ready = await waitForCanvasReady();
-    if (!ready) return false;
-
-    const app = getApp();
-    if (!app || typeof app.loadGraphData !== "function") return false;
-    const wfStore = app.extensionManager?.workflow;
-    const wfPath = `workflows/${cleanName}`;
-
-    try {
-      if (typeof wfStore?.syncWorkflows === "function") {
-        await wfStore.syncWorkflows();
-      }
-    } catch (e) {}
-
-    const graphData = await fetchWorkflowJson(wfPath);
-    if (!graphData || typeof graphData !== "object") return false;
-    ensureValidUuid(graphData);
-
-    try {
-      const bgPaths = (extraNames || [])
-        .map(sanitizeWfName)
-        .filter((n) => n && n !== cleanName)
-        .map((n) => `workflows/${n}`)
-        .filter((p) => Boolean(wfStore?.getWorkflowByPath?.(p)));
-      if (bgPaths.length && typeof wfStore?.openWorkflowsInBackground === "function") {
-        wfStore.openWorkflowsInBackground({ right: bgPaths });
-      }
-    } catch (e) {}
-
-    const wfObj = wfStore?.getWorkflowByPath?.(wfPath) || null;
-    if (wfObj) {
-      // 严禁在 loadGraphData 之前手动调用 wfStore.openWorkflow(wfObj)，否则会干扰 beforeLoadNewGraph 状态暂存导致旧画布覆盖新工作流
-      await app.loadGraphData(graphData, true, true, wfObj);
-      try {
-        if (
-          wfStore &&
-          typeof wfStore.isActive === "function" &&
-          !wfStore.isActive(wfObj) &&
-          typeof wfStore.openWorkflow === "function"
-        ) {
-          await wfStore.openWorkflow(wfObj);
-        }
-      } catch (e) {}
-      try {
-        wfObj.changeTracker?.reset?.();
-        wfObj.isModified = false;
-      } catch (e) {}
-    } else {
-      await app.loadGraphData(graphData, true, true, cleanName.replace(/\.json$/i, ""));
-    }
-
-    try {
-      app.canvas?.setDirty?.(true, true);
-    } catch (e) {}
-
-    if (showNotice) {
-      try {
-        app.extensionManager?.toast?.add?.({
-          severity: "success",
-          summary: "✨ 已直铺工作流到画布",
-          detail: cleanName,
-          life: 2800
-        });
-      } catch (e) {}
-    }
-    return true;
-  }
-
-  function enqueueOpenWorkflow(rawName, extraNames = [], showNotice = true) {
-    const task = openQueue
-      .then(
-        () => _doOpenWorkflowOntoCanvas(rawName, extraNames, showNotice),
-        () => _doOpenWorkflowOntoCanvas(rawName, extraNames, showNotice)
-      )
-      .catch((err) => {
-        console.warn("[colab_pet_direct_canvas] 直铺工作流失败:", err);
-        return false;
-      });
-    openQueue = task.then(() => undefined, () => undefined);
-    return task;
-  }
-
-  async function postNativeAck(id, name) {
-    const payload = JSON.stringify({ id, name, ts: Date.now() / 1000 });
-    for (const ep of ["/colab_pet/ack_workflow", "/api/colab_pet/ack_workflow"]) {
-      try {
-        const resp = await fetch(ep, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: payload
-        });
-        if (resp.ok) return;
-      } catch (e) {}
-    }
-  }
-
-  async function postLegacyAck(id, name) {
-    try {
-      await fetch("/userdata/colab_pet_bridge_ack.json?overwrite=true", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, name, ts: Date.now() / 1000 })
-      });
-    } catch (e) {}
-  }
-
-  async function startLivePushBridge() {
-    const api = getApi();
-    let nativeOk = false;
-
-    try {
-      const pingResp = await fetch(`/colab_pet/ping?t=${Date.now()}`, { cache: "no-store" });
-      if (pingResp.ok) {
-        const pdata = await pingResp.json();
-        nativeOk = Boolean(pdata && pdata.ok);
-      }
-    } catch (e) {}
-
-    if (nativeOk && api && typeof api.addEventListener === "function") {
-      api.addEventListener("colab_pet.open_workflow", async (ev) => {
-        const d = ev?.detail || {};
-        const cmdId = String(d.id || "");
-        const wfName = sanitizeWfName(d.name || "");
-        if (!wfName) return;
-        if (cmdId) {
-          if (handledCmdIds.has(cmdId)) return;
-          handledCmdIds.add(cmdId);
-        }
-        // 后台标签页略微让步前台可见标签页优先接管，且自身不阻塞可正常完成加载
-        if (typeof document !== "undefined" && document.hidden) {
-          await sleep(180);
-        }
-        const extras = Array.isArray(d.extra_names) ? d.extra_names : [];
-        const ok = await enqueueOpenWorkflow(wfName, extras, true);
-        if (ok) {
-          if (cmdId) await postNativeAck(cmdId, wfName);
-        } else if (cmdId) {
-          handledCmdIds.delete(cmdId);
-        }
-      });
-      return;
-    }
-
-    // 存量实例未加载自定义节点路由时，回退轻量指令轮询（存储在 userdata 根目录，不污染 workflows 栏）
-    const bootTs = Date.now() / 1000 - 2.0;
-    let pollBusy = false;
-    const pollCmd = async () => {
-      if (pollBusy) return;
-      pollBusy = true;
-      try {
-        const r = await fetch(`/userdata/colab_pet_bridge_cmd.json?t=${Date.now()}`, { cache: "no-store" });
-        if (!r.ok) return;
-        const cmd = await r.json();
-        if (!cmd || !cmd.id || !cmd.name) return;
-        const cmdId = String(cmd.id);
-        if (handledCmdIds.has(cmdId)) return;
-        if (Number(cmd.ts || 0) < bootTs) return;
-        handledCmdIds.add(cmdId);
-        const wfName = sanitizeWfName(cmd.name);
-        if (!wfName) return;
-        if (typeof document !== "undefined" && document.hidden) {
-          await sleep(180);
-        }
-        const extras = Array.isArray(cmd.extra_names) ? cmd.extra_names : [];
-        const ok = await enqueueOpenWorkflow(wfName, extras, true);
-        if (ok) {
-          await postLegacyAck(cmdId, wfName);
-        } else {
-          handledCmdIds.delete(cmdId);
-        }
-      } catch (e) {
-      } finally {
-        pollBusy = false;
-      }
-    };
-
-    window.addEventListener("focus", () => pollCmd());
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) pollCmd();
-    });
-    setInterval(pollCmd, 1200);
-  }
-
-  let setupStarted = false;
-  async function runStartupHooks() {
-    if (setupStarted) return;
-    setupStarted = true;
-    startLivePushBridge();
-    if (pendingWfName) {
-      const targetWf = pendingWfName;
-      const targetExtras = pendingExtraNames;
-      pendingWfName = "";
-      pendingExtraNames = [];
-      await enqueueOpenWorkflow(targetWf, targetExtras, true);
-    }
-  }
-
-  const app = getApp();
-  if (app && typeof app.registerExtension === "function") {
-    app.registerExtension({
-      name: "ColabPet.DirectCanvas",
-      async setup() {
-        runStartupHooks();
-      }
-    });
-  } else {
-    waitForCanvasReady().then(() => runStartupHooks());
-  }
-})();
-""".strip()
+DIRECT_CANVAS_JS = load_direct_canvas_js()
 
 
 def env_flag(name: str, default: bool) -> bool:
@@ -414,13 +114,12 @@ def mask_secret(val: str) -> str:
 
 def safe_cmd_line(cmd: list[str]) -> str:
     """安全获取外部工具或 Git 仓库的单行版本摘要。"""
-    try:
+    # 可选版本探测失败（未安装或超时）时安全回退空串
+    with contextlib.suppress(OSError, subprocess.SubprocessError):
         res = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=8, check=False)
         if res.returncode == 0:
             lines = [ln.strip() for ln in (res.stdout or "").splitlines() if ln.strip()]
             return lines[0] if lines else ""
-    except Exception:
-        pass
     return ""
 
 
@@ -464,13 +163,7 @@ def read_json_dict(path: Path) -> dict[str, Any]:
 
 def load_pet_bridge_init_py(base_dir: Path | None = None) -> str:
     """从同目录 `colab_pet_bridge_node.py` 读取单源服务端桥接中间件完整源码。"""
-    anchors = [base_dir] if base_dir is not None else []
-    anchors.extend([Path(__file__).resolve().parent, Path.cwd()])
-    for root in anchors:
-        cand = Path(root) / BRIDGE_NODE_FILENAME
-        if cand.is_file():
-            return cand.read_text(encoding="utf-8").strip()
-    return ""
+    return load_companion_text(BRIDGE_NODE_FILENAME, base_dir)
 
 
 def install_pet_canvas_bridge(comfy_dir: Path = COMFY_DIR, base_dir: Path | None = None) -> None:
@@ -482,7 +175,10 @@ def install_pet_canvas_bridge(comfy_dir: Path = COMFY_DIR, base_dir: Path | None
     js_dir = bridge_dir / "js"
     js_dir.mkdir(parents=True, exist_ok=True)
     (bridge_dir / "__init__.py").write_text(bridge_src + "\n", encoding="utf-8")
-    (js_dir / "direct_canvas.js").write_text(DIRECT_CANVAS_JS + "\n", encoding="utf-8")
+    canvas_js = load_direct_canvas_js(base_dir) or DIRECT_CANVAS_JS
+    if not canvas_js:
+        raise FileNotFoundError(f"未找到直铺画布前端脚本 {DIRECT_CANVAS_JS_FILENAME}")
+    (js_dir / "direct_canvas.js").write_text(canvas_js + "\n", encoding="utf-8")
     print(f"已安装桌宠直铺画布桥接扩展: {bridge_dir}", flush=True)
 
 
@@ -776,10 +472,48 @@ def ensure_comfyui_repo(
     install_pet_canvas_bridge(comfy_dir)
 
 
+def _origin_key_common(url: str) -> str:
+    """提取标准化的协议+主机+端口源站标识，用于校验跨源重定向。"""
+    try:
+        parsed = urllib.parse.urlparse(str(url or "").strip())
+        scheme = parsed.scheme.lower()
+        host = (parsed.hostname or "").lower()
+        if not scheme or not host:
+            return ""
+        port = parsed.port or (443 if scheme == "https" else 80)
+        return f"{scheme}://{host}:{port}"
+    except Exception:
+        return ""
+
+
+class _NoCrossOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """禁止 HTTP 301/302/303/307/308 跳转至异源地址，防止认证头随重定向外泄。"""
+
+    def redirect_request(self, req: urllib.request.Request, fp: Any, code: int, msg: str, headers: Any, newurl: str):
+        req_origin = _origin_key_common(req.full_url)
+        resolved = urllib.parse.urljoin(req.full_url, str(newurl or ""))
+        next_origin = _origin_key_common(resolved)
+        if not req_origin or not next_origin or next_origin != req_origin:
+            raise urllib.error.HTTPError(
+                req.full_url,
+                code,
+                f"安全拦截：拒绝跨源重定向至 {next_origin or resolved}",
+                headers,
+                fp,
+            )
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _safe_urlopen(req_or_url: urllib.request.Request | str, *, timeout: float = 4.0) -> Any:
+    """使用同源重定向保护 opener 发起 HTTP 请求。"""
+    opener = urllib.request.build_opener(_NoCrossOriginRedirectHandler())
+    return opener.open(req_or_url, timeout=timeout)
+
+
 def probe_comfy_ready(timeout: float = 3.0) -> str | None:
     """探测本机 ComfyUI /system_stats 是否可响应。"""
     try:
-        with urllib.request.urlopen(f"{COMFY_API}/system_stats", timeout=timeout) as resp:
+        with _safe_urlopen(f"{COMFY_API}/system_stats", timeout=timeout) as resp:
             if resp.status == 200:
                 return resp.read().decode("utf-8", errors="ignore")
     except Exception:
@@ -789,14 +523,151 @@ def probe_comfy_ready(timeout: float = 3.0) -> str | None:
 
 def probe_bridge_version(timeout: float = 3.0) -> int:
     """探测运行中 ComfyUI 已加载的桌宠桥接节点版本号。"""
-    try:
-        with urllib.request.urlopen(f"{COMFY_API}/colab_pet/ping", timeout=timeout) as resp:
+    # 服务未启动或旧版无此路由时安全返回 0 以触发安装/重载
+    with contextlib.suppress(OSError, ValueError, TypeError):
+        with _safe_urlopen(f"{COMFY_API}/colab_pet/ping", timeout=timeout) as resp:
             if resp.status == 200:
                 data = json.loads(resp.read().decode("utf-8", errors="ignore") or "{}")
                 return int(data.get("version") or 0)
-    except Exception:
-        pass
     return 0
+
+
+def _pkill_quiet(pattern: str) -> None:
+    """静默按匹配模式终止后台进程（不中断后续清理流程）。"""
+    with contextlib.suppress(OSError, subprocess.SubprocessError):
+        subprocess.run(["pkill", "-f", pattern], check=False, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def terminate_proc(proc: Any) -> None:
+    """安全终止尚未通过安全校验的后台子进程（兼容真实 Popen 与测试替身对象）。"""
+    if proc is None:
+        return
+    with contextlib.suppress(OSError, subprocess.SubprocessError, ValueError, RuntimeError):
+        poll_fn = getattr(proc, "poll", None)
+        if callable(poll_fn) and poll_fn() is not None:
+            return
+        term_fn = getattr(proc, "terminate", None)
+        if callable(term_fn):
+            term_fn()
+        wait_fn = getattr(proc, "wait", None)
+        if callable(wait_fn):
+            try:
+                wait_fn(timeout=5)
+            except TypeError:
+                wait_fn()
+            except (OSError, subprocess.SubprocessError, ValueError, RuntimeError):
+                kill_fn = getattr(proc, "kill", None)
+                if callable(kill_fn):
+                    kill_fn()
+
+
+_terminate_proc = terminate_proc
+
+
+def _probe_http_status_and_body(
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    timeout: float = 3.0,
+) -> tuple[int | None, bytes, str]:
+    """使用同源重定向保护 opener 发起单次探测，返回 `(status, body_bytes, err_msg)`。"""
+    req = urllib.request.Request(url, headers=headers or {})
+    try:
+        with _safe_urlopen(req, timeout=timeout) as resp:
+            return int(getattr(resp, "status", 200)), resp.read() or b"", ""
+    except urllib.error.HTTPError as exc:
+        st = int(exc.code)
+        with contextlib.suppress(OSError):
+            exc.close()
+        return st, b"", ""
+    except (urllib.error.URLError, http.client.HTTPException, OSError, TimeoutError, ValueError) as exc:
+        return None, b"", str(exc)
+
+
+def _check_two_way_bearer(
+    url: str,
+    key: str,
+    *,
+    extra_headers: dict[str, str] | None = None,
+    timeout: float = 3.0,
+    title: str = "服务",
+) -> tuple[bool, bytes, str]:
+    """双向 Bearer 鉴权核验：匿名请求必拒 (401/403)，合法 Bearer 密钥必通 (200) 并返回正文。"""
+    hdrs = dict(extra_headers or {})
+    unauth_st, _, err_u = _probe_http_status_and_body(url, headers=hdrs or None, timeout=timeout)
+    if unauth_st is None:
+        return False, b"", f"探测 {title} 未授权响应异常: {err_u}"
+    if unauth_st == 200:
+        return False, b"", f"{title} {url} 未携带 Authorization 仍返回 HTTP 200，鉴权未生效"
+    if unauth_st not in (401, 403):
+        return False, b"", f"{title} {url} 对未授权请求返回异常状态码 HTTP {unauth_st}（预期 401/403）"
+    if not key:
+        return True, b"", ""
+    hdrs["Authorization"] = f"Bearer {key}"
+    auth_st, raw_auth, err_a = _probe_http_status_and_body(url, headers=hdrs, timeout=timeout)
+    if auth_st is None:
+        return False, b"", f"探测 {title} 合法密钥响应异常: {err_a}"
+    if auth_st != 200:
+        return False, b"", f"{title} {url} 携带 Bearer 密钥校验未通过（实际 HTTP {auth_st}，预期 200）"
+    return True, raw_auth, ""
+
+
+def verify_local_comfy_auth_enforced(
+    auth_key: str | None = None,
+    timeout: float = 3.0,
+    api_url: str | None = None,
+) -> tuple[bool, str]:
+    """核实本机 ComfyUI v3 公网鉴权网关已真实生效，未授权公网代理请求必被拦截且合法密钥可通行。"""
+    base_api = str(api_url or COMFY_API).strip().rstrip("/")
+    if not api_url or base_api == COMFY_API.rstrip("/"):
+        bridge_ver = probe_bridge_version(timeout=timeout)
+    else:
+        st_p, raw_p, _ = _probe_http_status_and_body(f"{base_api}/colab_pet/ping", timeout=timeout)
+        try:
+            bridge_ver = int(json.loads(raw_p.decode("utf-8", errors="ignore") or "{}").get("version") or 0) if st_p == 200 else 0
+        except Exception:
+            bridge_ver = 0
+    if bridge_ver < 3:
+        return False, f"ComfyUI 桥接扩展版本不足或未加载（version={bridge_ver} < 3）"
+
+    eff_key = ensure_comfy_auth_key() if auth_key is None else str(auth_key).strip()
+    ok, _, msg = _check_two_way_bearer(
+        f"{base_api}/system_stats",
+        eff_key,
+        extra_headers={"X-Forwarded-For": "203.0.113.1"},
+        timeout=timeout,
+        title="ComfyUI",
+    )
+    return (True, "ComfyUI 公网鉴权网关校验通过") if ok else (False, msg)
+
+
+def load_local_llm_auth_key(explicit_key: str | None = None) -> str:
+    """按优先级从显式参数、本地私有密钥文件及服务契约加载 LLM API Key。"""
+    cand = str(explicit_key or "").strip()
+    if cand:
+        return cand
+    if LLAMA_API_KEY_FILE.is_file():
+        with contextlib.suppress(OSError):
+            raw = LLAMA_API_KEY_FILE.read_text(encoding="utf-8", errors="ignore").strip()
+            if raw:
+                return raw.splitlines()[0].strip()
+    meta = read_json_dict(SERVICE_META_FILE)
+    return str(meta.get("api_key") or "").strip()
+
+
+def verify_local_llm_auth_enforced(
+    port: int = 18080,
+    api_key: str | None = None,
+    timeout: float = 3.0,
+) -> tuple[bool, str]:
+    """核实本地 LLM 网关（/v1/models）已启用 API Key 鉴权且合法 Bearer 密钥可通行。"""
+    key = load_local_llm_auth_key(None) if api_key is None else str(api_key).strip()
+    if not key:
+        return False, "未找到有效 LLM API Key，拒绝无鉴权暴露公网隧道"
+    ok, _, msg = _check_two_way_bearer(
+        f"http://127.0.0.1:{int(port)}/v1/models", key, timeout=timeout, title="LLM 网关"
+    )
+    return (True, "LLM 网关 API Key 鉴权校验通过") if ok else (False, msg)
 
 
 def start_comfyui_and_wait(
@@ -806,10 +677,10 @@ def start_comfyui_and_wait(
     wait_timeout_sec: int = 120,
     extra_ready_probe: Callable[[], str | None] | None = None,
 ) -> None:
-    """非阻塞守护启动 ComfyUI（自动确保随机鉴权密钥存在且关闭裸通配符 CORS）。"""
+    """非阻塞守护启动 ComfyUI（自动确保随机鉴权密钥存在且严格校验公网认证中间件生效）。"""
     print("=== [6/7] 启动 ComfyUI 服务并等待就绪 ===", flush=True)
     COMFY_OUT.mkdir(parents=True, exist_ok=True)
-    ensure_comfy_auth_key()
+    auth_key = ensure_comfy_auth_key()
 
     reserve_vram_raw = (os.environ.get("COMFY_RESERVE_VRAM") or "").strip()
     ensure_reserve = (os.environ.get("COMFY_ENSURE_RESERVE_VRAM") or "").strip() == "1"
@@ -826,8 +697,12 @@ def start_comfyui_and_wait(
         restart_reason = ""
         if probe_bridge_version() < 3:
             restart_reason = "检测到存量 ComfyUI 未启用 v3 公网认证网关，正在平滑重启加载..."
-        elif extra_ready_probe is not None:
-            restart_reason = extra_ready_probe() or ""
+        else:
+            auth_ok, auth_reason = verify_local_comfy_auth_enforced(auth_key)
+            if not auth_ok:
+                restart_reason = f"检测到存量 ComfyUI 公网鉴权网关未生效（{auth_reason}），正在平滑重启加载..."
+            elif extra_ready_probe is not None:
+                restart_reason = extra_ready_probe() or ""
         if not restart_reason and ensure_reserve and reserve_val:
             pg = subprocess.run(["pgrep", "-af", "main.py.*8188"], stdin=subprocess.DEVNULL, capture_output=True, text=True)
             if "--reserve-vram" not in (pg.stdout or ""):
@@ -837,7 +712,7 @@ def start_comfyui_and_wait(
             return
 
         print(restart_reason, flush=True)
-        subprocess.run(["pkill", "-f", "main.py.*8188"], check=False, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        _pkill_quiet("main.py.*8188")
         for _ in range(15):
             if probe_comfy_ready() is None:
                 break
@@ -878,45 +753,218 @@ def start_comfyui_and_wait(
     print(f"已后台拉起 ComfyUI (PID={proc.pid})，日志: {COMFY_LOG}", flush=True)
 
     steps = max(1, wait_timeout_sec // 2)
+    auth_fail_streak = 0
+    last_auth_reason = ""
     for idx in range(1, steps + 1):
         ready_payload = probe_comfy_ready()
         if ready_payload:
-            print(f"ComfyUI 就绪（耗时约 {idx * 2} 秒）", flush=True)
-            print(f"system_stats: {ready_payload[:300]}", flush=True)
-            return
+            auth_ok, auth_reason = verify_local_comfy_auth_enforced(auth_key)
+            if auth_ok:
+                print(f"ComfyUI 就绪且公网鉴权网关校验通过（耗时约 {idx * 2} 秒）", flush=True)
+                print(f"system_stats: {ready_payload[:300]}", flush=True)
+                return
+            auth_fail_streak += 1
+            last_auth_reason = auth_reason
+            print(
+                f"[警告] ComfyUI /system_stats 已响应但公网鉴权网关尚未通过校验 ({auth_fail_streak}/3): {auth_reason}",
+                flush=True,
+            )
+            if auth_fail_streak >= 3:
+                _terminate_proc(proc)
+                raise RuntimeError(f"ComfyUI 公网鉴权网关未生效，拒绝暴露公网隧道: {auth_reason}")
+        else:
+            auth_fail_streak = 0
         time.sleep(2)
+
+    if auth_fail_streak > 0:
+        _terminate_proc(proc)
+        raise RuntimeError(f"ComfyUI 公网鉴权网关未生效，拒绝暴露公网隧道: {last_auth_reason}")
 
     tail = COMFY_LOG.read_text(encoding="utf-8", errors="ignore")[-2000:] if COMFY_LOG.is_file() else ""
     raise TimeoutError(f"等待 ComfyUI 就绪超时（{wait_timeout_sec}s），末尾日志:\n{tail}")
 
 
-def probe_public_tunnel_url(url: str, *, kind: str = "comfy", auth_key: str = "", timeout: float = 4.0) -> bool:
-    """通过公网 HTTPS 验证隧道是否真正可用（防止仅凭旧日志假死复用）。"""
+def verify_public_tunnel_auth_enforced(
+    url: str,
+    *,
+    kind: str = "comfy",
+    auth_key: str = "",
+    timeout: float = 5.0,
+) -> tuple[bool, str]:
+    """对公网隧道地址执行双向鉴权验收（匿名请求必拒 401/403，合法 Bearer 请求必通 200 且结构合法）。"""
     base = str(url or "").strip().rstrip("/")
-    if not base.startswith("https://"):
-        return False
-    target = f"{base}/health" if kind == "llm" else f"{base}/system_stats"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    if kind != "llm" and auth_key:
-        headers["Authorization"] = f"Bearer {auth_key}"
+    if not base.startswith(("https://", "http://127.0.0.1:", "http://localhost:")):
+        return False, "非法的公网隧道地址协议"
+    norm_kind = "llm" if str(kind or "").strip().lower() == "llm" else "comfy"
+    key = (
+        (str(auth_key).strip() or load_local_llm_auth_key(None))
+        if norm_kind == "llm"
+        else (str(auth_key).strip() or ensure_comfy_auth_key())
+    )
+    if not key:
+        return False, f"{norm_kind} 缺少鉴权密钥，拒绝验收公网隧道"
+
+    target = f"{base}/v1/models" if norm_kind == "llm" else f"{base}/system_stats"
+    ok, raw_auth, msg = _check_two_way_bearer(
+        target, key, extra_headers={"User-Agent": "Mozilla/5.0"}, timeout=timeout, title="公网隧道"
+    )
+    if not ok:
+        return False, msg
     try:
-        req = urllib.request.Request(target, headers=headers)
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            if resp.status != 200:
-                return False
-            body = json.loads(resp.read().decode("utf-8", errors="ignore") or "{}")
-            return isinstance(body, dict) and (body.get("status") == "ok" if kind == "llm" else ("system" in body or "devices" in body))
-    except urllib.error.HTTPError as exc:
-        if kind != "llm" and exc.code == 401:
-            try:
-                with urllib.request.urlopen(urllib.request.Request(f"{base}/__pet_health", headers={"User-Agent": "Mozilla/5.0"}), timeout=timeout) as hr:
-                    hb = json.loads(hr.read().decode("utf-8", errors="ignore") or "{}")
-                    return hr.status == 200 and isinstance(hb, dict) and hb.get("status") == "ok"
-            except Exception:
-                return False
-        return False
+        body = json.loads(raw_auth.decode("utf-8", errors="ignore") or "{}")
     except Exception:
-        return False
+        body = None
+    valid_body = isinstance(body, dict) and (
+        ("data" in body or "object" in body) if norm_kind == "llm" else ("system" in body or "devices" in body)
+    )
+    if not valid_body:
+        return False, f"公网隧道 {target} 返回内容格式异常"
+    return True, f"{norm_kind} 公网隧道双向鉴权验收通过"
+
+
+def _await_public_tunnel_auth(
+    url: str,
+    *,
+    kind: str,
+    auth_key: str,
+    abort_fn: Callable[[str], None] | None = None,
+    max_attempts: int = 12,
+    interval: float = 1.5,
+    timeout: float = 4.0,
+) -> None:
+    """轮询等待公网隧道边缘路由就绪并完成双向鉴权验收；若匿名直通 HTTP 200 则立即中止。"""
+    def _fail(msg: str) -> None:
+        if abort_fn is not None:
+            abort_fn(msg)
+        raise RuntimeError(msg)
+
+    last_reason = "未知原因"
+    attempts = max(1, int(max_attempts))
+    for idx in range(attempts):
+        ok, reason = verify_public_tunnel_auth_enforced(url, kind=kind, auth_key=auth_key, timeout=timeout)
+        if ok:
+            return
+        last_reason = reason
+        if "HTTP 200" in reason:
+            _fail(reason)
+        if idx + 1 < attempts:
+            time.sleep(interval)
+    _fail(f"公网隧道双向鉴权验收未通过: {last_reason}")
+
+
+def probe_public_tunnel_url(url: str, *, kind: str = "comfy", auth_key: str = "", timeout: float = 4.0) -> bool:
+    """通过公网 HTTPS 验证隧道双向鉴权真实可用（未授权 401/403 且合法 Bearer 200，禁止跨源重定向）。"""
+    return verify_public_tunnel_auth_enforced(url, kind=kind, auth_key=auth_key, timeout=timeout)[0]
+
+
+def _verify_local_auth_before_tunnel(
+    norm_kind: str,
+    local_port: int,
+    auth_key: str,
+    use_named: bool,
+    cohost_other: bool,
+    abort_fn: Callable[[str], None],
+) -> str:
+    """暴露公网隧道前先强校验本机 Comfy/LLM 鉴权网关均已实际生效，返回生效密钥。"""
+    if norm_kind == "llm":
+        eff_llm_key = load_local_llm_auth_key(auth_key or None)
+        llm_ok, llm_reason = verify_local_llm_auth_enforced(port=int(local_port), api_key=eff_llm_key)
+        if not llm_ok:
+            abort_fn(f"LLM 网关 API Key 鉴权未生效，拒绝暴露公网隧道: {llm_reason}")
+        if use_named and cohost_other:
+            comfy_ok, comfy_reason = verify_local_comfy_auth_enforced()
+            if not comfy_ok:
+                abort_fn(f"ComfyUI 公网鉴权网关未生效，拒绝暴露双栖命名隧道: {comfy_reason}")
+        return eff_llm_key
+
+    eff_comfy_key = str(auth_key or "").strip() or ensure_comfy_auth_key()
+    comfy_api_target = COMFY_API if int(local_port) == 8188 else f"http://127.0.0.1:{int(local_port)}"
+    comfy_ok, comfy_reason = verify_local_comfy_auth_enforced(auth_key=eff_comfy_key, api_url=comfy_api_target)
+    if not comfy_ok:
+        abort_fn(f"ComfyUI 公网鉴权网关未生效，拒绝暴露公网隧道: {comfy_reason}")
+    if use_named and cohost_other:
+        meta = read_json_dict(SERVICE_META_FILE)
+        llm_port = int(meta.get("llm_port") or 18080)
+        st_h, _, _ = _probe_http_status_and_body(f"http://127.0.0.1:{llm_port}/health", timeout=2.0)
+        if meta.get("kind") == "dual" or st_h == 200:
+            llm_ok, llm_reason = verify_local_llm_auth_enforced(
+                port=llm_port,
+                api_key=str(meta.get("api_key") or "").strip() or None,
+            )
+            if not llm_ok:
+                abort_fn(f"LLM 网关 API Key 鉴权未生效，拒绝暴露双栖命名隧道: {llm_reason}")
+    return eff_comfy_key
+
+
+def _try_reuse_running_cloudflared(
+    *,
+    use_named: bool,
+    local_port: int,
+    eff_url: str,
+    service_kind: str,
+    auth_k: str,
+    url_file: Path,
+    tunnel_re: re.Pattern[str],
+) -> str | None:
+    """尝试复用已在运行且通过公网双向鉴权的 cloudflared 隧道，未命中返回 None。"""
+    pgrep_pat = "cloudflared tunnel" if use_named else f"cloudflared tunnel.*{local_port}"
+    pgrep_res = subprocess.run(
+        ["pgrep", "-af" if use_named else "-f", pgrep_pat],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+    )
+    if pgrep_res.returncode != 0:
+        return None
+    proc_out = pgrep_res.stdout or ""
+    if use_named and " run" in proc_out and probe_public_tunnel_url(eff_url, kind=service_kind, auth_key=auth_k):
+        print(f"复用运行中的命名隧道 ({service_kind}): {eff_url}", flush=True)
+        url_file.write_text(eff_url + "\n", encoding="utf-8")
+        return eff_url
+    if (not use_named) and f"127.0.0.1:{local_port}" in proc_out and url_file.is_file():
+        m_cached = tunnel_re.search(url_file.read_text(encoding="utf-8", errors="ignore"))
+        if m_cached and probe_public_tunnel_url(m_cached.group(0), kind=service_kind, auth_key=auth_k):
+            print(f"复用运行中的 cloudflared 隧道 (:{local_port}): {m_cached.group(0)}", flush=True)
+            return m_cached.group(0)
+    return None
+
+
+def _wait_for_cloudflared_tunnel_url(
+    proc: subprocess.Popen[Any],
+    *,
+    use_named: bool,
+    eff_url: str,
+    eff_tok: str,
+    service_kind: str,
+    auth_k: str,
+    log_path: Path,
+    tunnel_re: re.Pattern[str],
+) -> str:
+    """轮询 cloudflared 日志或命名隧道健康状态，直至获取发布地址或超时。"""
+
+    def _log_tail(redact: str = "") -> str:
+        tail = log_path.read_text(encoding="utf-8", errors="ignore")[-1500:] if log_path.is_file() else ""
+        return tail.replace(redact, "[REDACTED]") if redact else tail
+
+    if use_named:
+        for _ in range(35):
+            if proc.poll() is not None:
+                raise RuntimeError(f"cloudflared 命名隧道异常退出 (rc={proc.returncode})，日志:\n{_log_tail(eff_tok)}")
+            txt = log_path.read_text(encoding="utf-8", errors="ignore") if log_path.is_file() else ""
+            if "Registered tunnel connection" in txt or probe_public_tunnel_url(
+                eff_url, kind=service_kind, auth_key=auth_k, timeout=2.0
+            ):
+                return eff_url
+            time.sleep(1)
+        raise TimeoutError(f"等待 cloudflared 命名隧道注册超时（35s），日志:\n{_log_tail(eff_tok)}")
+
+    for _ in range(30):
+        if log_path.is_file():
+            m = tunnel_re.search(log_path.read_text(encoding="utf-8", errors="ignore"))
+            if m:
+                return m.group(0)
+        time.sleep(1)
+    raise TimeoutError(f"等待 cloudflared 分配隧道地址超时（30s），日志:\n{_log_tail()}")
 
 
 def start_cloudflared_tunnel(
@@ -930,35 +978,43 @@ def start_cloudflared_tunnel(
     tunnel_url_file: Path | None = None,
     log_file: Path | None = None,
     tunnel_re: re.Pattern[str] = DEFAULT_TUNNEL_URL_RE,
+    auth_key: str = "",
 ) -> str:
-    """统一拉起或复用 `cloudflared` 隧道（支持 quick/named 与双栖隔离，复用前真实 HTTPS 验活）。"""
+    """统一拉起或复用 `cloudflared` 隧道（本机鉴权与公网双向鉴权均通过后才发布地址）。"""
     eff_tok = (cf_token or "").strip()
     eff_url = (cf_url or "").strip().rstrip("/")
     use_named = bool(eff_tok and eff_url)
     url_file = Path(tunnel_url_file or (LLM_TUNNEL_URL_FILE if (service_kind == "llm" and cohost_other) else TUNNEL_URL_FILE))
     log_path = Path(log_file or (Path("/root/cloudflared_llm.log") if (service_kind == "llm" and cohost_other and not use_named) else CLOUDFLARED_LOG))
 
-    pgrep_pat = "cloudflared tunnel" if use_named else f"cloudflared tunnel.*{local_port}"
-    pgrep_res = subprocess.run(["pgrep", "-af" if use_named else "-f", pgrep_pat], stdin=subprocess.DEVNULL, capture_output=True, text=True)
-    proc_out = pgrep_res.stdout or ""
-    auth_k = ensure_comfy_auth_key() if service_kind != "llm" else ""
-
-    if not force_restart and pgrep_res.returncode == 0:
-        if use_named and " run" in proc_out and probe_public_tunnel_url(eff_url, kind=service_kind, auth_key=auth_k):
-            print(f"复用运行中的命名隧道 ({service_kind}): {eff_url}", flush=True)
-            url_file.write_text(eff_url + "\n", encoding="utf-8")
-            return eff_url
-        if (not use_named) and f"127.0.0.1:{local_port}" in proc_out and url_file.is_file():
-            m_cached = tunnel_re.search(url_file.read_text(encoding="utf-8", errors="ignore"))
-            if m_cached and probe_public_tunnel_url(m_cached.group(0), kind=service_kind, auth_key=auth_k):
-                print(f"复用运行中的 cloudflared 隧道 (:{local_port}): {m_cached.group(0)}", flush=True)
-                return m_cached.group(0)
-
     if cohost_other:
         kill_pat = "cloudflared tunnel.* run" if use_named else f"cloudflared tunnel.*{local_port}"
     else:
         kill_pat = "cloudflared tunnel"
-    subprocess.run(["pkill", "-f", kill_pat], check=False, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def _abort_unprotected(err_msg: str) -> None:
+        _pkill_quiet(kill_pat)
+        with contextlib.suppress(OSError):
+            url_file.unlink(missing_ok=True)
+        raise RuntimeError(err_msg)
+
+    norm_kind = str(service_kind or "comfy").strip().lower()
+    auth_k = _verify_local_auth_before_tunnel(norm_kind, int(local_port), auth_key, use_named, cohost_other, _abort_unprotected)
+
+    if not force_restart:
+        reused = _try_reuse_running_cloudflared(
+            use_named=use_named,
+            local_port=int(local_port),
+            eff_url=eff_url,
+            service_kind=service_kind,
+            auth_k=auth_k,
+            url_file=url_file,
+            tunnel_re=tunnel_re,
+        )
+        if reused:
+            return reused
+
+    _pkill_quiet(kill_pat)
     time.sleep(0.5)
 
     cf_bin = shutil.which("cloudflared") or str(CLOUDFLARED_BIN)
@@ -972,50 +1028,41 @@ def start_cloudflared_tunnel(
     else:
         cmd = [cf_bin, "tunnel", "--no-autoupdate", "--protocol", "http2", "--url", f"http://127.0.0.1:{local_port}"]
 
-    log_f = open(log_path, "wb")
-    try:
+    with open(log_path, "wb") as log_f:
         proc = subprocess.Popen(cmd, env=cf_env, stdin=subprocess.DEVNULL, stdout=log_f, stderr=subprocess.STDOUT, start_new_session=True, close_fds=True)
-    finally:
-        log_f.close()
     print(f"已后台拉起 cloudflared (PID={proc.pid}, port={local_port})，日志: {log_path}", flush=True)
 
-    tunnel_url: str | None = None
-    if use_named:
-        for _ in range(35):
-            if proc.poll() is not None:
-                tail = log_path.read_text(encoding="utf-8", errors="ignore")[-1500:] if log_path.is_file() else ""
-                if eff_tok:
-                    tail = tail.replace(eff_tok, "[REDACTED]")
-                raise RuntimeError(f"cloudflared 命名隧道异常退出 (rc={proc.returncode})，日志:\n{tail}")
-            txt = log_path.read_text(encoding="utf-8", errors="ignore") if log_path.is_file() else ""
-            if "Registered tunnel connection" in txt or probe_public_tunnel_url(eff_url, kind=service_kind, auth_key=auth_k, timeout=2.0):
-                tunnel_url = eff_url
-                break
-            time.sleep(1)
-        if not tunnel_url:
-            tail = log_path.read_text(encoding="utf-8", errors="ignore")[-1500:] if log_path.is_file() else ""
-            if eff_tok:
-                tail = tail.replace(eff_tok, "[REDACTED]")
-            raise TimeoutError(f"等待 cloudflared 命名隧道注册超时（35s），日志:\n{tail}")
-    else:
-        for _ in range(30):
-            if log_path.is_file():
-                m = tunnel_re.search(log_path.read_text(encoding="utf-8", errors="ignore"))
-                if m:
-                    tunnel_url = m.group(0)
-                    break
-            time.sleep(1)
-        if not tunnel_url:
-            tail = log_path.read_text(encoding="utf-8", errors="ignore")[-1500:] if log_path.is_file() else ""
-            raise TimeoutError(f"等待 cloudflared 分配隧道地址超时（30s），日志:\n{tail}")
-
+    tunnel_url = _wait_for_cloudflared_tunnel_url(
+        proc,
+        use_named=use_named,
+        eff_url=eff_url,
+        eff_tok=eff_tok,
+        service_kind=service_kind,
+        auth_k=auth_k,
+        log_path=log_path,
+        tunnel_re=tunnel_re,
+    )
+    _await_public_tunnel_auth(
+        tunnel_url,
+        kind=norm_kind,
+        auth_key=auth_k,
+        abort_fn=_abort_unprotected,
+        max_attempts=(12 if use_named else 15),
+        interval=1.5,
+    )
     url_file.write_text(tunnel_url + "\n", encoding="utf-8")
     return tunnel_url
 
 
 def start_comfy_tunnel_standard() -> str:
-    """ComfyUI 自举标准步骤 [7/7]：读取环境隧道配置、启停隧道并打印标准标志。"""
+    """ComfyUI 自举标准步骤 [7/7]：先强制校验公网鉴权网关已生效，再发布或按分阶段配置延后隧道。"""
     print("=== [7/7] 启动 ComfyUI Cloudflared 公网隧道 ===", flush=True)
+    auth_ok, auth_reason = verify_local_comfy_auth_enforced()
+    if not auth_ok:
+        raise RuntimeError(f"ComfyUI 公网鉴权网关未生效，拒绝暴露公网隧道: {auth_reason}")
+    if env_flag("COMFY_DEFER_TUNNEL", False):
+        print("[多工作流分阶段启动] ComfyUI 本地鉴权已就绪，延后至最终阶段统一发布隧道", flush=True)
+        return ""
     url = start_cloudflared_tunnel(
         local_port=8188,
         service_kind="comfy",
@@ -1040,7 +1087,7 @@ def finalize_service_contract(
     cf_llm_url: str = "",
     tunnel_pattern: str = "",
 ) -> dict[str, Any]:
-    """汇总并在远端以 0600 写入 `/root/colab_service_meta.json`，严禁把 Comfy 域名错写进 LLM 槽位。"""
+    """汇总并在远端以 0600 写入 `/root/colab_service_meta.json`，确保双服务均通过公网双向鉴权后才发布。"""
     tun_re = re.compile(tunnel_pattern) if tunnel_pattern else DEFAULT_TUNNEL_URL_RE
     meta = read_json_dict(SERVICE_META_FILE) if is_dual else {}
 
@@ -1051,18 +1098,73 @@ def finalize_service_contract(
                 return m.group(0).rstrip("/")
         return str(fb or "").strip().rstrip("/")
 
-    comfy_u = _read_url(TUNNEL_URL_FILE, str(meta.get("comfy_tunnel_url") or cf_comfy_url))
+    comfy_file_u = _read_url(TUNNEL_URL_FILE, "")
     llm_u = _read_url(LLM_TUNNEL_URL_FILE, str(meta.get("llm_tunnel_url") or cf_llm_url)) if is_dual else ""
     comfy_auth_k = ensure_comfy_auth_key()
 
+    # 隧道地址文件可能是同一实例上次部署遗留的（进程已被清理），必须公网实测通过才可信；否则在此主动拉起并验收
+    if comfy_file_u and probe_public_tunnel_url(comfy_file_u, kind="comfy", auth_key=comfy_auth_k):
+        comfy_u = comfy_file_u
+    else:
+        if comfy_file_u:
+            print(f"[隧道复核] 已记录的 ComfyUI 隧道 {comfy_file_u} 公网不可达，正在重新拉起...", flush=True)
+            comfy_file_u = ""
+        cf_tok_env = (os.environ.get("CF_TUNNEL_TOKEN") or "").strip()
+        comfy_u = start_cloudflared_tunnel(
+            local_port=8188,
+            service_kind="comfy",
+            cf_token=cf_tok_env,
+            cf_url=cf_comfy_url,
+            cohost_other=is_dual,
+            tunnel_url_file=TUNNEL_URL_FILE,
+            tunnel_re=tun_re,
+            auth_key=comfy_auth_k,
+        ).rstrip("/")
+
     if is_dual:
+        llm_port = int(meta.get("llm_port") or 18080)
+        llm_key = load_local_llm_auth_key(str(meta.get("api_key") or "").strip() or None)
+        cf_tok = (os.environ.get("CF_TUNNEL_TOKEN") or "").strip()
+
+        def _abort_dual(msg: str) -> None:
+            _pkill_quiet("cloudflared tunnel")
+            with contextlib.suppress(OSError):
+                TUNNEL_URL_FILE.unlink(missing_ok=True)
+                LLM_TUNNEL_URL_FILE.unlink(missing_ok=True)
+            raise RuntimeError(msg)
+
+        if cf_tok and cf_llm_url:
+            llm_ok, llm_reason = verify_local_llm_auth_enforced(port=llm_port, api_key=llm_key or None)
+            if not llm_ok:
+                _abort_dual(f"LLM 网关 API Key 鉴权未生效，拒绝发布双栖命名隧道: {llm_reason}")
+            clean_cf_llm = cf_llm_url.strip().rstrip("/")
+            _await_public_tunnel_auth(
+                clean_cf_llm,
+                kind="llm",
+                auth_key=llm_key,
+                abort_fn=_abort_dual,
+                max_attempts=12,
+                interval=1.5,
+            )
+            LLM_TUNNEL_URL_FILE.write_text(clean_cf_llm + "\n", encoding="utf-8")
+            llm_u = clean_cf_llm
+        elif not llm_u:
+            llm_u = start_cloudflared_tunnel(
+                local_port=llm_port,
+                service_kind="llm",
+                cohost_other=True,
+                tunnel_url_file=LLM_TUNNEL_URL_FILE,
+                tunnel_re=tun_re,
+                auth_key=llm_key,
+            ).rstrip("/")
+
         meta.update({
             "kind": "dual",
             "profiles": list(profiles),
             "comfy_profiles": list(comfy_profiles),
             "llm_profile": llm_profile,
             "comfy_port": 8188,
-            "llm_port": 18080,
+            "llm_port": llm_port,
             "port": 8188,
             "tunnel_url": comfy_u or llm_u,
             "comfy_tunnel_url": comfy_u,
@@ -1089,6 +1191,10 @@ def finalize_service_contract(
             print(f"COMFYUI_TUNNEL_URL: {comfy_u}", flush=True)
             print(f"SERVICE_TUNNEL_URL: {comfy_u}", flush=True)
         print("========================================", flush=True)
+    elif not comfy_file_u and comfy_u:
+        print("========================================", flush=True)
+        print(f"COMFYUI_TUNNEL_URL: {comfy_u}", flush=True)
+        print("========================================", flush=True)
     return meta
 
 
@@ -1103,19 +1209,17 @@ def write_runtime_versions_record(profile: str, extra: dict[str, Any] | None = N
     }
     if extra:
         info.update(extra)
-    try:
+    # PyTorch 未安装或 CUDA 不可用时跳过可选显卡版本字段
+    with contextlib.suppress(ImportError, RuntimeError, OSError):
         import torch
 
         info["torch"] = str(torch.__version__)
         info["cuda"] = str(torch.version.cuda or "")
         if torch.cuda.is_available():
             info["gpu"] = str(torch.cuda.get_device_name(0))
-    except Exception:
-        pass
-    try:
+    # 版本摘要文件属可选诊断产物，无写权限时不阻断主流程
+    with contextlib.suppress(OSError):
         write_private_json(Path("/root/colab_runtime_versions.json"), info)
-    except Exception:
-        pass
     print(f"[VERSIONS] {json.dumps(info, ensure_ascii=False)}", flush=True)
 
 

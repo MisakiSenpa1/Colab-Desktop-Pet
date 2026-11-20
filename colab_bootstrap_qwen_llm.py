@@ -19,6 +19,7 @@
     LLM_GDRIVE_CACHE  是否启用 Google Drive 模型分片读写缓存（默认 0）
     LLM_API_KEY       访问密钥（默认 auto，自动生成 sk-pet-... 并幂等复用已有配置）
 """
+import contextlib
 import json
 import os
 import secrets
@@ -32,6 +33,7 @@ from pathlib import Path, PurePosixPath
 
 from colab_remote_common import (
     CLOUDFLARED_LOG,
+    LLAMA_API_KEY_FILE,
     LLM_TUNNEL_URL_FILE,
     RCLONE_CONF,
     SERVICE_META_FILE,
@@ -41,11 +43,17 @@ from colab_remote_common import (
     download_with_urllib as _download_with_urllib,
     ensure_tools,
     env_flag as _env_flag,
+    load_companion_text,
     mask_secret as _mask_key,
+    probe_comfy_ready,
     read_json_dict,
     run_cmd,
+    safe_extract_tar_gz,
     start_cloudflared_tunnel,
+    terminate_proc,
+    verify_local_llm_auth_enforced,
     write_private_json as _write_private_meta,
+    write_private_text,
     write_runtime_versions_record as _write_versions_common,
 )
 
@@ -60,6 +68,8 @@ LLAMA_API = f"http://127.0.0.1:{LLAMA_PORT}"
 LLAMA_INTERNAL_API = f"http://127.0.0.1:{LLAMA_INTERNAL_PORT}"
 
 LLAMA_LOG = Path("/root/llama_server.log")
+SSE_GATEWAY_SRC_FILENAME = "colab_sse_gateway.py"
+SSE_GATEWAY_VERSION = 2
 SSE_GATEWAY_FILE = Path("/root/llm_sse_gateway.py")
 SSE_GATEWAY_LOG = Path("/root/llm_sse_gateway.log")
 CLOUDFLARED_LLM_LOG = Path("/root/cloudflared_llm.log")
@@ -177,25 +187,6 @@ def _calc_n_parallel(vram_gib: float) -> int:
     return 4 if vram_gib >= 88.0 else 2
 
 
-def _safe_extract_tar(tar_path: Path, dest_dir: Path):
-    """安全解压 tar.gz 归档至指定目录，防御路径穿越并保留可执行权限与同级符号链接。"""
-    dest_root = dest_dir.resolve()
-    dest_root.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(tar_path, "r:gz") as tf:
-        for member in tf.getmembers():
-            norm_parts = PurePosixPath(member.name).parts
-            if PurePosixPath(member.name).is_absolute() or ".." in norm_parts:
-                raise RuntimeError(f"归档中存在越界路径，拒绝解压: {member.name}")
-            if member.issym() or member.islnk():
-                link_p = PurePosixPath(member.linkname)
-                if link_p.is_absolute() or ".." in link_p.parts:
-                    raise RuntimeError(f"归档符号链接存在越界目标，拒绝解压: {member.linkname}")
-        if sys.version_info >= (3, 12):
-            tf.extractall(dest_root, filter="tar")
-        else:
-            tf.extractall(dest_root)
-
-
 def _existing_quant_gib(quant: str) -> float:
     """计算指定量化子目录下已落盘目标文件的总 GiB，保证重复运行时的幂等空间核算。"""
     spec = QUANT_SPECS.get(quant)
@@ -251,8 +242,8 @@ def check_environment() -> tuple[str, float, str]:
                 f"PyTorch: {torch.__version__} | CUDA: {torch.version.cuda} | SM: sm_{sm_num} | VRAM: {vram_gib:.1f} GiB",
                 flush=True,
             )
-    except Exception:
-        pass
+    except (ImportError, RuntimeError, OSError) as exc:
+        print(f"[提示] PyTorch CUDA 探测跳过，改用 nvidia-smi ({exc})", flush=True)
 
     if not sm_num or vram_gib <= 0.0:
         raw_cap = subprocess.check_output(
@@ -432,6 +423,192 @@ def _fast_pull_tar(url: str, dst: Path) -> bool:
         return False
 
 
+def _try_pull_llama_gdrive_cache(
+    rclone_bin: str,
+    remote_cache_uri: str,
+    local_cache_tar: Path,
+    cache_tar_name: str,
+) -> tuple[Path, str] | None:
+    """尝试从 Google Drive 拉取同架构预归档 llama-server 二进制缓存包并校验 CUDA。"""
+    print(f"尝试从 Google Drive 拉取缓存引擎包: {remote_cache_uri}", flush=True)
+    local_cache_tar.unlink(missing_ok=True)
+    pull_res = run_cmd(
+        [
+            rclone_bin,
+            "copyto",
+            "--config", str(RCLONE_CONF),
+            "--disable-http2",
+            remote_cache_uri,
+            str(local_cache_tar),
+        ],
+        check=False,
+    )
+    if not (pull_res.returncode == 0 and local_cache_tar.is_file() and local_cache_tar.stat().st_size > 100_000):
+        return None
+
+    shutil.rmtree(LLAMA_DIR, ignore_errors=True)
+    LLAMA_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        safe_extract_tar_gz(local_cache_tar, LLAMA_DIR)
+        verified = _verify_llama_cuda(LLAMA_DIR)
+        if verified is not None:
+            print(f"已命中云盘引擎缓存并校验通过: {cache_tar_name}", flush=True)
+            return verified
+    except Exception as exc:
+        print(f"[提示] 云盘缓存包解压或校验异常，继续拉取构建 ({exc})", flush=True)
+    finally:
+        local_cache_tar.unlink(missing_ok=True)
+    return None
+
+
+def _try_pull_llama_github_prebuilt() -> tuple[Path, str] | None:
+    """尝试拉取并验证官方 GitHub Release Ubuntu CUDA 12.8 预编译包。"""
+    shutil.rmtree(LLAMA_DIR, ignore_errors=True)
+    LLAMA_DIR.mkdir(parents=True, exist_ok=True)
+    base_rel = f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMA_CPP_TAG}"
+    main_tar = Path(f"/tmp/llama-{LLAMA_CPP_TAG}-cuda.tar.gz")
+    cudart_tar = Path(f"/tmp/cudart-llama-{LLAMA_CPP_TAG}-cuda.tar.gz")
+    verified: tuple[Path, str] | None = None
+
+    print(f"尝试拉取官方 CUDA 预编译包 ({LLAMA_CPP_TAG})...", flush=True)
+    try:
+        ok_main = _fast_pull_tar(
+            f"{base_rel}/llama-{LLAMA_CPP_TAG}-bin-ubuntu-cuda-12.8-x64.tar.gz",
+            main_tar,
+        )
+        if ok_main:
+            ok_rt = _fast_pull_tar(
+                f"{base_rel}/cudart-llama-{LLAMA_CPP_TAG}-bin-ubuntu-cuda-12.8-x64.tar.gz",
+                cudart_tar,
+            )
+            safe_extract_tar_gz(main_tar, LLAMA_DIR)
+            if ok_rt and cudart_tar.is_file():
+                safe_extract_tar_gz(cudart_tar, LLAMA_DIR)
+            verified = _verify_llama_cuda(LLAMA_DIR)
+    except Exception as exc:
+        print(f"[提示] 预编译包解压或验证未通过，准备回退源码编译: {exc}", flush=True)
+        verified = None
+    finally:
+        main_tar.unlink(missing_ok=True)
+        cudart_tar.unlink(missing_ok=True)
+    return verified
+
+
+def _select_cuda_build_env() -> dict[str, str]:
+    """构造 CUDA 源码编译环境；当系统默认 gcc >= 15 且装有 gcc-14 时自动切换避免 char8_t 冲突。"""
+    build_env = os.environ.copy()
+    if shutil.which("gcc-14") and shutil.which("g++-14"):
+        gcc_ver_res = subprocess.run(
+            ["gcc", "-dumpversion"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        raw_major = (gcc_ver_res.stdout or "").strip().split(".")[0]
+        if raw_major.isdigit() and int(raw_major) >= 15:
+            build_env["CC"] = "gcc-14"
+            build_env["CXX"] = "g++-14"
+    return build_env
+
+
+def _install_compiled_llama_artifacts(src_dir: Path) -> None:
+    """将源码编译产出的 `llama-server` 与 `.so` 动态库（保留符号链接）安装到 `LLAMA_DIR/bin`。"""
+    shutil.rmtree(LLAMA_DIR, ignore_errors=True)
+    bin_dst = LLAMA_DIR / "bin"
+    bin_dst.mkdir(parents=True, exist_ok=True)
+
+    built_bins = list((src_dir / "build").rglob("llama-server"))
+    if not built_bins:
+        raise RuntimeError("源码编译完成后未找到 llama-server 可执行文件")
+    shutil.copy2(built_bins[0], bin_dst / "llama-server")
+    os.chmod(bin_dst / "llama-server", 0o755)
+
+    for so_file in (src_dir / "build").rglob("*.so*"):
+        target_so = bin_dst / so_file.name
+        if target_so.exists() or target_so.is_symlink():
+            continue
+        if so_file.is_symlink():
+            link_name = PurePosixPath(os.readlink(so_file)).name
+            if link_name and link_name != so_file.name:
+                os.symlink(link_name, target_so)
+        elif so_file.is_file():
+            shutil.copy2(so_file, target_so)
+
+
+def _compile_llama_server_from_source(sm_num: str) -> tuple[Path, str]:
+    """使用 CMake + Ninja 按目标 SM 架构单架构源码编译 llama-server 并执行 CUDA 自检。"""
+    print(f"预编译包未就绪或不适配当前架构，启动单架构 (sm_{sm_num}) 极速源码编译...", flush=True)
+    run_cmd([
+        "bash",
+        "-lc",
+        "apt-get update -qq && apt-get install -y -qq build-essential cmake ninja-build git",
+    ])
+    src_dir = Path("/tmp/llama_cpp_src")
+    shutil.rmtree(src_dir, ignore_errors=True)
+    clone_res = run_cmd(
+        [
+            "git", "clone", "--depth", "1", "--branch", LLAMA_CPP_TAG,
+            "https://github.com/ggml-org/llama.cpp.git", str(src_dir),
+        ],
+        check=False,
+    )
+    if clone_res.returncode != 0:
+        print(f"[提示] 分支标签 {LLAMA_CPP_TAG} 克隆未命中，回退最新主干克隆...", flush=True)
+        shutil.rmtree(src_dir, ignore_errors=True)
+        run_cmd([
+            "git", "clone", "--depth", "1",
+            "https://github.com/ggml-org/llama.cpp.git", str(src_dir),
+        ])
+
+    cmake_cmd = [
+        "cmake", "-B", "build", "-G", "Ninja",
+        "-DGGML_CUDA=ON", f"-DCMAKE_CUDA_ARCHITECTURES={sm_num}",
+        "-DLLAMA_CURL=OFF", "-DCMAKE_BUILD_TYPE=Release",
+    ]
+    build_env = _select_cuda_build_env()
+    run_cmd(cmake_cmd, cwd=src_dir, env=build_env)
+    nproc = str(max(2, os.cpu_count() or 4))
+    run_cmd(["cmake", "--build", "build", "--target", "llama-server", "-j", nproc], cwd=src_dir, env=build_env)
+
+    _install_compiled_llama_artifacts(src_dir)
+    shutil.rmtree(src_dir, ignore_errors=True)
+    verified = _verify_llama_cuda(LLAMA_DIR)
+    if verified is None:
+        raise RuntimeError("llama-server 源码编译完成，但 --list-devices 仍未识别到 CUDA0！")
+    return verified
+
+
+def _upload_llama_gdrive_cache(
+    rclone_bin: str,
+    remote_cache_uri: str,
+    local_cache_tar: Path,
+) -> None:
+    """将已验证通过的 llama-server 打包上传至 Google Drive 供后续实例秒拉复用。"""
+    try:
+        print(f"正在归档并上传 llama-server 二进制缓存至 {remote_cache_uri} ...", flush=True)
+        local_cache_tar.unlink(missing_ok=True)
+        with tarfile.open(local_cache_tar, "w:gz") as tf:
+            for item in sorted(LLAMA_DIR.rglob("*")):
+                if item.is_file() or item.is_symlink():
+                    tf.add(item, arcname=item.relative_to(LLAMA_DIR).as_posix(), recursive=False)
+        run_cmd(
+            [
+                rclone_bin,
+                "copyto",
+                "--config", str(RCLONE_CONF),
+                "--disable-http2",
+                str(local_cache_tar),
+                remote_cache_uri,
+            ],
+            check=False,
+        )
+    except Exception as exc:
+        print(f"[提示] 上传引擎二进制缓存失败（不影响本次部署）: {exc}", flush=True)
+    finally:
+        local_cache_tar.unlink(missing_ok=True)
+
+
 def ensure_llama_server(sm_num: str) -> tuple[Path, str]:
     """按 云盘缓存 -> GitHub CUDA 预编译包 -> Ninja 单架构源码编译 三级准备 llama-server。"""
     print(f"=== [3/7] 准备 llama-server CUDA 推理引擎 (tag={LLAMA_CPP_TAG}, sm_{sm_num}) ===", flush=True)
@@ -445,178 +622,21 @@ def ensure_llama_server(sm_num: str) -> tuple[Path, str]:
     cache_tar_name = f"llama-server-{LLAMA_CPP_TAG}-sm{sm_num}.tar.gz"
     remote_cache_uri = f"{GDRIVE_BIN_REMOTE}/{cache_tar_name}"
     local_cache_tar = Path(f"/tmp/{cache_tar_name}")
-    loaded_from_gdrive = False
 
     # 1) 优先尝试从 Google Drive 拉取同架构预归档二进制包
     if has_rclone_conf:
-        print(f"尝试从 Google Drive 拉取缓存引擎包: {remote_cache_uri}", flush=True)
-        local_cache_tar.unlink(missing_ok=True)
-        pull_res = run_cmd(
-            [
-                rclone_bin,
-                "copyto",
-                "--config", str(RCLONE_CONF),
-                "--disable-http2",
-                remote_cache_uri,
-                str(local_cache_tar),
-            ],
-            check=False,
-        )
-        if pull_res.returncode == 0 and local_cache_tar.is_file() and local_cache_tar.stat().st_size > 100_000:
-            shutil.rmtree(LLAMA_DIR, ignore_errors=True)
-            LLAMA_DIR.mkdir(parents=True, exist_ok=True)
-            try:
-                _safe_extract_tar(local_cache_tar, LLAMA_DIR)
-                verified = _verify_llama_cuda(LLAMA_DIR)
-                if verified is not None:
-                    loaded_from_gdrive = True
-                    local_cache_tar.unlink(missing_ok=True)
-                    print(f"已命中云盘引擎缓存并校验通过: {cache_tar_name}", flush=True)
-                    return verified
-            except Exception as exc:
-                print(f"[提示] 云盘缓存包解压或校验异常，继续拉取构建 ({exc})", flush=True)
-            finally:
-                local_cache_tar.unlink(missing_ok=True)
+        cached = _try_pull_llama_gdrive_cache(rclone_bin, remote_cache_uri, local_cache_tar, cache_tar_name)
+        if cached is not None:
+            return cached
 
-    # 2) 未命中缓存时尝试拉取官方 GitHub Release Ubuntu CUDA 12.8 预编译包
-    verified: tuple[Path, str] | None = None
-    shutil.rmtree(LLAMA_DIR, ignore_errors=True)
-    LLAMA_DIR.mkdir(parents=True, exist_ok=True)
-    base_rel = f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMA_CPP_TAG}"
-    main_tar = Path(f"/tmp/llama-{LLAMA_CPP_TAG}-cuda.tar.gz")
-    cudart_tar = Path(f"/tmp/cudart-llama-{LLAMA_CPP_TAG}-cuda.tar.gz")
-
-    print(f"尝试拉取官方 CUDA 预编译包 ({LLAMA_CPP_TAG})...", flush=True)
-    ok_main = _fast_pull_tar(
-        f"{base_rel}/llama-{LLAMA_CPP_TAG}-bin-ubuntu-cuda-12.8-x64.tar.gz",
-        main_tar,
-    )
-    if ok_main:
-        ok_rt = _fast_pull_tar(
-            f"{base_rel}/cudart-llama-{LLAMA_CPP_TAG}-bin-ubuntu-cuda-12.8-x64.tar.gz",
-            cudart_tar,
-        )
-        try:
-            _safe_extract_tar(main_tar, LLAMA_DIR)
-            if ok_rt and cudart_tar.is_file():
-                _safe_extract_tar(cudart_tar, LLAMA_DIR)
-            verified = _verify_llama_cuda(LLAMA_DIR)
-        except Exception as exc:
-            print(f"[提示] 预编译包解压或验证未通过，准备回退源码编译: {exc}", flush=True)
-            verified = None
-    main_tar.unlink(missing_ok=True)
-    cudart_tar.unlink(missing_ok=True)
-
-    # 3) 若预编译包不可用或未识别到 CUDA0，自动回退 Ninja 单架构源码编译
+    # 2) 未命中缓存时尝试拉取官方 GitHub Release CUDA 预编译包，失败则回退源码编译
+    verified = _try_pull_llama_github_prebuilt()
     if verified is None:
-        print(
-            f"预编译包未就绪或不适配当前架构，启动单架构 (sm_{sm_num}) 极速源码编译...",
-            flush=True,
-        )
-        run_cmd([
-            "bash",
-            "-lc",
-            "apt-get update -qq && apt-get install -y -qq build-essential cmake ninja-build git",
-        ])
-        src_dir = Path("/tmp/llama_cpp_src")
-        shutil.rmtree(src_dir, ignore_errors=True)
-        clone_res = run_cmd(
-            [
-                "git", "clone", "--depth", "1", "--branch", LLAMA_CPP_TAG,
-                "https://github.com/ggml-org/llama.cpp.git", str(src_dir),
-            ],
-            check=False,
-        )
-        if clone_res.returncode != 0:
-            print(f"[提示] 分支标签 {LLAMA_CPP_TAG} 克隆未命中，回退最新主干克隆...", flush=True)
-            shutil.rmtree(src_dir, ignore_errors=True)
-            run_cmd([
-                "git", "clone", "--depth", "1",
-                "https://github.com/ggml-org/llama.cpp.git", str(src_dir),
-            ])
+        verified = _compile_llama_server_from_source(sm_num)
 
-        cmake_cmd = [
-            "cmake",
-            "-B", "build",
-            "-G", "Ninja",
-            "-DGGML_CUDA=ON",
-            f"-DCMAKE_CUDA_ARCHITECTURES={sm_num}",
-            "-DLLAMA_CURL=OFF",
-            "-DCMAKE_BUILD_TYPE=Release",
-        ]
-        # CUDA 13 nvcc 若遇系统默认 gcc >= 15 可能报 char8_t 兼容问题，若存在 gcc-14 则优先选用
-        build_env = os.environ.copy()
-        if shutil.which("gcc-14") and shutil.which("g++-14"):
-            gcc_ver_res = subprocess.run(
-                ["gcc", "-dumpversion"],
-                stdin=subprocess.DEVNULL,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            raw_major = (gcc_ver_res.stdout or "").strip().split(".")[0]
-            if raw_major.isdigit() and int(raw_major) >= 15:
-                build_env["CC"] = "gcc-14"
-                build_env["CXX"] = "g++-14"
-
-        run_cmd(cmake_cmd, cwd=src_dir, env=build_env)
-        nproc = str(max(2, os.cpu_count() or 4))
-        run_cmd(
-            ["cmake", "--build", "build", "--target", "llama-server", "-j", nproc],
-            cwd=src_dir,
-            env=build_env,
-        )
-
-        shutil.rmtree(LLAMA_DIR, ignore_errors=True)
-        bin_dst = LLAMA_DIR / "bin"
-        bin_dst.mkdir(parents=True, exist_ok=True)
-
-        built_bins = list((src_dir / "build").rglob("llama-server"))
-        if not built_bins:
-            raise RuntimeError("源码编译完成后未找到 llama-server 可执行文件")
-        shutil.copy2(built_bins[0], bin_dst / "llama-server")
-        os.chmod(bin_dst / "llama-server", 0o755)
-
-        for so_file in (src_dir / "build").rglob("*.so*"):
-            target_so = bin_dst / so_file.name
-            if target_so.exists() or target_so.is_symlink():
-                continue
-            if so_file.is_symlink():
-                link_name = PurePosixPath(os.readlink(so_file)).name
-                if link_name and link_name != so_file.name:
-                    os.symlink(link_name, target_so)
-            elif so_file.is_file():
-                shutil.copy2(so_file, target_so)
-
-        shutil.rmtree(src_dir, ignore_errors=True)
-        verified = _verify_llama_cuda(LLAMA_DIR)
-        if verified is None:
-            raise RuntimeError("llama-server 源码编译完成，但 --list-devices 仍未识别到 CUDA0！")
-
-    # 4) 若云盘尚无该架构缓存，打包上传至 Google Drive 供后续实例秒拉复用
-    if has_rclone_conf and not loaded_from_gdrive:
-        try:
-            print(f"正在归档并上传 llama-server 二进制缓存至 {remote_cache_uri} ...", flush=True)
-            local_cache_tar.unlink(missing_ok=True)
-            with tarfile.open(local_cache_tar, "w:gz") as tf:
-                for item in sorted(LLAMA_DIR.rglob("*")):
-                    if item.is_file() or item.is_symlink():
-                        tf.add(item, arcname=item.relative_to(LLAMA_DIR).as_posix(), recursive=False)
-            run_cmd(
-                [
-                    rclone_bin,
-                    "copyto",
-                    "--config", str(RCLONE_CONF),
-                    "--disable-http2",
-                    str(local_cache_tar),
-                    remote_cache_uri,
-                ],
-                check=False,
-            )
-        except Exception as exc:
-            print(f"[提示] 上传引擎二进制缓存失败（不影响本次部署）: {exc}", flush=True)
-        finally:
-            local_cache_tar.unlink(missing_ok=True)
+    # 3) 若云盘尚无该架构缓存，打包上传至 Google Drive 供后续实例秒拉复用
+    if has_rclone_conf:
+        _upload_llama_gdrive_cache(rclone_bin, remote_cache_uri, local_cache_tar)
 
     print(f"推理引擎依赖安装完成: {verified[0]}", flush=True)
     return verified
@@ -685,6 +705,31 @@ def _read_existing_meta() -> dict:
     return read_json_dict(SERVICE_META_FILE)
 
 
+def _server_supports_api_key_file(server_bin: Path) -> bool:
+    """探测 llama-server --help 是否支持 --api-key-file 参数，避免命令行明文暴露密钥。"""
+    env = os.environ.copy()
+    search_root = LLAMA_DIR if LLAMA_DIR.is_dir() else server_bin.parent
+    ld_path = _build_ld_library_path(search_root)
+    if ld_path:
+        env["LD_LIBRARY_PATH"] = ld_path
+    try:
+        res = subprocess.run(
+            [str(server_bin), "--help"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+            env=env,
+            check=False,
+        )
+        help_txt = f"{res.stdout or ''}\n{res.stderr or ''}"
+        return "--api-key-file" in help_txt
+    except Exception:
+        return False
+
+
 def build_auth_and_args(
     server_bin: Path,
     first_shard: Path,
@@ -740,6 +785,12 @@ def build_auth_and_args(
     else:
         cache_ram_mib = 8192
     threads_batch = max(4, min(48, os.cpu_count() or 16))
+    write_private_text(LLAMA_API_KEY_FILE, api_key + "\n")
+    auth_args = (
+        ["--api-key-file", str(LLAMA_API_KEY_FILE)]
+        if _server_supports_api_key_file(server_bin)
+        else ["--api-key", api_key]
+    )
 
     cmd = [
         str(server_bin),
@@ -769,7 +820,7 @@ def build_auth_and_args(
         "-tb", str(threads_batch),
         "--host", "127.0.0.1",
         "--port", str(LLAMA_INTERNAL_PORT),
-        "--api-key", api_key,
+        *auth_args,
         "--alias", MODEL_ALIAS,
     ])
     if DEFAULT_EFFORT == "none":
@@ -790,757 +841,6 @@ def build_auth_and_args(
     )
     return api_key, cmd
 
-
-_SSE_GATEWAY_SCRIPT = r'''#!/usr/bin/env python3
-"""本地零依赖 SSE 保活反向代理网关（127.0.0.1:18080 -> 127.0.0.1:18081）。
-
-针对流式推理 POST 请求（stream=true），在 llama-server 长上下文 Prefill 期间，
-按 SSE_HEARTBEAT_SEC 间隔向下游发送合法 SSE 注释帧 `: keepalive\n\n`（Chunked 编码），
-防止 Cloudflare 代理因约 100 秒无首字节响应而触发超时断流；
-其余请求（/health、/v1/models、非流式、401 鉴权错误等）保持零修改原样透传。
-"""
-import asyncio
-import gzip
-import json
-import os
-import re
-import sys
-import zlib
-
-LISTEN_HOST = os.environ.get("SSE_GW_HOST", "127.0.0.1")
-LISTEN_PORT = int(os.environ.get("SSE_GW_PORT", "18080"))
-UPSTREAM_HOST = os.environ.get("SSE_UPSTREAM_HOST", "127.0.0.1")
-UPSTREAM_PORT = int(os.environ.get("SSE_UPSTREAM_PORT", "18081"))
-HEARTBEAT_SEC = float(os.environ.get("SSE_HEARTBEAT_SEC", "12.0"))
-BASE_MODEL = (os.environ.get("SSE_BASE_MODEL") or "Qwen3.8-Flash-Next-abliterated").strip() or "Qwen3.8-Flash-Next-abliterated"
-DEFAULT_EFFORT = (os.environ.get("SSE_DEFAULT_EFFORT") or "medium").strip().lower()
-if DEFAULT_EFFORT not in {"none", "low", "medium", "high", "xhigh"}:
-    DEFAULT_EFFORT = "medium"
-MAX_STREAM_INSPECT_BYTES = 128 * 1024 * 1024
-
-STREAM_PATHS = frozenset({
-    "/v1/chat/completions",
-    "/chat/completions",
-    "/v1/completions",
-    "/completions",
-    "/v1/messages",
-    "/messages",
-})
-MODELS_PATHS = frozenset({"/v1/models", "/models"})
-
-_KEEPALIVE_PAYLOAD = b": keepalive\n\n"
-_KEEPALIVE_CHUNK = f"{len(_KEEPALIVE_PAYLOAD):x}\r\n".encode("ascii") + _KEEPALIVE_PAYLOAD + b"\r\n"
-
-_SUFFIX_TO_EFFORT = (
-    ("-nothink", "none"),
-    ("-minimal", "low"),
-    ("-medium", "medium"),
-    ("-xhigh", "xhigh"),
-    ("-none", "none"),
-    ("-fast", "low"),
-    ("-off", "none"),
-    ("-high", "xhigh"),
-    ("-max", "xhigh"),
-    ("-low", "low"),
-)
-_SUPPORTED_PARAMS = ["reasoning_effort", "thinking", "enable_thinking", "tools"]
-_ALL_REASONING_LEVELS = ["none", "low", "medium", "high", "xhigh"]
-
-
-def _map_effort_str(val: object) -> str | None:
-    """将各类协议的思考强度字符串安全映射为 Jinja 模板合法集合（none/low/medium/xhigh）。"""
-    if not isinstance(val, str):
-        return None
-    s = val.strip().lower()
-    if s in {"none", "off", "disable", "disabled", "false", "0", "nothink"}:
-        return "none"
-    if s in {"minimal", "low", "fast"}:
-        return "low"
-    if s in {"medium", "med", "balanced", "default"}:
-        return "medium"
-    if s in {"high", "xhigh", "max", "heavy"}:
-        return "xhigh"
-    return None
-
-
-def _augment_models_catalog(obj: dict) -> dict:
-    """为 /v1/models 注入 reasoning_levels 与分档虚拟模型供 Magpie 一键识别。"""
-    if not isinstance(obj, dict):
-        return obj
-    data_list = obj.get("data")
-    if isinstance(data_list, list) and data_list:
-        base_item = None
-        for item in data_list:
-            if isinstance(item, dict) and item.get("id") == BASE_MODEL:
-                base_item = item
-                break
-        if base_item is None and isinstance(data_list[0], dict):
-            base_item = data_list[0]
-        if base_item is not None:
-            base_id = str(base_item.get("id") or BASE_MODEL)
-            base_item["reasoning_levels"] = list(_ALL_REASONING_LEVELS)
-            base_item["supported_parameters"] = list(_SUPPORTED_PARAMS)
-            existing_ids = {str(it.get("id")) for it in data_list if isinstance(it, dict) and it.get("id")}
-            for suf, lvls in (
-                ("-nothink", ["none"]),
-                ("-low", ["low"]),
-                ("-medium", ["medium"]),
-                ("-xhigh", ["xhigh"]),
-            ):
-                vid = f"{base_id}{suf}"
-                if vid in existing_ids:
-                    continue
-                clone = dict(base_item)
-                clone["id"] = vid
-                if "aliases" in clone:
-                    clone["aliases"] = [vid]
-                clone["reasoning_levels"] = lvls
-                clone["supported_parameters"] = list(_SUPPORTED_PARAMS)
-                data_list.append(clone)
-                existing_ids.add(vid)
-
-    models_list = obj.get("models")
-    if isinstance(models_list, list) and models_list:
-        base_m = None
-        for item in models_list:
-            if isinstance(item, dict) and (item.get("model") == BASE_MODEL or item.get("name") == BASE_MODEL):
-                base_m = item
-                break
-        if base_m is None and isinstance(models_list[0], dict):
-            base_m = models_list[0]
-        if base_m is not None:
-            base_id = str(base_m.get("model") or base_m.get("name") or BASE_MODEL)
-            base_m["reasoning_levels"] = list(_ALL_REASONING_LEVELS)
-            existing_names = {
-                str(it.get("model") or it.get("name"))
-                for it in models_list
-                if isinstance(it, dict) and (it.get("model") or it.get("name"))
-            }
-            for suf, lvls in (
-                ("-nothink", ["none"]),
-                ("-low", ["low"]),
-                ("-medium", ["medium"]),
-                ("-xhigh", ["xhigh"]),
-            ):
-                vid = f"{base_id}{suf}"
-                if vid in existing_names:
-                    continue
-                clone = dict(base_m)
-                clone["name"] = vid
-                clone["model"] = vid
-                clone["reasoning_levels"] = lvls
-                models_list.append(clone)
-                existing_names.add(vid)
-    return obj
-
-
-def _normalize_inference_payload(payload: dict, path: str) -> dict:
-    """解析虚拟模型后缀与多协议思考参数，统一规范化为 Jinja 安全参数并防报错。"""
-    if not isinstance(payload, dict):
-        return payload
-
-    suffix_effort: str | None = None
-    model_val = payload.get("model")
-    if isinstance(model_val, str):
-        stripped_val = model_val.strip()
-        lower_val = stripped_val.lower()
-        for suf, eff in _SUFFIX_TO_EFFORT:
-            if lower_val.endswith(suf):
-                suffix_effort = eff
-                payload["model"] = BASE_MODEL
-                break
-
-    raw_ct_kwargs = payload.get("chat_template_kwargs")
-    ct_kwargs = dict(raw_ct_kwargs) if isinstance(raw_ct_kwargs, dict) else {}
-
-    explicit_disable = False
-    explicit_enable = False
-    for flag_val in (ct_kwargs.get("enable_thinking"), payload.get("enable_thinking")):
-        if isinstance(flag_val, bool):
-            if flag_val:
-                explicit_enable = True
-            else:
-                explicit_disable = True
-
-    thinking_cfg = payload.get("thinking")
-    budget_effort: str | None = None
-    if isinstance(thinking_cfg, dict):
-        t_type = str(thinking_cfg.get("type") or "").strip().lower()
-        if t_type == "disabled":
-            explicit_disable = True
-        elif t_type == "enabled":
-            explicit_enable = True
-            bt = thinking_cfg.get("budget_tokens")
-            if isinstance(bt, (int, float)):
-                if bt <= 0:
-                    budget_effort = "none"
-                elif bt <= 1024:
-                    budget_effort = "low"
-                elif bt <= 4096:
-                    budget_effort = "medium"
-                else:
-                    budget_effort = "xhigh"
-
-    reasoning_cfg = payload.get("reasoning")
-    output_cfg = payload.get("output_config")
-    explicit_level = (
-        _map_effort_str(ct_kwargs.get("reasoning_effort"))
-        or _map_effort_str(payload.get("reasoning_effort"))
-        or (_map_effort_str(reasoning_cfg.get("effort")) if isinstance(reasoning_cfg, dict) else None)
-        or (_map_effort_str(output_cfg.get("effort")) if isinstance(output_cfg, dict) else None)
-        or budget_effort
-    )
-
-    default_mapped = _map_effort_str(DEFAULT_EFFORT) or "medium"
-    if explicit_disable or explicit_level == "none":
-        resolved = "none"
-    elif explicit_level in {"low", "medium", "xhigh"}:
-        resolved = explicit_level
-    elif explicit_enable:
-        if suffix_effort in {"low", "medium", "xhigh"}:
-            resolved = suffix_effort
-        elif default_mapped in {"low", "medium", "xhigh"}:
-            resolved = default_mapped
-        else:
-            resolved = "medium"
-    elif suffix_effort is not None:
-        resolved = suffix_effort
-    else:
-        resolved = default_mapped
-
-    # 清理可能透传进 llama-server Jinja 模板引发异常的顶层非标准字段
-    payload.pop("reasoning_effort", None)
-    payload.pop("enable_thinking", None)
-    payload.pop("reasoning", None)
-    payload.pop("output_config", None)
-
-    if resolved == "none":
-        ct_kwargs.pop("reasoning_effort", None)
-        ct_kwargs["enable_thinking"] = False
-        if path in {"/v1/messages", "/messages"}:
-            payload["thinking"] = {"type": "disabled"}
-        else:
-            payload.pop("thinking", None)
-    else:
-        ct_kwargs["enable_thinking"] = True
-        ct_kwargs["reasoning_effort"] = resolved
-
-    payload["chat_template_kwargs"] = ct_kwargs
-    return payload
-
-
-def _parse_headers(raw_head: bytes) -> tuple[str, list[tuple[str, str]], dict[str, str]]:
-    """解析 HTTP 起始行与大小写不敏感头字段映射。"""
-    text = raw_head[:-4].decode("latin-1")
-    lines = text.split("\r\n")
-    start_line = lines[0]
-    hdrs: list[tuple[str, str]] = []
-    hdr_map: dict[str, str] = {}
-    for line in lines[1:]:
-        if ":" not in line:
-            continue
-        k, v = line.split(":", 1)
-        k_s = k.strip()
-        v_s = v.strip()
-        hdrs.append((k_s, v_s))
-        kl = k_s.lower()
-        hdr_map[kl] = f"{hdr_map[kl]}, {v_s}" if kl in hdr_map else v_s
-    return start_line, hdrs, hdr_map
-
-
-async def _read_chunked_body(reader: asyncio.StreamReader, limit: int) -> bytes:
-    """解码客户端 Chunked 请求体，限制最大缓冲大小防止内存溢出。"""
-    buf = bytearray()
-    while True:
-        size_line = await reader.readline()
-        if not size_line:
-            raise EOFError("unexpected EOF reading chunk size")
-        size_hex = size_line.split(b";", 1)[0].strip()
-        chunk_size = int(size_hex, 16)
-        if chunk_size == 0:
-            while True:
-                trailer = await reader.readline()
-                if not trailer or trailer in (b"\r\n", b"\n"):
-                    break
-            break
-        if len(buf) + chunk_size > limit:
-            raise ValueError("payload_too_large")
-        data = await reader.readexactly(chunk_size)
-        buf.extend(data)
-        crlf = await reader.readexactly(2)
-        if crlf != b"\r\n":
-            raise ValueError("invalid chunk terminator")
-    return bytes(buf)
-
-
-def _rebuild_headers(
-    start_line: str,
-    hdrs: list[tuple[str, str]],
-    *,
-    force_close: bool = True,
-    content_length: int | None = None,
-    strip_expect: bool = False,
-    strip_accept_encoding: bool = False,
-    strip_content_encoding: bool = False,
-) -> bytes:
-    """重组 HTTP 头：统一注入 Connection: close 以保证每次请求均经过网关调度。"""
-    drop = {"connection", "keep-alive", "proxy-connection"} if force_close else set()
-    if strip_expect:
-        drop.add("expect")
-    if strip_accept_encoding:
-        drop.add("accept-encoding")
-    if strip_content_encoding:
-        drop.add("content-encoding")
-    if content_length is not None:
-        drop.update({"transfer-encoding", "content-length"})
-    out = [start_line]
-    for k, v in hdrs:
-        if k.lower() in drop:
-            continue
-        out.append(f"{k}: {v}")
-    if force_close:
-        out.append("Connection: close")
-    if content_length is not None:
-        out.append(f"Content-Length: {content_length}")
-    return ("\r\n".join(out) + "\r\n\r\n").encode("latin-1")
-
-
-async def _pump_stream(
-    reader: asyncio.StreamReader,
-    writer: asyncio.StreamWriter,
-    *,
-    as_chunked: bool = False,
-    emit_last_chunk: bool = False,
-) -> None:
-    """将输入流单向转发至输出流，可选封装为 HTTP/1.1 Chunked 帧。"""
-    while True:
-        data = await reader.read(65536)
-        if not data:
-            break
-        if as_chunked:
-            writer.write(f"{len(data):x}\r\n".encode("ascii") + data + b"\r\n")
-        else:
-            writer.write(data)
-        await writer.drain()
-    if as_chunked and emit_last_chunk:
-        writer.write(b"0\r\n\r\n")
-        await writer.drain()
-
-
-async def _wait_client_disconnect(reader: asyncio.StreamReader) -> None:
-    """监听客户端关闭信号（read 返回 EOF 即视为断开）。"""
-    while True:
-        chunk = await reader.read(1024)
-        if not chunk:
-            return
-
-
-def _cors_header_block(hdr_map: dict[str, str]) -> str:
-    """生成浏览器 Web 客户端兼容的 CORS 响应头片段（支持 Origin 回显与凭据请求）。"""
-    origin = str(hdr_map.get("origin") or "").strip()
-    if origin and "\r" not in origin and "\n" not in origin:
-        lines = [
-            f"Access-Control-Allow-Origin: {origin}",
-            "Access-Control-Allow-Credentials: true",
-            "Vary: Origin",
-        ]
-    else:
-        lines = ["Access-Control-Allow-Origin: *"]
-    lines.extend([
-        "Access-Control-Allow-Methods: GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers: Authorization, Content-Type, X-Api-Key, Anthropic-Version, X-Requested-With",
-    ])
-    return "\r\n".join(lines) + "\r\n"
-
-
-async def _send_simple_error(
-    writer: asyncio.StreamWriter,
-    status: int,
-    reason: str,
-    message: str,
-    hdr_map: dict[str, str] | None = None,
-) -> None:
-    """向下游返回标准 OpenAI 风格 JSON 错误响应（附带 CORS 头防浏览器跨域拦截）。"""
-    body = json.dumps({"error": {"message": message, "type": "gateway_error"}}, ensure_ascii=False).encode("utf-8")
-    cors_blk = _cors_header_block(hdr_map or {})
-    hdr = (
-        f"HTTP/1.1 {status} {reason}\r\n"
-        f"{cors_blk}"
-        f"Content-Type: application/json; charset=utf-8\r\n"
-        f"Content-Length: {len(body)}\r\n"
-        f"Connection: close\r\n\r\n"
-    ).encode("latin-1")
-    writer.write(hdr + body)
-    await writer.drain()
-
-
-def _format_sse_error_frame(path: str, status: int, raw_text: str) -> bytes:
-    """按请求端点协议格式化已进入 SSE 流后的终端错误帧（兼容 Anthropic /v1/messages 与 OpenAI）。"""
-    clean_msg = str(raw_text or f"Upstream HTTP {status}").strip()
-    err_type = "api_error"
-    try:
-        parsed = json.loads(clean_msg)
-        if isinstance(parsed, dict):
-            inner = parsed.get("error") if isinstance(parsed.get("error"), dict) else parsed
-            if isinstance(inner, dict):
-                if inner.get("message"):
-                    clean_msg = str(inner["message"])
-                if inner.get("type"):
-                    err_type = str(inner["type"])
-    except Exception:
-        pass
-
-    if path in {"/v1/messages", "/messages"}:
-        if status == 400 or "context size" in clean_msg.lower():
-            anth_type = "invalid_request_error"
-        elif status in (401, 403):
-            anth_type = "authentication_error"
-        elif status == 429:
-            anth_type = "rate_limit_error"
-        else:
-            anth_type = "api_error"
-        frame_obj = {
-            "type": "error",
-            "error": {"type": anth_type, "message": clean_msg},
-        }
-        return (
-            f"event: error\n"
-            f"data: {json.dumps(frame_obj, ensure_ascii=False)}\n\n"
-        ).encode("utf-8")
-
-    return (
-        f"data: {json.dumps({'error': {'status': status, 'type': err_type, 'message': clean_msg}}, ensure_ascii=False)}\n\n"
-        f"data: [DONE]\n\n"
-    ).encode("utf-8")
-
-
-async def _close_writer(writer: asyncio.StreamWriter | None) -> None:
-    """安全关闭 StreamWriter，忽略已断开连接异常。"""
-    if writer is None:
-        return
-    try:
-        if not writer.is_closing():
-            writer.close()
-        await writer.wait_closed()
-    except Exception:
-        pass
-
-
-async def _handle_client(client_reader: asyncio.StreamReader, client_writer: asyncio.StreamWriter) -> None:
-    """处理单条入站 TCP HTTP 请求，执行 SSE 保活调度或零修改透传。"""
-    up_writer: asyncio.StreamWriter | None = None
-    try:
-        try:
-            raw_req_head = await client_reader.readuntil(b"\r\n\r\n")
-        except (asyncio.IncompleteReadError, asyncio.LimitOverrunError, ConnectionError):
-            return
-
-        start_line, hdrs, hdr_map = _parse_headers(raw_req_head)
-        parts = start_line.split(" ", 2)
-        if len(parts) < 2:
-            await _send_simple_error(client_writer, 400, "Bad Request", "Malformed HTTP request line", hdr_map)
-            return
-        method, target = parts[0].upper(), parts[1]
-        path = target.split("?", 1)[0]
-        if method == "OPTIONS":
-            preflight_hdr = (
-                f"HTTP/1.1 204 No Content\r\n"
-                f"{_cors_header_block(hdr_map)}"
-                f"Access-Control-Max-Age: 86400\r\n"
-                f"Connection: close\r\n\r\n"
-            ).encode("latin-1")
-            client_writer.write(preflight_hdr)
-            await client_writer.drain()
-            return
-        is_upgrade = "upgrade" in hdr_map
-        is_chunked_req = "chunked" in hdr_map.get("transfer-encoding", "").lower()
-
-        cl_raw = hdr_map.get("content-length")
-        content_len: int | None = None
-        if cl_raw is not None:
-            try:
-                content_len = int(cl_raw.strip())
-            except ValueError:
-                content_len = None
-
-        should_inspect = (not is_upgrade) and (method == "POST") and (path in STREAM_PATHS)
-        can_inspect = should_inspect and (
-            is_chunked_req or (content_len is not None and 0 < content_len <= MAX_STREAM_INSPECT_BYTES)
-        )
-
-        body_bytes: bytes | None = None
-        is_stream = False
-        was_rewritten = False
-        if can_inspect:
-            if "100-continue" in hdr_map.get("expect", "").lower():
-                client_writer.write(b"HTTP/1.1 100 Continue\r\n\r\n")
-                await client_writer.drain()
-            try:
-                if is_chunked_req:
-                    body_bytes = await _read_chunked_body(client_reader, MAX_STREAM_INSPECT_BYTES)
-                else:
-                    body_bytes = await client_reader.readexactly(content_len or 0)
-            except ValueError as exc:
-                if str(exc) == "payload_too_large":
-                    await _send_simple_error(client_writer, 413, "Payload Too Large", "Request body exceeds 128 MiB limit", hdr_map)
-                    return
-                await _send_simple_error(client_writer, 400, "Bad Request", "Invalid chunked request body", hdr_map)
-                return
-            except (EOFError, asyncio.IncompleteReadError):
-                return
-
-            try:
-                inspect_bytes = body_bytes
-                enc = hdr_map.get("content-encoding", "").lower()
-                if "gzip" in enc:
-                    inspect_bytes = gzip.decompress(body_bytes)
-                elif "deflate" in enc:
-                    inspect_bytes = zlib.decompress(body_bytes)
-                payload_obj = json.loads(inspect_bytes.decode("utf-8"))
-                if isinstance(payload_obj, dict):
-                    is_stream = bool(payload_obj.get("stream"))
-                    payload_obj = _normalize_inference_payload(payload_obj, path)
-                    body_bytes = json.dumps(payload_obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-                    was_rewritten = True
-            except Exception:
-                # 若外层带非标准编码或微格式异常，至少按明文切片探测 stream 意图，绝不误关 SSE 保活
-                is_stream = bool(re.search(rb'"stream"\s*:\s*true\b', body_bytes or b""))
-
-        try:
-            up_reader, up_writer = await asyncio.open_connection(UPSTREAM_HOST, UPSTREAM_PORT, limit=1024 * 1024)
-        except Exception as exc:
-            await _send_simple_error(client_writer, 502, "Bad Gateway", f"Upstream unavailable: {exc}", hdr_map)
-            return
-
-        if (not is_upgrade) and (method == "GET") and (path in MODELS_PATHS):
-            fwd_head = _rebuild_headers(start_line, hdrs, force_close=True, strip_accept_encoding=True)
-            up_writer.write(fwd_head)
-            await up_writer.drain()
-            try:
-                up_hdr_raw = await up_reader.readuntil(b"\r\n\r\n")
-            except (asyncio.IncompleteReadError, asyncio.LimitOverrunError, ConnectionError) as exc:
-                await _send_simple_error(client_writer, 502, "Bad Gateway", f"Upstream closed early: {exc}", hdr_map)
-                return
-            up_start, _, up_hdr_map = _parse_headers(up_hdr_raw)
-            up_parts = up_start.split(" ", 2)
-            try:
-                up_status = int(up_parts[1]) if len(up_parts) >= 2 else 502
-            except ValueError:
-                up_status = 502
-            if up_status != 200:
-                client_writer.write(up_hdr_raw)
-                await client_writer.drain()
-                await _pump_stream(up_reader, client_writer)
-                return
-            if "chunked" in up_hdr_map.get("transfer-encoding", "").lower():
-                raw_models_body = await _read_chunked_body(up_reader, 16 * 1024 * 1024)
-            elif "content-length" in up_hdr_map:
-                try:
-                    raw_models_body = await up_reader.readexactly(int(up_hdr_map["content-length"].strip()))
-                except Exception:
-                    raw_models_body = await up_reader.read()
-            else:
-                raw_models_body = await up_reader.read()
-            if "gzip" in up_hdr_map.get("content-encoding", "").lower():
-                raw_models_body = gzip.decompress(raw_models_body)
-            try:
-                models_obj = json.loads(raw_models_body.decode("utf-8"))
-                out_models_bytes = json.dumps(
-                    _augment_models_catalog(models_obj),
-                    ensure_ascii=False,
-                ).encode("utf-8")
-            except Exception:
-                out_models_bytes = raw_models_body
-            resp_hdr = (
-                f"HTTP/1.1 200 OK\r\n"
-                f"{_cors_header_block(hdr_map)}"
-                f"Content-Type: application/json; charset=utf-8\r\n"
-                f"Content-Length: {len(out_models_bytes)}\r\n"
-                f"Connection: close\r\n\r\n"
-            ).encode("latin-1")
-            client_writer.write(resp_hdr + out_models_bytes)
-            await client_writer.drain()
-            return
-
-        if body_bytes is not None:
-            fwd_head = _rebuild_headers(
-                start_line,
-                hdrs,
-                force_close=True,
-                content_length=len(body_bytes),
-                strip_expect=True,
-                strip_accept_encoding=is_stream,
-                strip_content_encoding=was_rewritten,
-            )
-            up_writer.write(fwd_head + body_bytes)
-            await up_writer.drain()
-        elif not is_upgrade:
-            fwd_head = _rebuild_headers(start_line, hdrs, force_close=True)
-            up_writer.write(fwd_head)
-            await up_writer.drain()
-        else:
-            up_writer.write(raw_req_head)
-            await up_writer.drain()
-
-        if not is_stream:
-            # 常规请求 / 非流式推理 / Upgrade 连接：双向零改动转发
-            if body_bytes is not None:
-                u2c = asyncio.create_task(_pump_stream(up_reader, client_writer))
-                disc = asyncio.create_task(_wait_client_disconnect(client_reader))
-                done, pending = await asyncio.wait({u2c, disc}, return_when=asyncio.FIRST_COMPLETED)
-                for t in pending:
-                    t.cancel()
-                await asyncio.gather(*pending, return_exceptions=True)
-                for t in done:
-                    if not t.cancelled():
-                        exc = t.exception()
-                        if exc and not isinstance(exc, ConnectionError):
-                            raise exc
-                return
-
-            c2u = asyncio.create_task(_pump_stream(client_reader, up_writer))
-            u2c = asyncio.create_task(_pump_stream(up_reader, client_writer))
-            try:
-                done, pending = await asyncio.wait({c2u, u2c}, return_when=asyncio.FIRST_COMPLETED)
-                if c2u in done and u2c in pending:
-                    if not is_upgrade:
-                        try:
-                            if up_writer.can_write_eof():
-                                up_writer.write_eof()
-                        except Exception:
-                            pass
-                        await u2c
-                elif u2c in done and c2u in pending:
-                    c2u.cancel()
-                    await asyncio.gather(c2u, return_exceptions=True)
-            finally:
-                for t in (c2u, u2c):
-                    if not t.done():
-                        t.cancel()
-                await asyncio.gather(c2u, u2c, return_exceptions=True)
-            return
-
-        # ===== SSE 流式推理保活分支 (stream=true) =====
-        hdr_task = asyncio.create_task(up_reader.readuntil(b"\r\n\r\n"))
-        disc_task = asyncio.create_task(_wait_client_disconnect(client_reader))
-        sent_sse_headers = False
-        up_hdr_raw = b""
-
-        try:
-            while not hdr_task.done():
-                done, _ = await asyncio.wait(
-                    {hdr_task, disc_task},
-                    timeout=HEARTBEAT_SEC,
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-                if disc_task in done:
-                    hdr_task.cancel()
-                    await asyncio.gather(hdr_task, return_exceptions=True)
-                    return
-                if hdr_task in done:
-                    break
-                if not sent_sse_headers:
-                    client_writer.write(
-                        (
-                            f"HTTP/1.1 200 OK\r\n"
-                            f"{_cors_header_block(hdr_map)}"
-                            f"Content-Type: text/event-stream; charset=utf-8\r\n"
-                            f"Cache-Control: no-cache, no-transform\r\n"
-                            f"Connection: close\r\n"
-                            f"Transfer-Encoding: chunked\r\n"
-                            f"X-Accel-Buffering: no\r\n"
-                            f"\r\n"
-                        ).encode("latin-1")
-                    )
-                    sent_sse_headers = True
-                client_writer.write(_KEEPALIVE_CHUNK)
-                await client_writer.drain()
-
-            try:
-                up_hdr_raw = hdr_task.result()
-            except (asyncio.IncompleteReadError, asyncio.LimitOverrunError, ConnectionError) as exc:
-                if not sent_sse_headers:
-                    await _send_simple_error(client_writer, 502, "Bad Gateway", f"Upstream closed early: {exc}", hdr_map)
-                else:
-                    err_evt = _format_sse_error_frame(path, 502, f"Upstream closed early: {exc}")
-                    client_writer.write(f"{len(err_evt):x}\r\n".encode("ascii") + err_evt + b"\r\n0\r\n\r\n")
-                    await client_writer.drain()
-                return
-
-            if not sent_sse_headers:
-                client_writer.write(up_hdr_raw)
-                await client_writer.drain()
-                u2c = asyncio.create_task(_pump_stream(up_reader, client_writer))
-                done, pending = await asyncio.wait({u2c, disc_task}, return_when=asyncio.FIRST_COMPLETED)
-                for t in pending:
-                    t.cancel()
-                await asyncio.gather(*pending, return_exceptions=True)
-                return
-
-            up_start, _, up_hdr_map = _parse_headers(up_hdr_raw)
-            up_parts = up_start.split(" ", 2)
-            try:
-                up_status = int(up_parts[1]) if len(up_parts) >= 2 else 502
-            except ValueError:
-                up_status = 502
-
-            if up_status != 200:
-                err_raw = await up_reader.read(65536)
-                err_txt = err_raw.decode("utf-8", errors="ignore").strip() or f"Upstream HTTP {up_status}"
-                err_evt = _format_sse_error_frame(path, up_status, err_txt)
-                client_writer.write(f"{len(err_evt):x}\r\n".encode("ascii") + err_evt + b"\r\n0\r\n\r\n")
-                await client_writer.drain()
-                return
-
-            up_is_chunked = "chunked" in up_hdr_map.get("transfer-encoding", "").lower()
-            u2c = asyncio.create_task(
-                _pump_stream(
-                    up_reader,
-                    client_writer,
-                    as_chunked=(not up_is_chunked),
-                    emit_last_chunk=(not up_is_chunked),
-                )
-            )
-            done, pending = await asyncio.wait({u2c, disc_task}, return_when=asyncio.FIRST_COMPLETED)
-            for t in pending:
-                t.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
-        finally:
-            for t in (hdr_task, disc_task):
-                if not t.done():
-                    t.cancel()
-            await asyncio.gather(hdr_task, disc_task, return_exceptions=True)
-    except ConnectionError:
-        pass
-    except Exception as exc:
-        print(f"[sse-gw] unexpected error: {exc}", file=sys.stderr, flush=True)
-    finally:
-        await _close_writer(up_writer)
-        await _close_writer(client_writer)
-
-
-async def _amain() -> None:
-    server = await asyncio.start_server(
-        _handle_client,
-        host=LISTEN_HOST,
-        port=LISTEN_PORT,
-        limit=1024 * 1024,
-    )
-    print(
-        f"[sse-gw] listening on {LISTEN_HOST}:{LISTEN_PORT} -> {UPSTREAM_HOST}:{UPSTREAM_PORT} "
-        f"(heartbeat={HEARTBEAT_SEC}s)",
-        flush=True,
-    )
-    async with server:
-        await server.serve_forever()
-
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(_amain())
-    except KeyboardInterrupt:
-        pass
-'''
 
 
 def _probe_http_health(port: int, timeout: float = 3.0) -> bool:
@@ -1609,6 +909,26 @@ def _wait_slots_idle_briefly(api_key: str, max_wait_s: float = 10.0) -> None:
         time.sleep(1.0)
 
 
+def _pkill_patterns(*patterns: str) -> None:
+    """按模式列表静默清理远端残留进程。"""
+    for pat in patterns:
+        with contextlib.suppress(OSError, subprocess.SubprocessError):
+            subprocess.run(["pkill", "-f", pat], check=False, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def _cleanup_llm_processes(*procs: object) -> None:
+    """鉴权校验失败时清理 SSE 网关与 llama-server 子进程，防止裸服务继续监听。"""
+    for proc in procs:
+        terminate_proc(proc)
+    if shutil.which("pkill"):
+        _pkill_patterns("llm_sse_gateway.py", "llama-server")
+
+
+def _verify_llm_gateway_auth_enforced(port: int, api_key: str, timeout: float = 3.0) -> tuple[bool, str]:
+    """核实本地 LLM 网关（/v1/models）已启用 API Key 鉴权且合法 Bearer 密钥可通行（复用公共实现）。"""
+    return verify_local_llm_auth_enforced(port=port, api_key=api_key, timeout=timeout)
+
+
 def start_llama_and_wait(
     cmd: list[str],
     ld_library_path: str,
@@ -1616,9 +936,17 @@ def start_llama_and_wait(
     api_key: str,
     n_parallel: int = 2,
 ) -> tuple[str, float, float]:
-    """守护启动 llama-server (:18081) 与 SSE 保活网关 (:18080)，轮询就绪并采集稳态显存。"""
+    """守护启动 llama-server (:18081) 与 SSE 保活网关 (:18080)，轮询就绪并严格验证鉴权与网关版本一致。"""
     print("=== [6/7] 启动 llama-server 与 SSE 保活网关并等待就绪 ===", flush=True)
+    gw_src = (load_companion_text(SSE_GATEWAY_SRC_FILENAME) or "").strip()
+    if not gw_src:
+        raise FileNotFoundError(f"未找到独立 SSE 网关脚本: {SSE_GATEWAY_SRC_FILENAME}")
+    gw_disk_ok = (
+        SSE_GATEWAY_FILE.is_file()
+        and SSE_GATEWAY_FILE.read_text(encoding="utf-8", errors="ignore").strip() == gw_src
+    )
     old_meta = _read_existing_meta()
+    gw_ver_ok = old_meta.get("sse_gateway_version") in (None, SSE_GATEWAY_VERSION)
     same_cfg = (
         old_meta.get("kind") in ("llm", "dual")
         and old_meta.get("model_variant", "180b") == MODEL_VARIANT
@@ -1632,31 +960,27 @@ def start_llama_and_wait(
         and int(old_meta.get("n_parallel") or 1) == n_parallel
         and str(old_meta.get("default_effort") or "") == DEFAULT_EFFORT
         and str(old_meta.get("api_key") or "") == api_key
+        and gw_disk_ok
+        and gw_ver_ok
     )
     if same_cfg and _probe_http_health(LLAMA_INTERNAL_PORT) and _probe_http_health(LLAMA_PORT):
-        gpu_name, used_g, tot_g = _query_steady_vram()
-        print(
-            f"llama-server 与 SSE 网关已在运行且配置一致，直接复用。GPU={gpu_name}, VRAM={used_g}/{tot_g} GiB",
-            flush=True,
-        )
-        return gpu_name, used_g, tot_g
+        auth_ok, auth_reason = _verify_llm_gateway_auth_enforced(LLAMA_PORT, api_key)
+        if auth_ok:
+            gpu_name, used_g, tot_g = _query_steady_vram()
+            print(
+                f"llama-server 与 SSE 网关已在运行且配置一致，直接复用。GPU={gpu_name}, VRAM={used_g}/{tot_g} GiB",
+                flush=True,
+            )
+            return gpu_name, used_g, tot_g
+        print(f"[警告] 存量 LLM 网关鉴权校验未通过（{auth_reason}），将平滑重启服务...", flush=True)
 
     old_key = str(old_meta.get("api_key") or "").strip() or api_key
     if _probe_http_health(LLAMA_PORT, timeout=1.0) or _probe_http_health(LLAMA_INTERNAL_PORT, timeout=1.0):
         _wait_slots_idle_briefly(old_key, max_wait_s=10.0)
 
     # 停止旧版 SSE 网关与 llama-server；非双栖模式下同步清理残留 ComfyUI 释放显存
-    kill_patterns = ["llm_sse_gateway.py", "llama-server"]
-    if not COHOST_COMFY:
-        kill_patterns = ["ComfyUI/main.py", "main.py.*8188", *kill_patterns]
-    for pattern in kill_patterns:
-        subprocess.run(
-            ["pkill", "-f", pattern],
-            check=False,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+    kill_patterns = ("llm_sse_gateway.py", "llama-server") if COHOST_COMFY else ("ComfyUI/main.py", "main.py.*8188", "llm_sse_gateway.py", "llama-server")
+    _pkill_patterns(*kill_patterns)
     time.sleep(1.5)
 
     env = os.environ.copy()
@@ -1714,11 +1038,13 @@ def start_llama_and_wait(
         raise TimeoutError(f"等待 llama-server :{LLAMA_INTERNAL_PORT}/health 就绪超时（480s），末尾日志:\n{tail}")
 
     # 写入并守护启动本地 SSE 保活与思考强度归一化网关 (:18080 -> :18081)
-    SSE_GATEWAY_FILE.write_text(_SSE_GATEWAY_SCRIPT.lstrip("\n"), encoding="utf-8")
+    SSE_GATEWAY_FILE.write_text(gw_src + "\n", encoding="utf-8")
     os.chmod(SSE_GATEWAY_FILE, 0o700)
     gw_env = os.environ.copy()
     gw_env["SSE_BASE_MODEL"] = MODEL_ALIAS
     gw_env["SSE_DEFAULT_EFFORT"] = DEFAULT_EFFORT
+    gw_env["SSE_API_KEY_FILE"] = str(LLAMA_API_KEY_FILE)
+    gw_env["SSE_REQUIRE_AUTH"] = "1"
     gw_log_f = open(SSE_GATEWAY_LOG, "wb")
     try:
         gw_proc = subprocess.Popen(
@@ -1742,6 +1068,11 @@ def start_llama_and_wait(
     while time.monotonic() - gw_t0 < 15.0:
         if _probe_http_health(LLAMA_PORT, timeout=2.0):
             print(f"SSE 保活网关 :{LLAMA_PORT}/health 探测通过", flush=True)
+            auth_ok, auth_reason = _verify_llm_gateway_auth_enforced(LLAMA_PORT, api_key)
+            if not auth_ok:
+                print(f"[安全拦截] {auth_reason}", flush=True)
+                _cleanup_llm_processes(gw_proc, proc)
+                raise RuntimeError(f"LLM 网关 API Key 鉴权未生效，拒绝暴露公网隧道: {auth_reason}")
             return gpu_name, used_g, tot_g
         if gw_proc.poll() is not None:
             gw_tail = SSE_GATEWAY_LOG.read_text(encoding="utf-8", errors="ignore")[-1500:] if SSE_GATEWAY_LOG.is_file() else ""
@@ -1753,12 +1084,8 @@ def start_llama_and_wait(
 
 
 def _probe_local_comfy_ready(timeout: float = 2.0) -> bool:
-    """探测本机 ComfyUI (:8188/system_stats) 是否正在运行。"""
-    try:
-        with urllib.request.urlopen("http://127.0.0.1:8188/system_stats", timeout=timeout) as resp:
-            return resp.status == 200
-    except Exception:
-        return False
+    """探测本机 ComfyUI (:8188/system_stats) 是否正在运行（复用公共实现）。"""
+    return probe_comfy_ready(timeout=timeout) is not None
 
 
 def start_tunnel_and_write_contract(
@@ -1769,23 +1096,33 @@ def start_tunnel_and_write_contract(
     vram_total_gb: float,
     n_parallel: int = 2,
 ) -> str:
-    """确保 cloudflared 指向 127.0.0.1:18080（优先命名隧道），落盘 0600 服务契约并输出公网地址。"""
+    """确保 API Key 鉴权已生效后再打通（或按双栖阶段配置延后）隧道并写入 0600 服务契约。"""
     print("=== [7/7] 打通 Cloudflared 隧道并写入服务契约 ===", flush=True)
-    tunnel_url = start_cloudflared_tunnel(
-        local_port=LLAMA_PORT,
-        service_kind="llm",
-        cf_token=CF_TUNNEL_TOKEN,
-        cf_url=CF_TUNNEL_URL,
-        cohost_other=COHOST_COMFY,
-        tunnel_url_file=(LLM_TUNNEL_URL_FILE if COHOST_COMFY else TUNNEL_URL_FILE),
-        log_file=(CLOUDFLARED_LLM_LOG if (COHOST_COMFY and not (CF_TUNNEL_TOKEN and CF_TUNNEL_URL)) else CLOUDFLARED_LOG),
-        tunnel_re=TUNNEL_URL_RE,
-    )
-    LLM_TUNNEL_URL_FILE.write_text(tunnel_url + "\n", encoding="utf-8")
-    if not COHOST_COMFY:
-        TUNNEL_URL_FILE.write_text(tunnel_url + "\n", encoding="utf-8")
+    auth_ok, auth_reason = _verify_llm_gateway_auth_enforced(LLAMA_PORT, api_key)
+    if not auth_ok:
+        print(f"[安全拦截] {auth_reason}", flush=True)
+        _cleanup_llm_processes()
+        raise RuntimeError(f"LLM 网关 API Key 鉴权未生效，拒绝暴露公网隧道: {auth_reason}")
 
-    comfy_alive = _probe_local_comfy_ready(timeout=2.0)
+    defer_tunnel = _env_flag("LLM_DEFER_TUNNEL", False)
+    tunnel_url = ""
+    if not defer_tunnel:
+        tunnel_url = start_cloudflared_tunnel(
+            local_port=LLAMA_PORT,
+            service_kind="llm",
+            cf_token=CF_TUNNEL_TOKEN,
+            cf_url=CF_TUNNEL_URL,
+            cohost_other=COHOST_COMFY,
+            tunnel_url_file=(LLM_TUNNEL_URL_FILE if COHOST_COMFY else TUNNEL_URL_FILE),
+            log_file=(CLOUDFLARED_LLM_LOG if (COHOST_COMFY and not (CF_TUNNEL_TOKEN and CF_TUNNEL_URL)) else CLOUDFLARED_LOG),
+            tunnel_re=TUNNEL_URL_RE,
+            auth_key=api_key,
+        )
+        LLM_TUNNEL_URL_FILE.write_text(tunnel_url + "\n", encoding="utf-8")
+        if not COHOST_COMFY:
+            TUNNEL_URL_FILE.write_text(tunnel_url + "\n", encoding="utf-8")
+
+    comfy_alive = False if defer_tunnel else _probe_local_comfy_ready(timeout=2.0)
     is_dual = bool(COHOST_COMFY or comfy_alive)
     old_meta = _read_existing_meta()
     comfy_url_val = CF_COMFY_TUNNEL_URL or ""
@@ -1793,7 +1130,7 @@ def start_tunnel_and_write_contract(
         m_comfy = TUNNEL_URL_RE.search(TUNNEL_URL_FILE.read_text(encoding="utf-8", errors="ignore"))
         if m_comfy:
             comfy_url_val = m_comfy.group(0)
-    if not comfy_url_val and is_dual:
+    if not comfy_url_val and is_dual and not defer_tunnel:
         old_comfy_url = str(old_meta.get("comfy_tunnel_url") or "").strip().rstrip("/")
         if not old_comfy_url and old_meta.get("kind") in ("comfy", "dual"):
             old_comfy_url = str(old_meta.get("tunnel_url") or "").strip().rstrip("/")
@@ -1813,6 +1150,7 @@ def start_tunnel_and_write_contract(
         "port": LLAMA_PORT,
         "llm_port": LLAMA_PORT,
         "internal_port": LLAMA_INTERNAL_PORT,
+        "sse_gateway_version": SSE_GATEWAY_VERSION,
         "sse_keepalive": True,
         "kv_unified": True,
         "n_parallel": n_parallel,
@@ -1830,7 +1168,7 @@ def start_tunnel_and_write_contract(
     }
     if is_dual:
         meta["comfy_port"] = 8188
-        if comfy_url_val:
+        if comfy_url_val and not defer_tunnel:
             meta["comfy_tunnel_url"] = comfy_url_val
         if existing_comfy_key:
             meta["comfy_api_key"] = existing_comfy_key
@@ -1838,6 +1176,10 @@ def start_tunnel_and_write_contract(
             meta["comfy_profiles"] = existing_comfy_profs
             meta["profiles"] = [*existing_comfy_profs, prof_id]
     _write_private_meta(SERVICE_META_FILE, meta)
+
+    if defer_tunnel:
+        print("[双栖分阶段启动] LLM 本地鉴权已就绪，延后至 ComfyUI 就绪后统一发布公网隧道", flush=True)
+        return ""
 
     print("========================================", flush=True)
     print(f"SERVICE_TUNNEL_URL: {tunnel_url}", flush=True)

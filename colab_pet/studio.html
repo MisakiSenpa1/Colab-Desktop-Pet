@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Colab Studio</title>
+  <!-- 在首帧渲染前同步读取主题偏好，避免切换浅色与深色时出现闪烁 -->
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem("studio-color-scheme");
+        var scheme = (saved === "light" || saved === "dark" || saved === "light dark") ? saved : "light";
+        document.documentElement.style.colorScheme = scheme;
+        document.documentElement.dataset.theme = scheme;
+      } catch (err) {
+        document.documentElement.style.colorScheme = "light";
+        document.documentElement.dataset.theme = "light";
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="/studio.css" />
+</head>
+<body>
+  <!-- 无边框窗体 8 方向缩放透明热区 -->
+  <div class="resize-edge resize-n" data-resize="n" aria-hidden="true"></div>
+  <div class="resize-edge resize-s" data-resize="s" aria-hidden="true"></div>
+  <div class="resize-edge resize-w" data-resize="w" aria-hidden="true"></div>
+  <div class="resize-edge resize-e" data-resize="e" aria-hidden="true"></div>
+  <div class="resize-edge resize-nw" data-resize="nw" aria-hidden="true"></div>
+  <div class="resize-edge resize-ne" data-resize="ne" aria-hidden="true"></div>
+  <div class="resize-edge resize-sw" data-resize="sw" aria-hidden="true"></div>
+  <div class="resize-edge resize-se" data-resize="se" aria-hidden="true"></div>
+
+  <div class="studio-shell" id="studio-shell">
+    <!-- 左侧毛玻璃导航栏 -->
+    <aside class="studio-sidebar" aria-label="主导航">
+      <div class="sidebar-top" id="sidebar-drag">
+        <div class="traffic-lights" role="group" aria-label="窗口控制">
+          <button class="tl-btn tl-close" id="btn-win-close" type="button" title="关闭工作台（桌宠保持运行）" aria-label="关闭工作台">
+            <svg class="tl-glyph" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" aria-hidden="true">
+              <path d="M3.2 3.2l5.6 5.6M8.8 3.2l-5.6 5.6" />
+            </svg>
+          </button>
+          <button class="tl-btn tl-min" id="btn-win-min" type="button" title="最小化" aria-label="最小化">
+            <svg class="tl-glyph" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" aria-hidden="true">
+              <path d="M2.6 6h6.8" />
+            </svg>
+          </button>
+          <button class="tl-btn tl-max" id="btn-win-max" type="button" title="最大化或还原" aria-label="最大化或还原">
+            <svg class="tl-glyph" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M7.2 2.4h2.4v2.4M4.8 9.6H2.4V7.2M9.6 2.4L6.7 5.3M2.4 9.6l2.9-2.9" />
+            </svg>
+          </button>
+        </div>
+        <div class="brand-mark">
+          <span class="brand-logo-badge" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17.5 19H9a5 5 0 0 1-.4-9.98A6.5 6.5 0 0 1 21 11.5a4 4 0 0 1-3.5 7.5Z" />
+            </svg>
+          </span>
+          <span class="brand-title">Colab Studio</span>
+        </div>
+        <button class="sb-privacy-btn" id="btn-privacy-mask" type="button" title="一键打码敏感账号与隧道链接" aria-pressed="false">
+          <svg class="icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
+            <circle cx="12" cy="12" r="2.6" />
+          </svg>
+          <span>打码</span>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav" role="tablist" aria-label="工作区切换">
+        <button class="nav-item active" id="nav-overview" type="button" role="tab" data-nav="overview" aria-selected="true">
+          <svg class="icon-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="7.5" height="7.5" rx="2" />
+            <rect x="13.5" y="3" width="7.5" height="7.5" rx="2" />
+            <rect x="3" y="13.5" width="7.5" height="7.5" rx="2" />
+            <path d="M14 17.25h7M17.5 13.75v7" />
+          </svg>
+          <span class="nav-label">算力与集群</span>
+          <span class="nav-pulse" id="nav-dot-overview" aria-hidden="true"></span>
+        </button>
+
+        <button class="nav-item" id="nav-gallery" type="button" role="tab" data-nav="gallery" aria-selected="false">
+          <svg class="icon-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2.5" />
+            <circle cx="8.5" cy="9.5" r="1.5" />
+            <path d="M21 15.5l-4.5-4.5L7 20" />
+          </svg>
+          <span class="nav-label">作品画廊</span>
+          <span class="nav-badge tabular hidden" id="nav-count-gallery">0</span>
+        </button>
+
+        <button class="nav-item" id="nav-tuner" type="button" role="tab" data-nav="tuner" aria-selected="false">
+          <svg class="icon-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" />
+            <path d="M2 14h4M10 8h4M18 16h4" />
+          </svg>
+          <span class="nav-label">引擎与云盘</span>
+        </button>
+
+        <button class="nav-item" id="nav-console" type="button" role="tab" data-nav="console" aria-selected="false">
+          <svg class="icon-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2.5" />
+            <path d="M7.5 9.5l3.5 2.5-3.5 2.5M13 14.5h3.5" />
+          </svg>
+          <span class="nav-label">控制台与体检</span>
+          <span class="nav-pulse" id="nav-dot-console" aria-hidden="true"></span>
+        </button>
+      </nav>
+
+      <!-- 左侧中段：1:1 复刻 EasyColab 原生算力实例与配额控制卡片 -->
+      <div class="sidebar-cards-scroll" id="sidebar-cards-scroll">
+        <!-- 卡片 1：Colab 算力实例（账号换号 + 一键部署 + 隧道掩码 + 三线实时遥测） -->
+        <section class="sb-card sb-ec-card" id="sb-card-instance" aria-label="Colab 算力实例与多维遥测">
+          <div class="sb-ec-head">
+            <div class="sb-ec-head-left">
+              <svg class="sb-ec-head-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+                <rect x="9.5" y="9.5" width="5" height="5" rx="0.8" />
+                <path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4" />
+              </svg>
+              <span class="sb-ec-card-title">Colab 算力实例</span>
+            </div>
+            <span class="sb-ec-status-pill" id="sb-card-online-badge">待机</span>
+          </div>
+
+          <div class="sb-ec-acct-row">
+            <span class="sb-ec-field-lbl">Google 账号</span>
+            <span class="sb-ec-email privacy-sensitive" id="sb-card-acct-email">未绑定</span>
+            <div class="sb-head-actions">
+              <button class="sb-ec-pill-btn" id="btn-sb-card-refresh" type="button" title="刷新官方账号与实例状态">刷新</button>
+              <button class="sb-ec-pill-btn sb-ec-acct-btn" id="btn-sb-acct-menu" type="button" title="切换账号或管理算力号池" aria-expanded="false" aria-controls="sb-acct-popover">
+                <span>换号</span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- 换号与号池锚定弹出菜单 -->
+          <div class="sb-acct-popover hidden" id="sb-acct-popover" role="menu" aria-hidden="true"></div>
+
+          <div class="sb-ec-deploy-row">
+            <select class="sb-ec-gpu-select" id="sb-gpu-select" aria-label="目标 GPU 规格">
+              <option value="G4">G4 · PRO 6000</option>
+              <option value="H100">H100 · 80GB</option>
+              <option value="A100">A100 · 80GB</option>
+              <option value="L4">L4 · 24GB</option>
+              <option value="T4">T4 · 16GB</option>
+            </select>
+            <button class="sb-ec-blue-btn" id="btn-sb-quick-deploy" type="button">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <polygon points="13 2 3 14 11.5 14 10.5 22 21 10 12.5 10 13 2" />
+              </svg>
+              <span id="sb-quick-deploy-lbl">唤醒实例并部署</span>
+            </button>
+          </div>
+
+          <div class="sb-ec-tunnel-row" id="sb-tunnel-row">
+            <input class="sb-ec-tunnel-input privacy-sensitive" id="sb-tunnel-input" type="text" readonly value="" placeholder="等待隧道地址就绪" title="点击复制隧道访问地址" aria-label="服务隧道地址" />
+            <button class="sb-ec-eye-btn is-masked" id="btn-sb-tunnel-eye" type="button" title="显示或打码隐藏隧道地址" aria-pressed="true">
+              <svg class="eye-open-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" />
+                <circle cx="12" cy="12" r="2.8" />
+              </svg>
+              <svg class="eye-off-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M17.9 17.9A10.7 10.7 0 0 1 12 18.5C5.6 18.5 2 12 2 12a18.2 18.2 0 0 1 5.1-5.9" />
+                <path d="M9.9 5.7A10.2 10.2 0 0 1 12 5.5c6.4 0 10 6.5 10 6.5a18.2 18.2 0 0 1-3 3.9" />
+                <path d="M3 3l18 18" />
+              </svg>
+            </button>
+            <button class="sb-ec-pill-btn" id="btn-sb-tunnel-refresh" type="button" title="刷新连接与实例遥测">刷新</button>
+            <button class="sb-ec-help-btn" id="btn-sb-tunnel-help" type="button" title="查看环境体检与部署说明" aria-label="环境体检与使用帮助">?</button>
+          </div>
+
+          <div class="sb-ec-hw-row">
+            <span class="sb-gpu-dot" id="sb-gpu-dot" aria-hidden="true"></span>
+            <span class="sb-gpu-fullname" id="sb-gpu-fullname">等待连接 GPU 实例</span>
+            <span class="sb-drive-pill" id="sb-drive-pill">未挂载云盘</span>
+            <button class="sb-tele-mode-btn" id="btn-sb-tele-mode" type="button" title="切换三线同屏对比或三项独立折线">
+              <svg width="10.5" height="10.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="7" rx="1.5" />
+                <rect x="3" y="13" width="18" height="7" rx="1.5" />
+              </svg>
+              <span id="sb-tele-mode-lbl">分项</span>
+            </button>
+          </div>
+
+          <div class="sb-telemetry-card" id="sb-telemetry-card">
+            <!-- 同屏模式：三线对比折线 + 对齐图例 -->
+            <div class="sb-tele-combined" id="sb-tele-combined">
+              <div class="sb-tele-plot-wrap">
+                <div class="sb-tele-yaxis" aria-hidden="true">
+                  <span>100%</span>
+                  <span>50%</span>
+                  <span>0%</span>
+                </div>
+                <svg class="sb-spark-svg" id="sb-tele-svg" viewBox="0 0 284 88" preserveAspectRatio="none" aria-hidden="true">
+                  <defs>
+                    <linearGradient id="sbVramGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stop-color="#5487FA" stop-opacity="0.22" />
+                      <stop offset="100%" stop-color="#5487FA" stop-opacity="0.01" />
+                    </linearGradient>
+                  </defs>
+                  <g class="sb-tele-grid" stroke="currentColor" stroke-width="0.7" stroke-dasharray="2.5 2.5" opacity="0.22">
+                    <line x1="0" y1="22" x2="284" y2="22" />
+                    <line x1="0" y1="44" x2="284" y2="44" />
+                    <line x1="0" y1="66" x2="284" y2="66" />
+                    <line x1="71" y1="0" x2="71" y2="88" />
+                    <line x1="142" y1="0" x2="142" y2="88" />
+                    <line x1="213" y1="0" x2="213" y2="88" />
+                  </g>
+                  <path id="sb-vram-area" d="M 0 83 L 284 83 L 284 88 L 0 88 Z" fill="url(#sbVramGrad)" />
+                  <path id="sb-disk-line" d="M 0 83 L 284 83" fill="none" stroke="#0DBAE0" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" />
+                  <path id="sb-ram-line" d="M 0 83 L 284 83" fill="none" stroke="#1AC287" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" />
+                  <path id="sb-vram-line" d="M 0 83 L 284 83" fill="none" stroke="#5487FA" stroke-width="1.95" stroke-linecap="round" stroke-linejoin="round" />
+                  <circle id="sb-disk-dot" cx="284" cy="83" r="2.7" fill="#0DBAE0" />
+                  <circle id="sb-ram-dot" cx="284" cy="83" r="2.7" fill="#1AC287" />
+                  <circle id="sb-vram-dot" cx="284" cy="83" r="2.9" fill="#5487FA" />
+                </svg>
+              </div>
+              <div class="sb-tele-legend">
+                <div class="sb-leg-row">
+                  <span class="sb-leg-swatch is-vram" aria-hidden="true"></span>
+                  <span class="sb-leg-name">显存 VRAM</span>
+                  <span class="sb-leg-gb tabular" id="sb-leg-vram-gb">-- / -- GB</span>
+                  <span class="sb-leg-pct is-vram tabular" id="sb-leg-vram-pct">--%</span>
+                </div>
+                <div class="sb-leg-row">
+                  <span class="sb-leg-swatch is-ram" aria-hidden="true"></span>
+                  <span class="sb-leg-name">内存 RAM</span>
+                  <span class="sb-leg-gb tabular" id="sb-leg-ram-gb">-- / -- GB</span>
+                  <span class="sb-leg-pct is-ram tabular" id="sb-leg-ram-pct">--%</span>
+                </div>
+                <div class="sb-leg-row">
+                  <span class="sb-leg-swatch is-disk" aria-hidden="true"></span>
+                  <span class="sb-leg-name">硬盘 Disk</span>
+                  <span class="sb-leg-gb tabular" id="sb-leg-disk-gb">-- / -- GB</span>
+                  <span class="sb-leg-pct is-disk tabular" id="sb-leg-disk-pct">--%</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 分项模式：三张独立硬件资源面积卡 -->
+            <div class="sb-tele-split hidden" id="sb-tele-split"></div>
+          </div>
+
+          <div class="sb-shm-footer" id="sb-shm-footer">
+            <span class="tabular" id="sb-shm-text">内存盘可用 --</span>
+            <span class="tabular" id="sb-drive-free-text"></span>
+          </div>
+        </section>
+
+        <!-- 卡片 2：算力额度与自动休眠 -->
+        <section class="sb-card sb-ec-card" id="sb-card-quota" aria-label="算力额度与自动休眠">
+          <div class="sb-ec-head">
+            <div class="sb-ec-head-left">
+              <svg class="sb-ec-head-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 12l3.8-3.8" />
+                <path d="M7.5 16.5h9" />
+              </svg>
+              <span class="sb-ec-card-title">算力额度与自动休眠</span>
+            </div>
+          </div>
+
+          <div class="sb-quota-metrics">
+            <div class="sb-quota-col">
+              <span class="sb-quota-lbl">账户余额</span>
+              <strong class="sb-quota-val tabular" id="sb-kpi-pool-cu">-- CU</strong>
+            </div>
+            <span class="sb-quota-vdiv" aria-hidden="true"></span>
+            <div class="sb-quota-col">
+              <span class="sb-quota-lbl">扣费速率</span>
+              <strong class="sb-quota-val is-rate tabular" id="sb-kpi-rate">0.00 CU/h</strong>
+            </div>
+            <span class="sb-quota-vdiv" aria-hidden="true"></span>
+            <div class="sb-quota-col">
+              <span class="sb-quota-lbl">本次运行</span>
+              <strong class="sb-quota-val is-uptime tabular" id="sb-kpi-uptime">00:00:00</strong>
+            </div>
+          </div>
+
+          <div class="sb-idle-row">
+            <span class="sb-idle-lbl">闲置自动释放</span>
+            <select class="sb-idle-select" id="sb-idle-select" aria-label="闲置自动释放时长">
+              <option value="0">关闭</option>
+              <option value="15">15 分钟</option>
+              <option value="30">30 分钟</option>
+              <option value="60">60 分钟</option>
+            </select>
+          </div>
+
+          <button class="sb-release-btn" id="btn-sb-release-all" type="button">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3v9" />
+              <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
+            </svg>
+            <span id="sb-release-label">释放全部实例</span>
+          </button>
+        </section>
+
+        <!-- 卡片 3：快捷启动工作流 -->
+        <section class="sb-card" id="sb-card-workflows" aria-label="快捷启动工作流">
+          <div class="sb-card-head">
+            <span class="sb-card-title">快捷工作流</span>
+            <span class="sb-card-badge" id="sb-wf-badge">待命</span>
+          </div>
+          <div class="sb-wf-list" id="sb-wf-list"></div>
+        </section>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="sb-status-card">
+          <div class="sb-status-top">
+            <span class="status-dot" id="sb-status-dot"></span>
+            <span class="sb-acct-name" id="sb-acct-name">未绑定账号</span>
+          </div>
+          <div class="sb-status-meta">
+            <span id="sb-status-text">等待同步</span>
+            <span class="tabular" id="sb-updated-at">--:--:--</span>
+          </div>
+        </div>
+        <button class="sb-sync-btn" id="btn-sb-sync" type="button" title="立即与云端同步状态">
+          <svg class="icon-svg" width="13.5" height="13.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 0 0-15.4-6.36L3 8" />
+            <path d="M3 3v5h5" />
+            <path d="M3 12a9 9 0 0 0 15.4 6.36L21 16" />
+            <path d="M21 21v-5h-5" />
+          </svg>
+          <span>同步实时状态</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- 右侧工作区主列 -->
+    <div class="studio-workspace">
+      <header class="studio-titlebar">
+        <div class="titlebar-drag" id="titlebar-drag" title="按住拖动窗口 · 双击最大化">
+          <span class="tb-status-dot" id="tb-status-dot" aria-hidden="true"></span>
+          <h1 class="titlebar-title" id="view-title">算力与集群</h1>
+          <span class="titlebar-sep" aria-hidden="true"></span>
+          <span class="titlebar-subtitle" id="view-subtitle">全池余额总览与异构节点编排</span>
+        </div>
+        <div class="titlebar-actions">
+          <button class="btn btn-sm btn-subtle" id="btn-title-primary" type="button">
+            <svg class="icon-svg" width="13.5" height="13.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 0 0-15.4-6.36L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M3 12a9 9 0 0 0 15.4 6.36L21 16" />
+              <path d="M21 21v-5h-5" />
+            </svg>
+            <span id="btn-title-primary-label">刷新算力</span>
+          </button>
+          <button class="btn btn-sm btn-subtle is-active" id="btn-log-panel-toggle" type="button" title="展开或收起右侧运行日志面板" aria-expanded="true" aria-controls="studio-log-panel">
+            <svg class="icon-svg" width="13.5" height="13.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="4 17 10 11 4 5" />
+              <line x1="12" y1="19" x2="20" y2="19" />
+            </svg>
+            <span>运行日志</span>
+          </button>
+          <button class="btn btn-sm btn-subtle copilot-toggle-btn" id="btn-copilot-toggle" type="button" title="开关 AI 副驾抽屉 (Ctrl+K)" aria-expanded="false" aria-controls="copilot-drawer">
+            <svg class="icon-svg copilot-spark-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="16" rx="3.5" />
+              <path d="M12 8l1.25 2.75L16 12l-2.75 1.25L12 16l-1.25-2.75L8 12l2.75-1.25z" />
+            </svg>
+            <span>AI 副驾</span>
+            <span class="copilot-dot" id="copilot-toggle-dot" aria-hidden="true"></span>
+            <kbd class="copilot-kbd">Ctrl+K</kbd>
+          </button>
+          <button class="icon-circle-btn" id="btn-theme-toggle" type="button" title="切换浅色 / 深色主题" aria-label="切换浅色或深色主题">
+            <svg class="icon-svg theme-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+            </svg>
+            <svg class="icon-svg theme-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a7 7 0 1 0 10.7 10.7z" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="studio-main" id="studio-main">
+        <!-- 视图 1：算力与集群 -->
+        <section class="view-pane active" id="view-overview" data-view="overview" role="tabpanel" aria-labelledby="nav-overview">
+          <div class="view-scroll">
+            <!-- 顶部核心指标条 -->
+            <div class="hero-strip">
+              <div class="hero-metric hero-metric-primary">
+                <span class="metric-k">全池总家底</span>
+                <div class="metric-v-row">
+                  <span class="metric-sigma" aria-hidden="true">Σ</span>
+                  <span class="hero-value tabular" id="ov-pool-cu">--.--</span>
+                  <span class="metric-unit">CU</span>
+                </div>
+                <span class="metric-sub tabular" id="ov-pool-sub">正在读取号池账本</span>
+              </div>
+
+              <div class="hero-divider" aria-hidden="true"></div>
+
+              <div class="hero-metric">
+                <span class="metric-k">当前激活账号</span>
+                <div class="metric-v-row">
+                  <span class="hero-value-md tabular" id="ov-active-cu">--.--</span>
+                  <span class="metric-unit-sm">CU</span>
+                </div>
+                <div class="hairline-progress" aria-hidden="true">
+                  <div class="hairline-progress-fill" id="ov-bal-bar"></div>
+                </div>
+                <span class="metric-sub tabular" id="ov-active-acct">--</span>
+              </div>
+
+              <div class="hero-divider" aria-hidden="true"></div>
+
+              <div class="hero-metric">
+                <span class="metric-k">跨号总耗速与续航</span>
+                <div class="metric-v-row">
+                  <span class="hero-value-md tabular" id="ov-rate">0.00</span>
+                  <span class="metric-unit-sm">CU/hr</span>
+                </div>
+                <span class="metric-sub tabular" id="ov-eta">续航: 无限</span>
+              </div>
+
+              <div class="hero-status-wrap">
+                <span class="status-chip idle" id="ov-status-pill">
+                  <span class="status-dot" id="ov-status-dot"></span>
+                  <span id="ov-status-text">已停机省积分</span>
+                </span>
+                <span class="metric-sub tabular" id="ov-day-consumed">今日实耗 0.00 CU</span>
+              </div>
+            </div>
+
+            <!-- 中部：双节点流光拓扑舱 / 部署舱 -->
+            <div class="section-block">
+              <div class="section-head">
+                <div class="section-title-group">
+                  <h2 class="section-title">双节点流光拓扑舱</h2>
+                  <span class="section-sub" id="ov-topo-mode">待机编排就绪</span>
+                </div>
+                <div class="section-actions">
+                  <button class="btn btn-xs btn-ghost hidden" id="btn-ov-toggle-boot" type="button">切换开机配置</button>
+                </div>
+              </div>
+
+              <!-- 1) 部署直播态 -->
+              <div class="inset-panel deploy-panel hidden" id="ov-deploy-card">
+                <div class="deploy-top-row">
+                  <div class="deploy-title-wrap">
+                    <span class="pulse-ring" aria-hidden="true"></span>
+                    <span class="deploy-stage-title" id="ov-deploy-stage">[0/7] 正在准备部署</span>
+                  </div>
+                  <div class="deploy-metrics tabular">
+                    <span id="ov-deploy-pct">0%</span>
+                    <span class="dot-sep" aria-hidden="true">·</span>
+                    <span id="ov-deploy-elapsed">00:00</span>
+                  </div>
+                </div>
+                <div class="deploy-sub-text" id="ov-deploy-detail">正在向 Colab 请求 GPU 实例...</div>
+                <div class="hairline-progress lg">
+                  <div class="hairline-progress-fill accent animated" id="ov-deploy-bar"></div>
+                </div>
+                <div class="step-track" id="ov-deploy-steps">
+                  <span class="step-pill" data-step="1">1 环境检查</span>
+                  <span class="step-pill" data-step="2">2 工具校验</span>
+                  <span class="step-pill" data-step="3">3 依赖就绪</span>
+                  <span class="step-pill" data-step="4">4 模型装载</span>
+                  <span class="step-pill" data-step="5">5 云盘挂载</span>
+                  <span class="step-pill" data-step="6">6 服务启动</span>
+                  <span class="step-pill" data-step="7">7 隧道连通</span>
+                </div>
+                <div class="deploy-foot">
+                  <span class="metric-sub" id="ov-deploy-foot">实时同步部署进度中</span>
+                  <button class="btn btn-sm btn-danger-soft" id="btn-ov-deploy-cancel" type="button">中止部署</button>
+                </div>
+              </div>
+
+              <!-- 2) 在线拓扑态 -->
+              <div class="inset-panel topo-panel hidden" id="ov-live-topo">
+                <div class="topo-grid">
+                  <!-- LLM 节点 -->
+                  <article class="topo-node" id="topo-llm-card">
+                    <div class="topo-node-head">
+                      <div class="topo-node-id">
+                        <span class="node-pulse" id="topo-llm-pulse"></span>
+                        <svg class="icon-svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                        </svg>
+                        <span class="topo-node-title">LLM 对话节点</span>
+                      </div>
+                      <span class="pill-tag" id="topo-llm-badge">待机</span>
+                    </div>
+                    <div class="topo-node-meta">
+                      <span class="topo-main-name" id="topo-llm-model">Qwen3.8 未挂载</span>
+                      <span class="topo-specs tabular" id="topo-llm-specs">--</span>
+                    </div>
+                    <div class="topo-vram-row">
+                      <span class="topo-vram-label" id="topo-llm-vram">VRAM --</span>
+                      <span class="topo-rate tabular" id="topo-llm-rate">0.00 CU/hr</span>
+                    </div>
+                    <div class="hairline-progress">
+                      <div class="hairline-progress-fill" id="topo-llm-bar"></div>
+                    </div>
+                    <div class="topo-node-actions">
+                      <button class="btn btn-xs btn-primary" id="btn-topo-llm-open" type="button">打开对话页</button>
+                      <button class="btn btn-xs btn-subtle" id="btn-topo-llm-copy" type="button">复制 API</button>
+                    </div>
+                  </article>
+
+                  <!-- 中央拓扑光束桥接 -->
+                  <div class="topo-bridge" id="topo-bridge" aria-hidden="true">
+                    <svg class="topo-link-svg" width="44" height="24" viewBox="0 0 44 24" fill="none">
+                      <path class="topo-link-track" d="M2 12h40" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 3" />
+                      <circle class="topo-link-node" cx="22" cy="12" r="3.5" fill="currentColor" />
+                    </svg>
+                    <span class="topo-bridge-label" id="topo-bridge-label">单卡运行</span>
+                  </div>
+
+                  <!-- ComfyUI 画布节点 -->
+                  <article class="topo-node" id="topo-comfy-card">
+                    <div class="topo-node-head">
+                      <div class="topo-node-id">
+                        <span class="node-pulse" id="topo-comfy-pulse"></span>
+                        <svg class="icon-svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <rect x="3" y="3" width="18" height="18" rx="3" />
+                          <circle cx="9" cy="9" r="1.5" />
+                          <path d="M21 15l-4.5-4.5L7 21" />
+                        </svg>
+                        <span class="topo-node-title">ComfyUI 画布节点</span>
+                      </div>
+                      <span class="pill-tag" id="topo-comfy-badge">待机</span>
+                    </div>
+                    <div class="topo-node-meta">
+                      <span class="topo-main-name" id="topo-comfy-profile">画布未挂载</span>
+                      <span class="topo-specs tabular" id="topo-comfy-specs">--</span>
+                    </div>
+                    <div class="topo-vram-row">
+                      <span class="topo-vram-label" id="topo-comfy-vram">VRAM --</span>
+                      <span class="topo-rate tabular" id="topo-comfy-rate">0.00 CU/hr</span>
+                    </div>
+                    <div class="hairline-progress">
+                      <div class="hairline-progress-fill" id="topo-comfy-bar"></div>
+                    </div>
+                    <div class="topo-node-actions">
+                      <button class="btn btn-xs btn-primary" id="btn-topo-comfy-open" type="button">打开 ComfyUI</button>
+                      <button class="btn btn-xs btn-subtle" id="btn-topo-comfy-copy" type="button">复制口令</button>
+                      <button class="btn btn-xs btn-subtle" id="btn-topo-comfy-sync" type="button">拉回成图</button>
+                    </div>
+                  </article>
+                </div>
+
+                <!-- 节点统一分槽控制与外链栏 -->
+                <div class="topo-footer">
+                  <div class="topo-footer-left">
+                    <button class="btn btn-xs btn-ghost" id="btn-ov-colab" type="button">打开 Colab 网页</button>
+                    <button class="btn btn-xs btn-ghost" id="btn-ov-upload" type="button">投递素材或模型</button>
+                  </div>
+                  <div class="topo-footer-right" id="ov-stop-group">
+                    <button class="btn btn-xs btn-danger-soft" id="btn-stop-comfy-slot" type="button">仅停画布</button>
+                    <button class="btn btn-xs btn-danger-soft" id="btn-stop-llm-slot" type="button">仅停 LLM</button>
+                    <button class="btn btn-xs btn-danger" id="btn-stop-all-slot" type="button">全停</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 3) 待机工作流与显卡选配舱 -->
+              <div class="inset-panel boot-panel" id="ov-boot-cockpit">
+                <div class="boot-cockpit-grid">
+                  <!-- 左：工作流多选组合 -->
+                  <div class="boot-col">
+                    <div class="boot-col-head">
+                      <span class="boot-col-title">选择云端工作流（支持多选混搭）</span>
+                      <div class="seg-control seg-xs" id="ov-wf-cat-seg">
+                        <button class="seg-item active" type="button" data-cat="all">全部</button>
+                        <button class="seg-item" type="button" data-cat="image">生图</button>
+                        <button class="seg-item" type="button" data-cat="video">视频</button>
+                        <button class="seg-item" type="button" data-cat="audio">语音</button>
+                        <button class="seg-item" type="button" data-cat="llm">对话</button>
+                      </div>
+                    </div>
+                    <div class="wf-select-list" id="ov-wf-list"></div>
+                    <div class="wf-mods-bar hidden" id="ov-wf-mods-bar"></div>
+                  </div>
+
+                  <!-- 右：显卡与异构集群策略 -->
+                  <div class="boot-col">
+                    <div class="boot-col-head">
+                      <span class="boot-col-title">算力显卡与部署模式</span>
+                      <div class="boot-mode-controls">
+                        <div class="seg-control seg-xs" id="ov-cluster-seg">
+                          <button class="seg-item active" type="button" data-mode="split">双号异构</button>
+                          <button class="seg-item" type="button" data-mode="cohost">单号同驻</button>
+                        </div>
+                        <button class="btn btn-xs btn-subtle" id="btn-boot-hm" type="button">高内存</button>
+                      </div>
+                    </div>
+                    <div class="gpu-selector-grid" id="ov-gpu-grid"></div>
+                    <div class="boot-summary-bar" id="ov-boot-summary">L4 · 24G 显存 · 53G 高存 · 约 2.5m</div>
+                    <div class="boot-cta-row">
+                      <button class="btn btn-primary btn-block" id="btn-ov-boot-start" type="button">
+                        <svg class="icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                        </svg>
+                        <span id="btn-ov-boot-label">一键开机部署 Anima · L4</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 底部：macOS 分组列表（Google Colab 算力号池） -->
+            <div class="section-block">
+              <div class="section-head">
+                <div class="section-title-group">
+                  <h2 class="section-title" id="ov-pool-title">Google Colab 算力号池</h2>
+                  <span class="pill-tag tabular" id="ov-pool-count">0 个账号</span>
+                </div>
+                <div class="section-actions">
+                  <button class="btn btn-xs btn-subtle" id="btn-pool-refresh" type="button">并发刷新全池</button>
+                  <button class="btn btn-xs btn-subtle active" id="btn-pool-auto" type="button" aria-pressed="true">智能寻优</button>
+                  <button class="btn btn-xs btn-primary" id="btn-pool-add" type="button">新增账号</button>
+                </div>
+              </div>
+              <div class="inset-list" id="ov-account-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 视图 2：作品画廊 -->
+        <section class="view-pane" id="view-gallery" data-view="gallery" role="tabpanel" aria-labelledby="nav-gallery">
+          <div class="gallery-toolbar">
+            <div class="gallery-toolbar-left">
+              <div class="seg-control" id="gallery-filter-seg" role="tablist" aria-label="媒体类型筛选">
+                <button class="seg-item active" type="button" role="tab" data-kind="all" aria-selected="true">全部</button>
+                <button class="seg-item" type="button" role="tab" data-kind="image" aria-selected="false">图像</button>
+                <button class="seg-item" type="button" role="tab" data-kind="video" aria-selected="false">视频</button>
+                <button class="seg-item" type="button" role="tab" data-kind="audio" aria-selected="false">语音</button>
+              </div>
+              <div class="seg-control seg-xs gal-layout-seg" id="gal-layout-seg" role="group" aria-label="画廊排列视图">
+                <button class="seg-item active" id="btn-gal-layout-masonry" type="button" data-layout="masonry" aria-pressed="true" title="瀑布流（保持原图比例）" aria-label="瀑布流视图">
+                  <svg class="icon-svg" width="12.5" height="12.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="11" rx="1.5" />
+                    <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                    <rect x="3" y="17" width="7" height="4" rx="1.5" />
+                    <rect x="14" y="13" width="7" height="8" rx="1.5" />
+                  </svg>
+                </button>
+                <button class="seg-item" id="btn-gal-layout-grid" type="button" data-layout="grid" aria-pressed="false" title="规整网格（统一 3:4 对比）" aria-label="规整网格视图">
+                  <svg class="icon-svg" width="12.5" height="12.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="8" height="8" rx="1.5" />
+                    <rect x="13" y="3" width="8" height="8" rx="1.5" />
+                    <rect x="3" y="13" width="8" height="8" rx="1.5" />
+                    <rect x="13" y="13" width="8" height="8" rx="1.5" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="gallery-toolbar-right">
+              <span class="metric-sub tabular" id="gallery-count">0 项作品</span>
+              <button class="btn btn-xs btn-ghost" id="btn-gal-open-dir" type="button">打开文件夹</button>
+              <button class="btn btn-xs btn-subtle" id="btn-gal-sync" type="button">拉回云端成图</button>
+              <button class="btn btn-xs btn-subtle" id="btn-gal-refresh" type="button">刷新</button>
+            </div>
+          </div>
+
+          <div class="gallery-filter-bar" id="gallery-filter-bar" role="toolbar" aria-label="画廊筛选与排序">
+            <label class="search-wrap gal-search-wrap">
+              <svg class="icon-svg search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" />
+                <path d="M20 20l-3.5-3.5" />
+              </svg>
+              <input class="mac-input search-input" id="inp-gal-search" type="search" autocomplete="off" placeholder="搜索文件名或子目录..." aria-label="搜索画廊作品" />
+            </label>
+
+            <div class="gal-pop-anchor">
+              <button class="btn btn-xs btn-subtle gal-filter-pill" id="btn-gal-folder" type="button" aria-expanded="false" aria-controls="gal-folder-popover" title="按子目录筛选作品">
+                <svg class="icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                </svg>
+                <span class="gal-pill-label" id="gal-folder-label">全部目录</span>
+                <svg class="icon-svg gal-pill-chev" width="10.5" height="10.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+              <div class="gal-dropdown-popover gal-folder-popover hidden" id="gal-folder-popover" role="dialog" aria-label="按目录筛选" aria-hidden="true" inert>
+                <label class="search-wrap gal-folder-search hidden" id="gal-folder-search-wrap">
+                  <svg class="icon-svg search-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="M20 20l-3.5-3.5" />
+                  </svg>
+                  <input class="mac-input search-input" id="inp-gal-folder-search" type="search" autocomplete="off" placeholder="过滤目录..." aria-label="过滤子目录" />
+                </label>
+                <div class="gal-pop-list" id="gal-folder-list"></div>
+              </div>
+            </div>
+
+            <div class="gal-pop-anchor">
+              <button class="btn btn-xs btn-subtle gal-filter-pill" id="btn-gal-date" type="button" aria-expanded="false" aria-controls="gal-date-popover" title="按时间范围筛选">
+                <svg class="icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="18" rx="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                <span class="gal-pill-label" id="gal-date-label">全部时间</span>
+                <svg class="icon-svg gal-pill-chev" width="10.5" height="10.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+              <div class="gal-dropdown-popover hidden" id="gal-date-popover" role="dialog" aria-label="按时间筛选" aria-hidden="true" inert>
+                <div class="gal-pop-list" id="gal-date-list">
+                  <button class="gal-pop-opt active" type="button" data-date="all"><span class="gal-pop-opt-label">全部时间</span></button>
+                  <button class="gal-pop-opt" type="button" data-date="today"><span class="gal-pop-opt-label">今天</span></button>
+                  <button class="gal-pop-opt" type="button" data-date="7d"><span class="gal-pop-opt-label">近 7 天</span></button>
+                  <button class="gal-pop-opt" type="button" data-date="30d"><span class="gal-pop-opt-label">近 30 天</span></button>
+                </div>
+              </div>
+            </div>
+
+            <div class="gal-pop-anchor">
+              <button class="btn btn-xs btn-subtle gal-filter-pill is-active" id="btn-gal-group" type="button" aria-expanded="false" aria-controls="gal-group-popover" title="切换画廊分组方式">
+                <svg class="icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="3" width="18" height="7" rx="1.5" />
+                  <rect x="3" y="14" width="18" height="7" rx="1.5" />
+                </svg>
+                <span class="gal-pill-label" id="gal-group-label">按日期分组</span>
+                <svg class="icon-svg gal-pill-chev" width="10.5" height="10.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+              <div class="gal-dropdown-popover hidden" id="gal-group-popover" role="dialog" aria-label="分组方式" aria-hidden="true" inert>
+                <div class="gal-pop-list" id="gal-group-list">
+                  <button class="gal-pop-opt active" type="button" data-group="date"><span class="gal-pop-opt-label">按日期分组</span></button>
+                  <button class="gal-pop-opt" type="button" data-group="folder"><span class="gal-pop-opt-label">按目录分组</span></button>
+                  <button class="gal-pop-opt" type="button" data-group="none"><span class="gal-pop-opt-label">平铺不分组</span></button>
+                </div>
+              </div>
+            </div>
+
+            <div class="gal-pop-anchor">
+              <button class="btn btn-xs btn-subtle gal-filter-pill" id="btn-gal-sort" type="button" aria-expanded="false" aria-controls="gal-sort-popover" title="切换排序方式">
+                <svg class="icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M3 6h13M3 12h9M3 18h5" />
+                  <path d="M17 16l3 3 3-3M20 7v12" />
+                </svg>
+                <span class="gal-pill-label" id="gal-sort-label">最新优先</span>
+                <svg class="icon-svg gal-pill-chev" width="10.5" height="10.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+              <div class="gal-dropdown-popover hidden" id="gal-sort-popover" role="dialog" aria-label="排序方式" aria-hidden="true" inert>
+                <div class="gal-pop-list" id="gal-sort-list">
+                  <button class="gal-pop-opt active" type="button" data-sort="newest"><span class="gal-pop-opt-label">最新优先</span></button>
+                  <button class="gal-pop-opt" type="button" data-sort="oldest"><span class="gal-pop-opt-label">最早优先</span></button>
+                  <button class="gal-pop-opt" type="button" data-sort="name_asc"><span class="gal-pop-opt-label">名称批次 A-Z</span></button>
+                  <button class="gal-pop-opt" type="button" data-sort="name_desc"><span class="gal-pop-opt-label">名称批次 Z-A</span></button>
+                  <button class="gal-pop-opt" type="button" data-sort="size_desc"><span class="gal-pop-opt-label">体积从大到小</span></button>
+                </div>
+              </div>
+            </div>
+
+            <button class="btn btn-xs btn-ghost gal-reset-btn hidden" id="btn-gal-reset-filter" type="button">重置筛选</button>
+          </div>
+
+          <div class="gallery-split">
+            <div class="gallery-stage" id="gallery-stage">
+              <div class="gallery-masonry" id="gallery-masonry"></div>
+              <div class="gal-load-more-wrap hidden" id="gal-load-more-wrap">
+                <button class="btn btn-sm btn-subtle" id="btn-gal-load-more" type="button">加载更多作品</button>
+              </div>
+              <div class="empty-state hidden" id="gallery-empty">
+                <svg class="icon-svg empty-icon" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="16" rx="2.5" />
+                  <circle cx="8.5" cy="9.5" r="1.5" />
+                  <path d="M21 15l-4.5-4.5L7 20" />
+                </svg>
+                <div class="empty-title" id="gallery-empty-title">本地作品目录暂无媒体文件</div>
+                <div class="empty-desc" id="gallery-empty-desc">从云端拉回成图、视频或合成语音后，将在此按时间与目录自动归档并解析生成参数</div>
+                <div class="empty-actions">
+                  <button class="btn btn-sm btn-primary" id="btn-gal-empty-sync" type="button">拉回云端成图</button>
+                  <button class="btn btn-sm btn-subtle" id="btn-gal-empty-dir" type="button">打开本地目录</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Finder 风格右侧 Inspector 检视栏 -->
+            <aside class="gallery-inspector" id="gallery-inspector" aria-label="作品元数据检视器" aria-hidden="true" inert>
+              <div class="inspector-head">
+                <span class="inspector-title">作品检视</span>
+                <button class="icon-circle-btn sm" id="btn-inspector-close" type="button" title="收起检视栏 (Esc)" aria-label="收起检视栏">
+                  <svg class="icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div class="inspector-scroll">
+                <div class="insp-preview" id="insp-preview"></div>
+                <div class="insp-file-block">
+                  <div class="insp-filename" id="insp-filename">--</div>
+                  <div class="insp-kv-grid" id="insp-meta-list"></div>
+                </div>
+                <div class="insp-gen-section hidden" id="insp-gen-section">
+                  <div class="insp-block">
+                    <div class="insp-block-head">
+                      <span class="insp-label">正向提示词 (Positive)</span>
+                    </div>
+                    <pre class="insp-code-well" id="insp-pos-prompt"></pre>
+                  </div>
+                  <div class="insp-block hidden" id="insp-neg-wrap">
+                    <div class="insp-block-head">
+                      <span class="insp-label">反向提示词 (Negative)</span>
+                    </div>
+                    <pre class="insp-code-well muted" id="insp-neg-prompt"></pre>
+                  </div>
+                  <div class="insp-block">
+                    <div class="insp-label">采样与模型参数</div>
+                    <div class="insp-params-grid" id="insp-params-grid"></div>
+                  </div>
+                  <div class="insp-block hidden" id="insp-loras-wrap">
+                    <div class="insp-label">LoRA 权重</div>
+                    <div class="insp-lora-list" id="insp-loras"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="inspector-actions">
+                <button class="btn btn-sm btn-primary inspector-span-full" id="btn-insp-push-canvas" type="button">推回在线画布重绘</button>
+                <button class="btn btn-sm btn-subtle inspector-span-full" id="btn-gal-copilot" type="button">
+                  <svg class="icon-svg" width="13.5" height="13.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
+                  </svg>
+                  <span>交由副驾改词重抽</span>
+                </button>
+                <button class="btn btn-sm btn-subtle" id="btn-insp-copy-prompt" type="button">复制 Prompt</button>
+                <button class="btn btn-sm btn-ghost" id="btn-insp-reveal" type="button">在文件夹中显示</button>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <!-- 视图 3：引擎与云盘 -->
+        <section class="view-pane" id="view-tuner" data-view="tuner" role="tabpanel" aria-labelledby="nav-tuner">
+          <div class="view-scroll">
+            <div class="tuner-grid">
+              <!-- 左：Qwen3.8 在线热调参 -->
+              <div class="inset-panel tuner-card">
+                <div class="section-head compact">
+                  <div class="section-title-group">
+                    <h2 class="section-title">Qwen3.8 在线热调参</h2>
+                    <span class="section-sub" id="tuner-llm-mode">27B / 180B 不断卡热重载</span>
+                  </div>
+                  <span class="pill-tag" id="tuner-llm-status">待机</span>
+                </div>
+
+                <div class="form-rows">
+                  <div class="form-row">
+                    <span class="form-label">上下文窗口</span>
+                    <div class="seg-control" id="tuner-ctx-seg">
+                      <button class="seg-item" type="button" data-ctx="32768">32K</button>
+                      <button class="seg-item active" type="button" data-ctx="65536">64K</button>
+                      <button class="seg-item" type="button" data-ctx="131072">128K</button>
+                      <button class="seg-item" type="button" data-ctx="262144">256K</button>
+                    </div>
+                  </div>
+
+                  <div class="form-row">
+                    <span class="form-label">量化精度</span>
+                    <div class="seg-control" id="tuner-quant-seg">
+                      <button class="seg-item active" type="button" data-quant="UD-Q4_K_XL">Q4</button>
+                      <button class="seg-item" type="button" data-quant="UD-IQ4_XS">IQ4</button>
+                      <button class="seg-item" type="button" data-quant="IQ3_XXS">IQ3</button>
+                    </div>
+                  </div>
+
+                  <div class="form-row">
+                    <div class="form-label-stack">
+                      <span class="form-label">多模态视觉识图 (mmproj)</span>
+                      <span class="form-hint">开启后支持直接传图对话（约增加 0.9G 显存）</span>
+                    </div>
+                    <button class="mac-switch on" id="btn-tuner-mmproj" type="button" role="switch" aria-checked="true" aria-label="切换视觉识图开关">
+                      <span class="mac-switch-thumb"></span>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="api-preview-box" id="tuner-api-preview">
+                  <div class="api-preview-row">
+                    <span class="api-preview-k">OpenAI Base URL</span>
+                    <span class="api-preview-v mono" id="tuner-api-url">开机后自动分配公网隧道</span>
+                  </div>
+                  <div class="api-preview-row">
+                    <span class="api-preview-k">默认模型标识</span>
+                    <span class="api-preview-v mono" id="tuner-api-model">Qwen3.8</span>
+                  </div>
+                </div>
+
+                <div class="tuner-card-actions">
+                  <button class="btn btn-sm btn-primary" id="btn-tuner-reload" type="button">一键热重载</button>
+                  <button class="btn btn-sm btn-subtle" id="btn-tuner-copy-api" type="button">复制 API (Magpie/Claude)</button>
+                  <button class="btn btn-sm btn-ghost" id="btn-tuner-open-llm" type="button">打开对话页</button>
+                </div>
+              </div>
+
+              <!-- 右：Cloud 云盘资产库 -->
+              <div class="inset-panel tuner-card">
+                <div class="section-head compact">
+                  <div class="section-title-group">
+                    <h2 class="section-title">Cloud 云盘资产库</h2>
+                    <span class="section-sub">gdrive_save</span>
+                  </div>
+                  <span class="pill-tag warn" id="tuner-gdrive-badge">待检测</span>
+                </div>
+
+                <div class="cloud-toolbar">
+                  <div class="seg-control seg-xs" id="tuner-cloud-seg">
+                    <button class="seg-item active" type="button" data-bucket="loras">LoRA</button>
+                    <button class="seg-item" type="button" data-bucket="workflows">工作流</button>
+                    <button class="seg-item" type="button" data-bucket="refs">音色</button>
+                  </div>
+                  <div class="cloud-actions">
+                    <button class="btn btn-xs btn-subtle" id="btn-tuner-cloud-refresh" type="button">刷新列表</button>
+                    <button class="btn btn-xs btn-ghost" id="btn-tuner-gdrive-bind" type="button">一键绑定</button>
+                    <button class="btn btn-xs btn-ghost" id="btn-tuner-gdrive-import" type="button">导入 .conf</button>
+                  </div>
+                </div>
+
+                <div class="inset-list compact cloud-list" id="tuner-cloud-list"></div>
+
+                <div class="dropzone-well" id="tuner-dropzone">
+                  <svg class="icon-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                  <span class="dropzone-text">将 LoRA / 工作流 / 音色文件拖入窗口，或</span>
+                  <button class="btn btn-xs btn-subtle" id="btn-tuner-upload" type="button">选取文件上传</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 下半部分：渐进式折叠收纳低频配置 -->
+            <div class="tuner-details-stack">
+              <details class="mac-details" id="details-cf">
+                <summary class="mac-details-summary">
+                  <div class="details-title-wrap">
+                    <svg class="icon-svg details-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                    <span class="details-title">Cloudflare 固定域名与隧道密钥</span>
+                  </div>
+                  <span class="pill-tag" id="tuner-cf-badge">免费临时隧道</span>
+                </summary>
+                <div class="mac-details-body">
+                  <div class="details-tip">普通用户推荐使用免配置的 trycloudflare 免费隧道；配置自有域名时，密钥安全存入系统凭据库而不落明文。</div>
+                  <div class="cf-form-grid">
+                    <label class="field-group">
+                      <span class="field-label">Tunnel Token</span>
+                      <input class="mac-input" id="inp-cf-token" type="password" autocomplete="off" placeholder="留空则保持当前已存密钥不变" />
+                    </label>
+                    <label class="field-group">
+                      <span class="field-label">固定 LLM API Key（选填）</span>
+                      <input class="mac-input" id="inp-cf-llmkey" type="password" autocomplete="off" placeholder="留空则每次开机随机生成" />
+                    </label>
+                    <label class="field-group">
+                      <span class="field-label">ComfyUI 固定域名</span>
+                      <input class="mac-input" id="inp-cf-comfy" type="url" placeholder="https://comfy.example.com" />
+                    </label>
+                    <label class="field-group">
+                      <span class="field-label">LLM 对话固定域名（选填）</span>
+                      <input class="mac-input" id="inp-cf-llm" type="url" placeholder="https://llm.example.com" />
+                    </label>
+                  </div>
+                  <div class="details-actions">
+                    <button class="btn btn-sm btn-primary" id="btn-cf-save" type="button">保存并启用</button>
+                    <button class="btn btn-sm btn-danger-soft" id="btn-cf-clear" type="button">切回免费隧道</button>
+                  </div>
+                </div>
+              </details>
+
+              <details class="mac-details" id="details-idle">
+                <summary class="mac-details-summary">
+                  <div class="details-title-wrap">
+                    <svg class="icon-svg details-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                    <span class="details-title">闲置停卡与自动拉回策略</span>
+                  </div>
+                  <span class="section-sub" id="tuner-idle-summary">智能保活 · 闲置 1h 自动停卡</span>
+                </summary>
+                <div class="mac-details-body">
+                  <div class="form-rows">
+                    <div class="form-row">
+                      <span class="form-label">防断连保活模式</span>
+                      <div class="seg-control" id="pref-keepalive-seg">
+                        <button class="seg-item" type="button" data-val="smart">智能保活</button>
+                        <button class="seg-item active" type="button" data-val="stop60">闲置 1h 停卡</button>
+                        <button class="seg-item" type="button" data-val="off">关闭</button>
+                      </div>
+                    </div>
+                    <div class="form-row">
+                      <span class="form-label">归档失败容灾策略</span>
+                      <div class="seg-control" id="pref-archive-seg">
+                        <button class="seg-item active" type="button" data-val="stop_billing">止损优先停卡</button>
+                        <button class="seg-item" type="button" data-val="keep_alive">保图留机告警</button>
+                      </div>
+                    </div>
+                    <div class="form-row">
+                      <span class="form-label">出图自动拉回本机</span>
+                      <div class="seg-control" id="pref-autopull-seg">
+                        <button class="seg-item active" type="button" data-val="1">自动</button>
+                        <button class="seg-item" type="button" data-val="0">手动</button>
+                      </div>
+                    </div>
+                    <div class="form-row">
+                      <span class="form-label">长时忘关提醒 / 轮询间隔</span>
+                      <div class="dual-seg-wrap">
+                        <div class="seg-control seg-xs" id="pref-longrun-seg">
+                          <button class="seg-item" type="button" data-val="60">1h</button>
+                          <button class="seg-item active" type="button" data-val="180">3h</button>
+                          <button class="seg-item" type="button" data-val="300">5h</button>
+                        </div>
+                        <div class="seg-control seg-xs" id="pref-poll-seg">
+                          <button class="seg-item" type="button" data-val="30">30s</button>
+                          <button class="seg-item active" type="button" data-val="60">60s</button>
+                          <button class="seg-item" type="button" data-val="120">2m</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </details>
+
+              <details class="mac-details" id="details-tools">
+                <summary class="mac-details-summary">
+                  <div class="details-title-wrap">
+                    <svg class="icon-svg details-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                    <span class="details-title">本地运行组件与工具路径</span>
+                  </div>
+                  <span class="pill-tag" id="tuner-tools-badge">探测中</span>
+                </summary>
+                <div class="mac-details-body">
+                  <div class="inset-list compact" id="tuner-tools-list"></div>
+                  <div class="details-actions">
+                    <button class="btn btn-xs btn-subtle" id="btn-tools-reset" type="button">恢复自动探测</button>
+                    <button class="btn btn-xs btn-ghost" id="btn-tools-copy-colab" type="button">复制安装 colab-cli</button>
+                    <button class="btn btn-xs btn-ghost" id="btn-tools-copy-rclone" type="button">复制安装 rclone</button>
+                  </div>
+                </div>
+              </details>
+            </div>
+          </div>
+        </section>
+
+        <!-- 视图 4：控制台与体检 -->
+        <section class="view-pane" id="view-console" data-view="console" role="tabpanel" aria-labelledby="nav-console">
+          <div class="console-toolbar">
+            <div class="seg-control" id="console-source-seg">
+              <button class="seg-item active" type="button" data-source="local_diag">本地诊断</button>
+              <button class="seg-item" type="button" data-source="llama">远端 LLM</button>
+              <button class="seg-item" type="button" data-source="comfy">远端 ComfyUI</button>
+            </div>
+
+            <div class="console-toolbar-right">
+              <label class="search-wrap">
+                <svg class="icon-svg search-icon" width="13.5" height="13.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M20 20l-3.5-3.5" />
+                </svg>
+                <input class="mac-input search-input" id="console-filter" type="search" placeholder="过滤日志关键词..." aria-label="过滤日志关键词" />
+              </label>
+              <button class="btn btn-xs btn-subtle" id="btn-console-refresh" type="button">刷新</button>
+              <button class="btn btn-xs btn-primary" id="btn-console-doctor" type="button">环境深度体检 (Doctor)</button>
+              <button class="btn btn-xs btn-subtle copilot-inline-btn" id="btn-console-copilot" type="button">
+                <svg class="icon-svg" width="12.5" height="12.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
+                </svg>
+                <span>副驾诊断报错</span>
+              </button>
+              <button class="btn btn-xs btn-subtle" id="btn-console-export" type="button">导出脱敏诊断包</button>
+              <button class="btn btn-xs btn-ghost" id="btn-console-open-dir" type="button">日志目录</button>
+            </div>
+          </div>
+
+          <div class="console-grid">
+            <!-- 实时脱敏终端日志 -->
+            <div class="inset-panel terminal-card">
+              <div class="terminal-head">
+                <div class="terminal-title-wrap">
+                  <span class="terminal-title" id="console-log-title">本地诊断日志</span>
+                  <span class="pill-tag tabular" id="console-line-count">0 行</span>
+                </div>
+                <div class="terminal-head-right">
+                  <span class="metric-sub tabular" id="console-updated-at">--:--:--</span>
+                  <button class="btn btn-xs btn-ghost" id="btn-console-copy-logs" type="button">复制视图</button>
+                </div>
+              </div>
+              <div class="terminal-body mono" id="console-log-view" role="log" aria-live="polite"></div>
+            </div>
+
+            <!-- Doctor 可视化环境检查清单 -->
+            <div class="inset-panel doctor-card">
+              <div class="doctor-head">
+                <div class="section-title-group">
+                  <h2 class="section-title">Doctor 环境体检清单</h2>
+                  <span class="pill-tag" id="doctor-summary-pill">待执行</span>
+                </div>
+                <div class="doctor-versions tabular" id="doctor-versions"></div>
+              </div>
+              <div class="doctor-list" id="doctor-items-list"></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- 右侧可收折实时运行日志面板（328px 深色终端流） -->
+    <aside class="studio-log-panel" id="studio-log-panel" aria-label="实时运行日志">
+      <div class="log-panel-top" id="log-panel-drag" title="按住拖动窗口">
+        <div class="log-panel-title-wrap">
+          <svg class="icon-svg icon-accent" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="4 17 10 11 4 5" />
+            <line x1="12" y1="19" x2="20" y2="19" />
+          </svg>
+          <span class="log-panel-title">运行日志</span>
+          <span class="rlog-live-pill" id="rlog-live-pill">
+            <span class="rlog-live-dot" id="rlog-live-dot"></span>
+            <span id="rlog-live-text">实时就绪</span>
+          </span>
+        </div>
+        <div class="log-panel-actions">
+          <button class="rlog-act-btn" id="btn-rlog-copy" type="button" title="复制当前日志">复制</button>
+          <button class="rlog-act-btn" id="btn-rlog-refresh" type="button" title="刷新云端实时日志">刷新</button>
+          <button class="rlog-act-btn" id="btn-rlog-clear" type="button" title="清空当前视图日志">清空</button>
+        </div>
+      </div>
+
+      <div class="rlog-subbar">
+        <div class="rlog-source-seg" id="rlog-source-seg" role="group" aria-label="日志来源过滤">
+          <button class="rlog-seg-btn active" type="button" data-rlog-src="all">全部</button>
+          <button class="rlog-seg-btn" type="button" data-rlog-src="comfy">Comfy</button>
+          <button class="rlog-seg-btn" type="button" data-rlog-src="llm">LLM</button>
+        </div>
+        <div class="rlog-task-meta">
+          <span class="rlog-task-text" id="rlog-task-text">系统待命 · 等待日志流</span>
+          <div class="rlog-progress-track" aria-hidden="true">
+            <div class="rlog-progress-fill" id="rlog-progress-fill" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rlog-terminal" id="rlog-terminal" role="log" aria-live="polite">
+        <div class="rlog-line rlog-info"><span class="rlog-time">--:--:--</span><span class="rlog-msg">等待连接集群与实时日志流...</span></div>
+      </div>
+    </aside>
+
+    <!-- 右侧可收折毛玻璃 AI 副驾抽屉（对标 Antigravity 对话与输入舱体验） -->
+    <aside class="copilot-drawer" id="copilot-drawer" aria-label="AI 副驾助手" aria-hidden="true" inert>
+      <div class="copilot-inner">
+        <!-- 极简顶栏：状态圆点 + AI 副驾 + 路由来源标签 + 供应商管理/清空/收起 -->
+        <header class="copilot-head">
+          <div class="copilot-head-brand">
+            <span class="status-dot idle" id="copilot-head-dot"></span>
+            <span class="copilot-head-title">AI 副驾</span>
+            <span class="copilot-route-badge" id="copilot-route-badge" title="当前大脑路由来源">自动路由</span>
+          </div>
+
+          <div class="copilot-head-actions">
+            <button class="icon-circle-btn sm" id="btn-copilot-new-chat" type="button" title="新建对话" aria-label="新建对话">
+              <svg class="icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </button>
+            <button class="icon-circle-btn sm" id="btn-copilot-history" type="button" title="历史会话管理" aria-label="历史会话" aria-expanded="false" aria-controls="copilot-history-popover">
+              <svg class="icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+                <path d="M3 3v5h5" />
+                <polyline points="12 7 12 12 15.5 14" />
+              </svg>
+            </button>
+            <button class="icon-circle-btn sm" id="btn-copilot-settings" type="button" title="自定义供应商与导入模型" aria-label="供应商与模型管理">
+              <svg class="icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="4" y1="21" x2="4" y2="14" />
+                <line x1="4" y1="10" x2="4" y2="3" />
+                <line x1="12" y1="21" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12" y2="3" />
+                <line x1="20" y1="21" x2="20" y2="16" />
+                <line x1="20" y1="12" x2="20" y2="3" />
+                <line x1="1" y1="14" x2="7" y2="14" />
+                <line x1="9" y1="8" x2="15" y2="8" />
+                <line x1="17" y1="16" x2="23" y2="16" />
+              </svg>
+            </button>
+            <button class="icon-circle-btn sm" id="btn-copilot-clear" type="button" title="清空当前副驾对话" aria-label="清空会话">
+              <svg class="icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                <path d="M10 11v6M14 11v6" />
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+              </svg>
+            </button>
+            <button class="icon-circle-btn sm" id="btn-copilot-close" type="button" title="收起 AI 副驾 (Ctrl+K)" aria-label="收起 AI 副驾">
+              <svg class="icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <!-- 顶栏下方轻量历史会话管理浮层 -->
+        <div class="copilot-history-popover hidden" id="copilot-history-popover" role="dialog" aria-label="历史会话与上下文管理" aria-hidden="true" inert>
+          <div class="pop-section-head">
+            <div class="cfg-head-left">
+              <span class="cfg-title">历史会话</span>
+              <span class="pill-tag tabular" id="history-count-badge">1 个会话</span>
+            </div>
+            <div class="cfg-label-actions">
+              <button class="btn btn-xs btn-subtle" id="btn-hist-new" type="button">新建</button>
+              <button class="btn btn-xs btn-ghost" id="btn-hist-clear-all" type="button">清空全部</button>
+            </div>
+          </div>
+
+          <div class="history-ctx-box">
+            <div class="history-ctx-row">
+              <span class="history-ctx-label" id="history-ctx-text">当前上下文：0 / 40 条 · 约 0 tok</span>
+            </div>
+            <div class="history-ctx-track" aria-hidden="true">
+              <div class="history-ctx-fill" id="history-ctx-fill"></div>
+            </div>
+          </div>
+
+          <label class="search-wrap cfg-quick-search hidden" id="history-search-wrap">
+            <svg class="icon-svg search-icon" width="12.5" height="12.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.5-3.5" />
+            </svg>
+            <input class="mac-input search-input" id="inp-history-filter" type="search" autocomplete="off" placeholder="搜索历史对话标题或摘要..." aria-label="搜索历史会话" />
+          </label>
+
+          <div class="copilot-history-list" id="copilot-history-list"></div>
+        </div>
+
+        <!-- 流式对话、可折叠思考链与工具卡片流 -->
+        <div class="copilot-messages" id="copilot-messages" role="log" aria-live="polite"></div>
+
+        <!-- 底部 Antigravity 一体化输入舱与向上弹出浮层 -->
+        <footer class="copilot-composer">
+          <button class="copilot-scroll-bottom-btn hidden" id="btn-copilot-scroll-bottom" type="button" title="滚动到最新回复" aria-label="回到底部">
+            <svg class="icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <polyline points="19 12 12 19 5 12" />
+            </svg>
+            <span>最新回复</span>
+          </button>
+
+          <!-- 浮层 1：向上弹出的模型选择与大脑路由浮层 -->
+          <div class="copilot-config-popover hidden" id="copilot-config-popover" role="dialog" aria-label="选择模型与大脑路由" aria-hidden="true" inert>
+            <div class="cfg-head">
+              <div class="cfg-head-left">
+                <span class="cfg-title">选择模型</span>
+                <span class="pill-tag" id="cfg-status-badge">Native 就绪</span>
+              </div>
+              <div class="cfg-label-actions">
+                <button class="btn btn-xs btn-ghost hidden" id="btn-agent-clear-key" type="button">清除密钥</button>
+                <button class="btn btn-xs btn-subtle" id="btn-open-provider-modal" type="button">管理与导入</button>
+                <button class="icon-circle-btn sm" id="btn-agent-cfg-close" type="button" aria-label="关闭模型选择浮层">
+                  <svg class="icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <label class="search-wrap cfg-quick-search hidden" id="cfg-quick-search-wrap">
+              <svg class="icon-svg search-icon" width="12.5" height="12.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" />
+                <path d="M20 20l-3.5-3.5" />
+              </svg>
+              <input class="mac-input search-input" id="inp-quick-model-filter" type="search" autocomplete="off" placeholder="搜索已导入模型或供应商..." aria-label="过滤已导入模型" />
+            </label>
+
+            <div class="cfg-quick-model-list" id="cfg-quick-model-list"></div>
+
+            <div class="cfg-route-footer" id="cfg-external-group">
+              <div class="cfg-field">
+                <div class="cfg-label-row">
+                  <span class="cfg-label">大脑路由</span>
+                  <span class="pill-tag" id="cfg-colab-llm-badge">Colab Qwen 待机</span>
+                </div>
+                <div class="seg-control cfg-seg" id="cfg-brain-seg">
+                  <button class="seg-item active" type="button" data-val="auto">自动</button>
+                  <button class="seg-item" type="button" data-val="colab_llm">Colab Qwen</button>
+                  <button class="seg-item" type="button" data-val="external_api">外部网关</button>
+                </div>
+              </div>
+
+              <div class="cfg-field">
+                <span class="cfg-label">执行引擎</span>
+                <div class="seg-control cfg-seg" id="cfg-driver-seg">
+                  <button class="seg-item active" type="button" data-val="native">Native 内核</button>
+                  <button class="seg-item" type="button" data-val="claude_code" id="btn-cfg-driver-claude">Claude Code</button>
+                </div>
+                <span class="cfg-hint hidden" id="cfg-claude-hint">未检测到本地 claude CLI，已自动灰置</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 浮层 2：向上弹出的思考强度与执行策略浮层 -->
+          <div class="copilot-effort-popover hidden" id="copilot-effort-popover" role="dialog" aria-label="模型思考强度与执行策略" aria-hidden="true" inert>
+            <div class="pop-section-head">
+              <span class="cfg-title">模型思考强度</span>
+              <span class="pill-tag" id="effort-status-badge">自动</span>
+            </div>
+            <div class="effort-list" id="effort-options-list">
+              <button class="effort-option active" type="button" data-effort="auto">
+                <span class="effort-opt-text">
+                  <span class="effort-opt-title">自动 (Auto)</span>
+                  <span class="effort-opt-desc">遵循网关与模型默认设置</span>
+                </span>
+                <svg class="icon-svg effort-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+              </button>
+              <button class="effort-option" type="button" data-effort="none">
+                <span class="effort-opt-text">
+                  <span class="effort-opt-title">关闭 (Off)</span>
+                  <span class="effort-opt-desc">快速直答，不展开思考链</span>
+                </span>
+                <svg class="icon-svg effort-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+              </button>
+              <button class="effort-option" type="button" data-effort="low">
+                <span class="effort-opt-text">
+                  <span class="effort-opt-title">低 (Low)</span>
+                  <span class="effort-opt-desc">轻量推演，兼顾响应速度</span>
+                </span>
+                <svg class="icon-svg effort-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+              </button>
+              <button class="effort-option" type="button" data-effort="medium">
+                <span class="effort-opt-text">
+                  <span class="effort-opt-title">中 (Medium)</span>
+                  <span class="effort-opt-desc">日常调度与排错均衡推荐</span>
+                </span>
+                <svg class="icon-svg effort-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+              </button>
+              <button class="effort-option" type="button" data-effort="high">
+                <span class="effort-opt-text">
+                  <span class="effort-opt-title">高 (High)</span>
+                  <span class="effort-opt-desc">深度多步诊断与复杂任务</span>
+                </span>
+                <svg class="icon-svg effort-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+              </button>
+              <button class="effort-option" type="button" data-effort="xhigh">
+                <span class="effort-opt-text">
+                  <span class="effort-opt-title">超高 (Extra)</span>
+                  <span class="effort-opt-desc">Extra-High 深度推演预算</span>
+                </span>
+                <svg class="icon-svg effort-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+              </button>
+            </div>
+            <div class="cfg-switch-row effort-turbo-row">
+              <div class="form-label-stack">
+                <span class="form-label">Turbo 自动放行</span>
+                <span class="form-hint">开启后启停 GPU 卡直接执行</span>
+              </div>
+              <button class="mac-switch" id="btn-agent-auto-approve" type="button" role="switch" aria-checked="false" aria-label="切换 Turbo 自动放行计费审批">
+                <span class="mac-switch-thumb"></span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 浮层 3：左下角 + 上下文附件与快捷指令菜单 -->
+          <div class="copilot-plus-popover hidden" id="copilot-plus-popover" role="menu" aria-label="附加上下文与快捷指令" aria-hidden="true" inert></div>
+
+          <!-- Antigravity 风格圆角卡片输入舱 -->
+          <div class="copilot-composer-box">
+            <!-- 顶部上下文附件预览条（画廊选图/日志摘录） -->
+            <div class="copilot-ctx-strip hidden" id="copilot-ctx-strip"></div>
+
+            <!-- 中部无边框自适应输入框 -->
+            <textarea class="copilot-input" id="copilot-input" rows="2" aria-label="向 AI 副驾输入指令" placeholder="输入指令，让副驾调度算力、改词重绘或排错..."></textarea>
+
+            <!-- 底部内联控制栏：左 (+ & 模型) | 右 (思考强度/策略 & 圆形发送钮) -->
+            <div class="copilot-composer-foot">
+              <div class="composer-foot-left">
+                <button class="composer-plus-btn" id="btn-copilot-plus" type="button" title="附加上下文或快捷指令" aria-label="附加上下文与快捷指令" aria-expanded="false" aria-controls="copilot-plus-popover">
+                  <svg class="icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+                <button class="copilot-brain-pill" id="copilot-brain-pill" type="button" title="切换模型、供应商与大脑路由" aria-expanded="false" aria-controls="copilot-config-popover">
+                  <span class="status-dot idle" id="copilot-brain-dot"></span>
+                  <span class="copilot-brain-label" id="copilot-brain-label">自动路由</span>
+                  <svg class="icon-svg copilot-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
+              </div>
+
+              <div class="composer-foot-right">
+                <button class="copilot-effort-btn" id="btn-copilot-effort" type="button" title="调节模型思考强度与 Turbo 执行策略" aria-expanded="false" aria-controls="copilot-effort-popover">
+                  <svg class="icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                  </svg>
+                  <span class="copilot-effort-label" id="copilot-effort-label">自动</span>
+                  <svg class="icon-svg copilot-chevron" width="10.5" height="10.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
+                <button class="copilot-send-btn" id="btn-copilot-send" type="button" title="发送消息 (Enter 确认 · Shift+Enter 换行)" aria-label="发送消息">
+                  <svg class="icon-svg icon-send" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                    <polyline points="12 5 19 12 12 19" />
+                  </svg>
+                  <svg class="icon-svg icon-stop hidden" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+                    <rect x="5" y="5" width="14" height="14" rx="2.5" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 账号绑定 / 重命名轻量模态框 -->
+  <div class="modal-backdrop hidden" id="studio-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-hidden="true" inert>
+    <div class="modal-sheet">
+      <div class="modal-head">
+        <h2 class="modal-title" id="modal-title">绑定 Google Colab 账号</h2>
+        <button class="icon-circle-btn sm" id="btn-modal-close" type="button" aria-label="关闭弹窗">
+          <svg class="icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- 模型供应商管理与模型导入弹窗（对标 Magpie 自定义供应商交互） -->
+  <div class="modal-backdrop hidden" id="provider-modal" role="dialog" aria-modal="true" aria-labelledby="provider-modal-title" aria-hidden="true" inert>
+    <div class="modal-sheet provider-modal-sheet">
+      <div class="modal-head provider-modal-head">
+        <div class="provider-title-wrap">
+          <svg class="icon-svg icon-accent" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+            <line x1="12" y1="22.08" x2="12" y2="12" />
+          </svg>
+          <h2 class="modal-title" id="provider-modal-title">自定义供应商与模型导入</h2>
+        </div>
+        <div class="provider-head-actions">
+          <button class="btn btn-xs btn-subtle" id="btn-prov-preset-magpie" type="button">
+            <svg class="icon-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+            <span>填入 Magpie 本机网关</span>
+          </button>
+          <button class="icon-circle-btn sm" id="btn-provider-modal-close" type="button" aria-label="关闭供应商设置弹窗">
+            <svg class="icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="provider-tabs-strip" id="prov-tabs-bar" aria-label="已保存供应商切换栏"></div>
+
+      <div class="modal-body provider-modal-body">
+        <div class="prov-form-row">
+          <label class="prov-form-label" for="inp-prov-name">名称</label>
+          <div class="prov-form-control">
+            <input class="mac-input" id="inp-prov-name" type="text" autocomplete="off" placeholder="例如 Magpie 本机网关 / My Relay" />
+          </div>
+        </div>
+
+        <div class="prov-form-row prov-row-top">
+          <span class="prov-form-label">Base URL</span>
+          <div class="prov-form-control prov-col">
+            <div class="seg-control prov-format-seg" id="prov-format-seg" role="tablist" aria-label="API 协议格式">
+              <button class="seg-item active" type="button" data-val="openai">OpenAI 兼容</button>
+              <button class="seg-item" type="button" data-val="openai_responses">OpenAI Responses</button>
+              <button class="seg-item" type="button" data-val="anthropic">Anthropic 兼容</button>
+              <button class="seg-item" type="button" data-val="gemini">Gemini 兼容</button>
+            </div>
+            <input class="mac-input" id="inp-prov-base-url" type="url" autocomplete="off" placeholder="http://127.0.0.1:3425/v1 或 https://.../v1" />
+            <div class="prov-probe-bar">
+              <button class="btn btn-xs btn-subtle" id="btn-prov-detect-proto" type="button">检测协议</button>
+              <input class="mac-input prov-probe-input" id="inp-prov-probe-model" type="text" autocomplete="off" placeholder="试用的模型，留空则检测下方已选列表" />
+              <button class="btn btn-xs btn-subtle" id="btn-prov-test-models" type="button">逐个检测已选模型</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="prov-form-row">
+          <label class="prov-form-label" for="inp-agent-api-key">API 密钥</label>
+          <div class="prov-form-control prov-inline">
+            <input class="mac-input" id="inp-agent-api-key" type="password" autocomplete="new-password" placeholder="本机网关（如 127.0.0.1:3425）免鉴权可留空" />
+            <button class="btn btn-xs btn-ghost" id="btn-prov-toggle-key" type="button">显示</button>
+          </div>
+        </div>
+
+        <div class="prov-form-row prov-row-top">
+          <label class="prov-form-label" for="inp-prov-models">模型</label>
+          <div class="prov-form-control prov-col">
+            <div class="prov-inline">
+              <input class="mac-input" id="inp-prov-models" type="text" autocomplete="off" placeholder="模型 ID，逗号分隔：例如 gpt-4.1, claude-sonnet-4-5" />
+              <button class="btn btn-xs btn-subtle prov-fetch-btn" id="btn-prov-fetch-models" type="button">获取模型</button>
+            </div>
+
+            <div class="prov-picker-panel" id="prov-models-picker">
+              <div class="prov-picker-toolbar">
+                <label class="search-wrap prov-picker-search">
+                  <svg class="icon-svg search-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="M20 20l-3.5-3.5" />
+                  </svg>
+                  <input class="mac-input search-input" id="inp-prov-model-filter" type="search" autocomplete="off" placeholder="筛选可用模型..." aria-label="筛选可用模型" />
+                </label>
+                <span class="prov-models-count tabular" id="prov-models-count">已选 0</span>
+                <div class="prov-picker-actions">
+                  <button class="btn btn-xs btn-ghost" id="btn-prov-select-all" type="button">全选</button>
+                  <button class="btn btn-xs btn-ghost" id="btn-prov-select-none" type="button">清空</button>
+                </div>
+              </div>
+              <div class="prov-models-grid" id="prov-models-grid"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="provider-modal-foot">
+        <div class="provider-foot-left">
+          <button class="btn btn-xs btn-ghost hidden" id="btn-prov-delete" type="button">删除供应商</button>
+          <span class="prov-status-text" id="prov-status-text">支持导入 Magpie 本机网关及兼容 OpenAI / Claude / Gemini 接口</span>
+        </div>
+        <div class="provider-foot-right">
+          <button class="btn btn-sm btn-ghost" id="btn-prov-cancel" type="button">取消</button>
+          <button class="btn btn-sm btn-primary" id="btn-prov-save" type="button">保存并启用</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部轻量状态浮层提示 -->
+  <div class="studio-toast" id="studio-toast" role="status" aria-live="polite" aria-hidden="true"></div>
+
+  <script src="/studio.js"></script>
+</body>
+</html>

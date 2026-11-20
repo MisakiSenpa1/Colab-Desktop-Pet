@@ -15,6 +15,9 @@
 """
 from __future__ import annotations
 
+import base64
+import binascii
+import contextlib
 import ctypes
 import hashlib
 import hmac
@@ -23,16 +26,28 @@ import os
 import re
 import secrets
 import subprocess
+import sys
 import threading
 import time
+import urllib.error
 import urllib.parse
+import urllib.request
 from collections import OrderedDict
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 VAULT_SERVICE_NAME = "google-colab-cli-pet-vault"
 CF_VAULT_TUNNEL_TOKEN_KEY = "secret:cf_tunnel_token"
 CF_VAULT_LLM_API_KEY = "secret:cf_llm_api_key"
+AGENT_VAULT_API_KEY = "secret:agent_api_key"
+AGENT_PROVIDER_VAULT_PREFIX = "secret:agent_provider:"
+
+
+def agent_provider_vault_key(provider_id: str) -> str:
+    """生成指定 AI 供应商的规范化凭据保险箱键名。"""
+    clean_id = re.sub(r"[^a-zA-Z0-9_-]", "_", str(provider_id or "").strip())[:48]
+    return f"{AGENT_PROVIDER_VAULT_PREFIX}{clean_id or 'default'}"
 
 _CUSTOM_TUNNEL_HOST_RE = re.compile(r"^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$", re.IGNORECASE)
 _MOCK_VAULT_LOCK = threading.RLock()
@@ -88,8 +103,14 @@ def clear_ephemeral_secrets() -> None:
         _EPHEMERAL_SECRETS.clear()
 
 
-_RE_BEARER = re.compile(r"(Authorization\s*:\s*Bearer\s+)[A-Za-z0-9._~+/=-]{8,}", re.IGNORECASE)
+_RE_BEARER = re.compile(
+    r"""(Authorization['"]?\s*:\s*['"]?Bearer\s+)[A-Za-z0-9._~+/=-]{6,}""",
+    re.IGNORECASE,
+)
 _RE_PREFIXED_KEY = re.compile(r"\b(?:sk|cpk)-[A-Za-z0-9_-]{12,}\b")
+_RE_GOCSPX_SECRET = re.compile(
+    r"(?<![A-Za-z0-9_-])GOCSPX-[A-Za-z0-9_-]{16,}(?![A-Za-z0-9_-])"
+)
 _RE_OAUTH_TOK = re.compile(
     r"(?<![A-Za-z0-9_-])(?:4/[0-9A-Za-z_-]{16,}|ya29\.[0-9A-Za-z._-]{16,}|1//[0-9A-Za-z_-]{16,})(?![A-Za-z0-9_-])"
 )
@@ -102,8 +123,12 @@ _RE_PROXY_OR_TICKET = re.compile(
     r"((?:colab-runtime-proxy-token|ticket)['\"]?\s*[:=]\s*|(?<=[?&])(?:colab-runtime-proxy-token|ticket|code)=)([^&\s'\"#,)}]+)",
     re.IGNORECASE,
 )
+_RE_URL_QUERY_SECRET = re.compile(
+    r"([?&](?:api_key|token|access_token)=)[^&#\s'\"]+",
+    re.IGNORECASE,
+)
 _RE_JSON_SECRET = re.compile(
-    r'("(?:access_token|refresh_token|client_secret|tunnel_token|llm_api_key|comfy_api_key|api_key|code_verifier)"\s*:\s*")[^"]+(")',
+    r"""(['"](?:access_token|refresh_token|client_secret|tunnel_token|llm_api_key|comfy_api_key|agent_api_key|x-api-key|x-goog-api-key|api_key|code_verifier)['"]\s*:\s*(['"]))(?:\\.|(?!\2)[^\r\n])+(\2)""",
     re.IGNORECASE,
 )
 
@@ -132,11 +157,13 @@ def redact_secrets(text: str | None, extra_secrets: Iterable[str] = ()) -> str:
 
     out = _RE_BEARER.sub(r"\1[REDACTED]", out)
     out = _RE_PREFIXED_KEY.sub("[REDACTED_KEY]", out)
+    out = _RE_GOCSPX_SECRET.sub("[REDACTED]", out)
     out = _RE_OAUTH_TOK.sub("[REDACTED_OAUTH]", out)
     out = _RE_JWT_TOK.sub("[REDACTED_CF_TOKEN]", out)
     out = _RE_CF_CLI_TOK.sub(r"\1\2[REDACTED_CF_TOKEN]\3", out)
     out = _RE_PROXY_OR_TICKET.sub(r"\1[REDACTED]", out)
-    out = _RE_JSON_SECRET.sub(r"\1[REDACTED]\2", out)
+    out = _RE_URL_QUERY_SECRET.sub(r"\1[REDACTED]", out)
+    out = _RE_JSON_SECRET.sub(r"\1[REDACTED]\3", out)
     return out
 
 
@@ -204,7 +231,16 @@ def _win_cred_read(target_name: str) -> str | None:
         _ADVAPI32.CredFree(pcred)
 
 
+def _ensure_safe_win_vault_write() -> None:
+    """防止测试过程在未配置沙箱环境变量时误改写宿主机真实 Windows 凭据库。"""
+    if "pytest" in sys.modules and not str(os.environ.get("COLAB_PET_MOCK_VAULT_PATH") or "").strip():
+        raise RuntimeError(
+            "安全拦截：pytest 运行期间未设置 COLAB_PET_MOCK_VAULT_PATH，禁止修改宿主机真实 Windows 凭据库"
+        )
+
+
 def _win_cred_write(target_name: str, user_name: str, secret_val: str) -> None:
+    _ensure_safe_win_vault_write()
     raw = str(secret_val).encode("utf-8")
     blob_arr = (ctypes.c_ubyte * len(raw)).from_buffer_copy(raw) if raw else None
     cred = _CREDENTIALW()
@@ -226,6 +262,7 @@ def _win_cred_write(target_name: str, user_name: str, secret_val: str) -> None:
 
 
 def _win_cred_delete(target_name: str) -> bool:
+    _ensure_safe_win_vault_write()
     ok = _ADVAPI32.CredDeleteW(target_name, _CRED_TYPE_GENERIC, 0)
     if not ok:
         err = ctypes.get_last_error()
@@ -406,6 +443,56 @@ def extract_valid_https_url(raw_url: str | None) -> str:
     return f"https://{host.lower()}"
 
 
+_RE_CF_ASSIGN_PREFIX = re.compile(r"^(?:--token|[A-Za-z_]*TOKEN)=(.+)$", re.IGNORECASE)
+_CF_BASE64_RE = re.compile(r"^[A-Za-z0-9+/_-]+={0,2}$")
+
+
+def extract_cf_tunnel_token(raw_input: str | None) -> str:
+    """从粘贴文本或 `cloudflared service install <token>` 命令中提取纯净 Tunnel Token。"""
+    s = str(raw_input or "").strip().strip("\"'").strip()
+    if not s:
+        return ""
+
+    parts = [p.strip("\"'") for p in s.split() if p.strip("\"'")]
+    if not parts:
+        return ""
+
+    normalized: list[str] = []
+    for part in parts:
+        m = _RE_CF_ASSIGN_PREFIX.match(part)
+        normalized.append(m.group(1).strip("\"'") if m else part)
+
+    if len(normalized) == 1:
+        return normalized[0]
+
+    for cand in reversed(normalized):
+        if cand.startswith("eyJ") and len(cand) >= 16:
+            return cand
+    for cand in reversed(normalized):
+        if not cand.startswith("-") and len(cand) >= 16:
+            return cand
+    return normalized[-1]
+
+
+def is_valid_cf_tunnel_token(token: str | None) -> bool:
+    """校验是否为合法 Cloudflare Named Tunnel 连接器令牌（无点号的 Base64 JSON，含 a/t/s 字段）。"""
+    tok = str(token or "").strip()
+    if len(tok) < 16 or "." in tok or any(ch.isspace() for ch in tok):
+        return False
+    if not _CF_BASE64_RE.fullmatch(tok):
+        return False
+    b64_std = tok.replace("-", "+").replace("_", "/")
+    pad = (-len(b64_std)) % 4
+    try:
+        raw = base64.b64decode(b64_std + ("=" * pad), validate=True)
+        payload = json.loads(raw.decode("utf-8", errors="strict"))
+    except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    return all(isinstance(payload.get(k), str) and bool(str(payload.get(k)).strip()) for k in ("a", "t", "s"))
+
+
 def _vault_key_from_ref(ref_val: Any, default_key: str) -> str:
     raw = str(ref_val or "").strip()
     if raw.startswith("vault:"):
@@ -542,7 +629,7 @@ def save_cf_tunnel_settings(
     existing = load_cf_tunnel_settings(
         config_path, include_secrets=True, colab_py=colab_py, vault=store
     )
-    new_tok = str(tunnel_token or "").strip()
+    new_tok = extract_cf_tunnel_token(tunnel_token)
     tok = new_tok if new_tok else str(existing.get("tunnel_token") or "").strip()
     if not tok:
         raise ValueError("首次启用固定域名请填写 Cloudflare Tunnel Token")
@@ -591,10 +678,9 @@ def clear_cf_tunnel_settings(
     """删除系统凭据库中的隧道敏感凭据及配置文件，恢复默认免费临时隧道。"""
     store = vault or VaultStore()
     for key_name in (CF_VAULT_TUNNEL_TOKEN_KEY, CF_VAULT_LLM_API_KEY):
-        try:
+        # 清除隧道凭据时条目可能本就不存在或凭据库暂不可用，忽略清理异常确保仍移除本地配置文件
+        with contextlib.suppress(OSError, RuntimeError, ValueError, KeyError, subprocess.SubprocessError):
             store.delete_secret(key_name, colab_py=colab_py)
-        except Exception:
-            pass
     Path(config_path).unlink(missing_ok=True)
 
 
@@ -635,7 +721,7 @@ def create_comfy_handoff_ticket(
     ts = int(now_ts if now_ts is not None else time.time())
     nonce = secrets.token_urlsafe(12)
     clean_next = sanitize_next_path(next_path)
-    msg = f"ticket:{ts}:{nonce}:{clean_next}".encode("utf-8")
+    msg = f"ticket:{ts}:{nonce}:{clean_next}".encode()
     sig = hmac.new(key_str.encode("utf-8"), msg, hashlib.sha256).hexdigest()
     ticket = f"{ts}.{nonce}.{sig}"
     register_ephemeral_secret(ticket)
@@ -652,3 +738,85 @@ def build_comfy_handoff_url(
     clean_next = sanitize_next_path(next_path)
     ticket = create_comfy_handoff_ticket(secret_key, next_path=clean_next)
     return f"{clean_base}/__pet_auth?ticket={ticket}&next={urllib.parse.quote(clean_next, safe='')}"
+
+
+# =========================================================================
+# HTTP 源站归一化、跨源重定向阻断与凭据保护请求入口
+# =========================================================================
+
+_CREDENTIAL_HEADER_NAMES = frozenset({
+    "authorization",
+    "x-api-key",
+    "x-goog-api-key",
+    "cookie",
+    "proxy-authorization",
+})
+
+
+def url_origin_key(base_url: str) -> str:
+    """提取标准化的协议+主机+端口源站标识，用于跨请求同源校验。"""
+    try:
+        parsed = urllib.parse.urlparse(str(base_url or "").strip())
+        scheme = parsed.scheme.lower()
+        host = (parsed.hostname or "").lower()
+        if not scheme or not host:
+            return ""
+        port = parsed.port or (443 if scheme == "https" else 80)
+        return f"{scheme}://{host}:{port}"
+    except Exception:
+        return ""
+
+
+class SameOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """拦截 HTTP 重定向跳转到异源地址，防止标准库沿重定向透传敏感认证头。"""
+
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ):
+        req_origin = url_origin_key(req.full_url)
+        resolved = urllib.parse.urljoin(req.full_url, str(newurl or ""))
+        next_origin = url_origin_key(resolved)
+        if not req_origin or not next_origin or next_origin != req_origin:
+            raise urllib.error.HTTPError(
+                req.full_url,
+                code,
+                f"安全拦截：拒绝跨源重定向至 {next_origin or resolved}",
+                headers,
+                fp,
+            )
+        new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_req is not None and (not req_origin or url_origin_key(new_req.full_url) != req_origin):
+            for hk in list(new_req.headers.keys()):
+                if hk.lower() in _CREDENTIAL_HEADER_NAMES:
+                    new_req.remove_header(hk)
+        return new_req
+
+
+def urlopen_safe(
+    req_or_url: urllib.request.Request | str,
+    *,
+    timeout: float = 10.0,
+    expected_origin: str = "",
+) -> Any:
+    """在校验绑定源站且严格禁止跨源重定向的前提下执行 HTTP 请求。"""
+    req = (
+        req_or_url
+        if isinstance(req_or_url, urllib.request.Request)
+        else urllib.request.Request(str(req_or_url))
+    )
+    req_origin = url_origin_key(req.full_url)
+    exp_raw = str(expected_origin or "").strip()
+    if exp_raw:
+        norm_exp = url_origin_key(exp_raw) or exp_raw
+        if not req_origin or req_origin != norm_exp:
+            raise ValueError(
+                f"安全拦截：请求目标源站 ({req_origin or req.full_url}) 与绑定源站 ({norm_exp}) 不一致"
+            )
+    opener = urllib.request.build_opener(SameOriginRedirectHandler())
+    return opener.open(req, timeout=timeout)

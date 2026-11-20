@@ -8,9 +8,10 @@ import re
 import shutil
 import sys
 import urllib.parse
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 _PKG_DIR = Path(__file__).resolve().parents[1]
 if str(_PKG_DIR) not in sys.path:
@@ -22,11 +23,23 @@ CLI_BRIDGE_SCRIPT = _PKG_DIR / "colab_cli_bridge.py"
 RCLONE_GDRIVE_SECTION_RE = re.compile(r"^\s*\[gdrive_save\]\s*$", re.MULTILINE)
 RCLONE_INI_SECTION_RE = re.compile(r"^\s*\[([^\]]+)\]\s*$", re.MULTILINE)
 
-_APPDATA_DIR = Path(os.environ.get("APPDATA") or (Path.home() / "AppData" / "Roaming"))
 DEFAULT_FALLBACK_COLAB_EXE = Path.home() / ".local" / "bin" / "colab.exe"
-DEFAULT_FALLBACK_COLAB_PY = _APPDATA_DIR / "uv" / "tools" / "google-colab-cli" / "Scripts" / "python.exe"
+DEFAULT_FALLBACK_COLAB_PY = (
+    Path.home()
+    / "AppData"
+    / "Roaming"
+    / "uv"
+    / "tools"
+    / "google-colab-cli"
+    / "Scripts"
+    / "python.exe"
+)
 DEFAULT_FALLBACK_RCLONE_EXE = Path.home() / "scoop" / "shims" / "rclone.exe"
-DEFAULT_FALLBACK_RCLONE_CONF = _APPDATA_DIR / "rclone" / "rclone.conf"
+DEFAULT_FALLBACK_RCLONE_CONF = (
+    (Path.home() / "AppData" / "Roaming" / "rclone" / "rclone.conf")
+    if os.name == "nt"
+    else (Path.home() / ".config" / "rclone" / "rclone.conf")
+)
 
 
 @dataclass
@@ -152,17 +165,19 @@ def has_gdrive_save_section(conf_path: Path | None) -> bool:
         return False
 
 
-def sanitize_account_label(label: str, fallback: str = "Ultra 账号") -> str:
+def sanitize_account_label(label: str, fallback: str = "Colab 账号") -> str:
     cleaned = re.sub(r"[\r\n\t]+", " ", str(label or "")).strip()
     return cleaned[:16] if cleaned else fallback
 
 
-def default_account_label(existing_profiles: list[dict[str, Any]]) -> str:
+def default_account_label(existing_profiles: list[dict[str, Any]], tier: str = "unknown") -> str:
+    prefix_map = {"ultra": "Ultra", "pro_plus": "Pro+", "pro": "Pro", "free": "Free"}
+    prefix = prefix_map.get(str(tier or "").strip().lower(), "Colab")
     used = {str(p.get("label") or "").strip() for p in existing_profiles}
     idx = len(existing_profiles) + 1
-    while f"Ultra {idx}号" in used:
+    while f"{prefix} {idx}号" in used:
         idx += 1
-    return f"Ultra {idx}号"
+    return f"{prefix} {idx}号"
 
 
 def extract_oauth_code(raw_input: str) -> str:
@@ -177,7 +192,90 @@ def extract_oauth_code(raw_input: str) -> str:
     return txt.splitlines()[0].strip()
 
 
+def _split_ini_sections(text: str) -> tuple[list[str], list[tuple[str, list[str]]]]:
+    """按 INI 节头拆分 rclone.conf，完整保留节前注释与各个 [remote] 配置节。"""
+    preamble: list[str] = []
+    sections: list[tuple[str, list[str]]] = []
+    cur_name: str | None = None
+    cur_lines: list[str] = []
+    for line in text.splitlines():
+        m = re.match(r"^\s*\[([^\]]+)\]\s*$", line)
+        if m:
+            if cur_name is not None:
+                sections.append((cur_name, cur_lines))
+            cur_name = m.group(1).strip()
+            cur_lines = [line]
+        elif cur_name is None:
+            preamble.append(line)
+        else:
+            cur_lines.append(line)
+    if cur_name is not None:
+        sections.append((cur_name, cur_lines))
+    return preamble, sections
+
+
+def _merge_gdrive_save_section(existing_text: str, new_gdrive_text: str) -> str:
+    """将新的 [gdrive_save] 节合入既有 rclone.conf 内容，保留其他 [remote] 配置节不变。"""
+    preamble, existing_sections = _split_ini_sections(existing_text)
+    _, new_sections = _split_ini_sections(new_gdrive_text)
+    gdrive_lines = next(
+        (lines for name, lines in new_sections if name == "gdrive_save"),
+        new_gdrive_text.strip().splitlines(),
+    )
+    cleaned_gdrive_lines = [ln for ln in gdrive_lines]
+    while cleaned_gdrive_lines and not cleaned_gdrive_lines[-1].strip():
+        cleaned_gdrive_lines.pop()
+
+    merged_sections: list[list[str]] = []
+    replaced = False
+    for sec_name, sec_lines in existing_sections:
+        lines_copy = list(sec_lines)
+        while lines_copy and not lines_copy[-1].strip():
+            lines_copy.pop()
+        if sec_name == "gdrive_save":
+            if not replaced:
+                merged_sections.append(cleaned_gdrive_lines)
+                replaced = True
+        else:
+            merged_sections.append(lines_copy)
+    if not replaced:
+        merged_sections.append(cleaned_gdrive_lines)
+
+    while preamble and not preamble[-1].strip():
+        preamble.pop()
+    blocks: list[str] = []
+    if preamble:
+        blocks.append("\n".join(preamble))
+    for sec_lines in merged_sections:
+        if sec_lines:
+            blocks.append("\n".join(sec_lines))
+    return "\n\n".join(blocks) + "\n"
+
+
+def _atomic_write_private_conf(dst_conf: Path, content: str) -> None:
+    """通过同目录 .tmp 临时文件与 replace 原子写入 rclone 配置，并尝试收紧权限为 0o600。"""
+    dst_conf.parent.mkdir(parents=True, exist_ok=True)
+    tmp_conf = dst_conf.with_name(f".{dst_conf.name}.{os.getpid()}.tmp")
+    fd = os.open(str(tmp_conf), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fp:
+            fp.write(content)
+        try:
+            os.chmod(str(tmp_conf), 0o600)
+        except OSError:
+            pass
+        tmp_conf.replace(dst_conf)
+        try:
+            os.chmod(str(dst_conf), 0o600)
+        except OSError:
+            pass
+    except BaseException:
+        tmp_conf.unlink(missing_ok=True)
+        raise
+
+
 def validate_and_import_rclone_conf(src_path: str | Path, *, package_dir: Path = _PKG_DIR) -> tuple[bool, Path | None, str]:
+    """校验并安全导入 rclone.conf；合并写入目标配置时自动备份并保留原有其他 remote。"""
     p = Path(str(src_path or "").strip())
     if not p.is_file():
         return False, None, "所选 rclone.conf 文件不存在"
@@ -193,9 +291,25 @@ def validate_and_import_rclone_conf(src_path: str | Path, *, package_dir: Path =
             dst_conf = (Path(appdata) / "rclone" / "rclone.conf") if appdata else (package_dir / "rclone.conf")
             dst_conf.parent.mkdir(parents=True, exist_ok=True)
             rewritten = RCLONE_INI_SECTION_RE.sub("[gdrive_save]", content, count=1)
-            fd = os.open(str(dst_conf), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "w", encoding="utf-8") as fp:
-                fp.write(rewritten)
+            if dst_conf.is_file():
+                bak_conf = dst_conf.with_suffix(".conf.bak")
+                shutil.copy2(dst_conf, bak_conf)
+                try:
+                    os.chmod(str(bak_conf), 0o600)
+                except OSError:
+                    pass
+                try:
+                    same_target = p.resolve() == dst_conf.resolve()
+                except OSError:
+                    same_target = False
+                if same_target:
+                    merged_text = rewritten.rstrip() + "\n"
+                else:
+                    existing_text = dst_conf.read_text(encoding="utf-8", errors="ignore")
+                    merged_text = _merge_gdrive_save_section(existing_text, rewritten)
+            else:
+                merged_text = rewritten.rstrip() + "\n"
+            _atomic_write_private_conf(dst_conf, merged_text)
             return True, dst_conf, ""
         return False, None, "该 rclone.conf 缺少 [gdrive_save] 远端，建议直接点「一键绑定云盘」"
     return True, p, ""

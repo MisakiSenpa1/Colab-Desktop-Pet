@@ -1,0 +1,32 @@
+# Colab-Desktop-Pet Ruff 静态代码质量与复杂度门禁配置
+# 用法（仓库根目录执行）：python -m ruff check --config ruff.toml .
+
+line-length = 120
+target-version = "py311"
+
+[lint]
+# E/F/W: 基础语法与风格 | B: flake8-bugbear 潜在缺陷 | S110: 禁止裸 except-pass
+# UP: pyupgrade 现代 Python 语法 | C901: McCabe 圈复杂度上限检查
+select = ["E", "F", "W", "B", "S110", "UP", "C901"]
+ignore = ["E501"]
+
+[lint.mccabe]
+max-complexity = 25
+
+[lint.per-file-ignores]
+# 向后兼容重导出门面模块（使用 **/ 前缀兼容全路径检查）
+"**/colab_core/runtime.py" = ["F401", "E402"]
+"**/colab_core/agent_tools.py" = ["F401", "E402"]
+"**/colab_core/agent/__init__.py" = ["F401", "E402"]
+"**/colab_pet/pet_app.py" = ["F401", "E402"]
+"**/colab_pet/colab_backend.py" = ["F401", "E402"]
+
+# 带 sys.path.insert 或标准流/环境初始化引导的顶层脚本与包内模块
+"**/启动Colab桌宠.pyw" = ["E402"]
+"**/colab_ctl.py" = ["E402"]
+"**/build_windows_package.py" = ["E402"]
+"**/colab_core/*.py" = ["E402"]
+"**/colab_pet/*.py" = ["E402"]
+
+# 自动化测试套件：允许测试夹具路径引导、宽容异常清理与长集成测试编排
+"**/tests/*.py" = ["S110", "C901", "E402", "B011", "UP"]

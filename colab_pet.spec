@@ -7,21 +7,31 @@
     pyinstaller --noconfirm --clean colab_pet.spec
 """
 
+import sys
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
-SPEC_DIR = Path(SPECPATH).resolve()
+SPEC_DIR = Path(SPECPATH).resolve()  # noqa: F821
+if str(SPEC_DIR) not in sys.path:
+    sys.path.insert(0, str(SPEC_DIR))
 
 datas = [
     (str(SPEC_DIR / "colab_pet" / "ui.html"), "colab_pet"),
+    (str(SPEC_DIR / "colab_pet" / "studio.html"), "colab_pet"),
+    (str(SPEC_DIR / "colab_pet" / "studio.css"), "colab_pet"),
+    (str(SPEC_DIR / "colab_pet" / "studio.js"), "colab_pet"),
     (str(SPEC_DIR / "colab_pet" / "ASSETS_NOTICE.txt"), "colab_pet"),
     (str(SPEC_DIR / "colab_pet" / "assets"), "colab_pet/assets"),
     (str(SPEC_DIR / "stack_manifest.json"), "."),
     (str(SPEC_DIR / "requirements.txt"), "."),
     (str(SPEC_DIR / "requirements-lock.txt"), "."),
+    (str(SPEC_DIR / "colab_ctl.py"), "."),
     (str(SPEC_DIR / "colab_cli_bridge.py"), "."),
     (str(SPEC_DIR / "colab_remote_common.py"), "."),
+    (str(SPEC_DIR / "colab_security.py"), "."),
     (str(SPEC_DIR / "colab_pet_bridge_node.py"), "."),
+    (str(SPEC_DIR / "colab_pet_direct_canvas.js"), "."),
+    (str(SPEC_DIR / "colab_sse_gateway.py"), "."),
     (str(SPEC_DIR / "colab_bootstrap_anima.py"), "."),
     (str(SPEC_DIR / "colab_bootstrap_minimax_h3.py"), "."),
     (str(SPEC_DIR / "colab_bootstrap_drama3.py"), "."),
@@ -45,8 +55,21 @@ hiddenimports = [
     "colab_ctl",
     "colab_security",
     "colab_backend",
+    "state_store",
+    "secret_store",
+    "context",
+    "win32_window",
+    "asset_server",
+    "bridge_api",
+    "backend_monitor",
+    "backend_deploy",
+    "backend_tunnel",
+    "backend_comfy",
+    "backend_accounts",
+    "backend_cluster",
+    "backend_studio",
+    "backend_agent",
     "requests",
-    "PIL",
     "websocket",
 ]
 for pkg in ("colab_core", "webview", "clr_loader", "pythonnet"):
@@ -57,7 +80,7 @@ for pkg in ("colab_core", "webview", "clr_loader", "pythonnet"):
 
 icon_file = SPEC_DIR / "build" / "pet.ico"
 
-a = Analysis(
+a = Analysis(  # noqa: F821
     [str(SPEC_DIR / "colab_pet" / "pet_app.py")],
     pathex=[str(SPEC_DIR), str(SPEC_DIR / "colab_pet")],
     binaries=[],
@@ -66,12 +89,64 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["pytest", "_pytest", "tkinter", "aiohttp"],
+    excludes=[
+        "PIL",
+        "pytest",
+        "_pytest",
+        "tkinter",
+        "aiohttp",
+        "pywin32",
+        "win32api",
+        "win32con",
+        "win32com",
+        "pythoncom",
+        "pywintypes",
+        "cryptography",
+        "cffi",
+        "charset_normalizer",
+        "unittest",
+        "pydoc",
+        "doctest",
+        "sqlite3",
+        "multiprocessing",
+        "webview.platforms.android",
+        "webview.platforms.cocoa",
+        "webview.platforms.gtk",
+        "webview.platforms.qt",
+        "webview.platforms.cef",
+        "webview.platforms.mshtml",
+    ],
     noarchive=False,
 )
-pyz = PYZ(a.pure)
 
-exe = EXE(
+# 剔除 Android JAR、ARM64/x86 非目标架构二进制与 .pdb 调试符号（保留 colab_pet/assets 与 workflows）
+_PRUNE_MARKERS = (
+    "pywebview-android.jar",
+    "win-arm64",
+    "win-x86",
+    ".x86.dll",
+    "/x86/",
+    "\\x86\\",
+)
+
+
+def _should_prune_toc_entry(entry: tuple[str, str, str]) -> bool:
+    """判定 TOC 条目是否属于需要裁剪的跨平台、非 x64 架构或调试符号文件。"""
+    for raw_path in entry[:2]:
+        low = str(raw_path or "").lower()
+        norm = low.replace("\\", "/")
+        if norm.endswith(".pdb"):
+            return True
+        if any(marker in low or marker in norm for marker in _PRUNE_MARKERS):
+            return True
+    return False
+
+
+a.binaries = [item for item in a.binaries if not _should_prune_toc_entry(item)]
+a.datas = [item for item in a.datas if not _should_prune_toc_entry(item)]
+pyz = PYZ(a.pure)  # noqa: F821
+
+exe = EXE(  # noqa: F821
     pyz,
     a.scripts,
     [],
@@ -85,7 +160,7 @@ exe = EXE(
     icon=str(icon_file) if icon_file.is_file() else None,
 )
 
-coll = COLLECT(
+coll = COLLECT(  # noqa: F821
     exe,
     a.binaries,
     a.datas,

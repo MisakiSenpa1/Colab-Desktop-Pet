@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import platform
@@ -9,13 +10,24 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import types
 import zipfile
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-_PKG_DIR = Path(__file__).resolve().parents[1]
+
+def _resolve_pkg_dir() -> Path:
+    """解析项目根目录（兼容 PyInstaller 冻结态 `_MEIPASS` 布局与单测仅 mock `sys.frozen` 场景）。"""
+    meipass_raw = getattr(sys, "_MEIPASS", None)
+    if getattr(sys, "frozen", False) and meipass_raw:
+        return Path(meipass_raw).resolve()
+    return Path(__file__).resolve().parents[1]
+
+
+_PKG_DIR = _resolve_pkg_dir()
 if str(_PKG_DIR) not in sys.path:
     sys.path.insert(0, str(_PKG_DIR))
 
@@ -35,8 +47,9 @@ from colab_core.runtime import (  # noqa: E402
     normalize_profiles,
     profile_bootstrap_spec,
     select_default_gpu,
+    suppress_logged,
 )
-from colab_security import VaultStore, extract_valid_https_url, redact_secrets  # noqa: E402
+from colab_security import VaultStore, extract_valid_https_url, is_valid_cf_tunnel_token, redact_secrets  # noqa: E402
 
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 MANIFEST_PATH = _PKG_DIR / "stack_manifest.json"
@@ -56,8 +69,38 @@ def load_stack_manifest(manifest_path: Path | None = None) -> dict[str, Any]:
     return data
 
 
+def _is_positive_number(val: Any) -> bool:
+    """判断配置值是否为严格大于 0 的非布尔数值。"""
+    return isinstance(val, (int, float)) and not isinstance(val, bool) and float(val) > 0.0
+
+
+def _verify_manifest_gpu_specs(manifest: dict[str, Any], errors: list[str]) -> None:
+    """校验清单中可选 `gpu_specs` 与 `gpu_order` 的结构及正数费率合法性。"""
+    if "gpu_specs" not in manifest:
+        return
+    gpu_specs = manifest.get("gpu_specs")
+    if not isinstance(gpu_specs, dict) or not gpu_specs:
+        errors.append("stack_manifest.json 的 gpu_specs 必须是非空字典")
+        return
+    for gpu_name, spec in gpu_specs.items():
+        if not isinstance(spec, dict):
+            errors.append(f"GPU 规格 {gpu_name} 定义不是有效字典")
+            continue
+        for rate_key in ("default_rate_std", "default_rate_hm"):
+            if not _is_positive_number(spec.get(rate_key)):
+                errors.append(f"GPU 规格 {gpu_name} 的 {rate_key} 必须为正数")
+    if "gpu_order" in manifest:
+        gpu_order = manifest.get("gpu_order")
+        if not isinstance(gpu_order, list) or not gpu_order:
+            errors.append("stack_manifest.json 的 gpu_order 必须是非空列表")
+        else:
+            for g in gpu_order:
+                if str(g) not in gpu_specs:
+                    errors.append(f"gpu_order 引用了未定义的 GPU 规格: {g}")
+
+
 def verify_manifest_and_assets(pkg_dir: Path | None = None) -> dict[str, Any]:
-    """校验清单中声明的依赖锁文件、自举/冒烟脚本、共享远端与桥接组件完整性。"""
+    """校验清单中声明的依赖锁文件、自举/冒烟脚本、共享远端与桥接组件及可选 GPU 费率完整性。"""
     root = Path(pkg_dir or _PKG_DIR)
     manifest = load_stack_manifest(root / "stack_manifest.json")
     host = manifest.get("host_baseline") or {}
@@ -68,7 +111,14 @@ def verify_manifest_and_assets(pkg_dir: Path | None = None) -> dict[str, Any]:
         if not rel or not (root / rel).is_file():
             errors.append(f"缺少依赖描述文件: {rel or req_key}")
 
-    for core_helper in ("colab_pet_bridge_node.py", "colab_remote_common.py", "colab_cli_bridge.py"):
+    for core_helper in (
+        "colab_pet_bridge_node.py",
+        "colab_remote_common.py",
+        "colab_cli_bridge.py",
+        "colab_sse_gateway.py",
+        "colab_pet_direct_canvas.js",
+        "colab_security.py",
+    ):
         if not (root / core_helper).is_file():
             errors.append(f"缺少核心组件文件: {core_helper}")
 
@@ -81,6 +131,8 @@ def verify_manifest_and_assets(pkg_dir: Path | None = None) -> dict[str, Any]:
             sname = str(spec.get(script_key) or "").strip()
             if not sname or not (root / sname).is_file():
                 errors.append(f"Profile {prof_name} 缺少脚本 {sname or script_key}")
+
+    _verify_manifest_gpu_specs(manifest, errors)
 
     return {
         "ok": len(errors) == 0,
@@ -199,46 +251,84 @@ def _default_sync_run(cmd: list[str], timeout: int = 12) -> subprocess.Completed
     )
 
 
-def run_preflight_checks(
+def _has_desktop_module(mod_name: str) -> bool:
+    """探测宿主桌面运行依赖模块是否可用（兼容 pythonnet 导入后 `clr.__spec__ is None` 的特性）。"""
+    try:
+        return importlib.util.find_spec(mod_name) is not None
+    except ValueError:
+        # pythonnet 导入 `clr` 后会以无 `__spec__` 的动态模块替换 `sys.modules["clr"]`
+        return isinstance(sys.modules.get(mod_name), types.ModuleType)
+    except (ImportError, AttributeError):
+        return False
+
+
+SUPPORTED_EDITIONS = ("public", "personal")
+
+
+def resolve_runtime_edition(
+    edition: str | None = None,
     *,
-    mode: str = "fast",
-    profiles: list[str] | str | None = None,
-    gpu: str | None = None,
-    tool_paths: ToolPaths | None = None,
-    state_path: Path | None = None,
-    download_dir: Path | None = None,
-    cf_config_path: Path | None = None,
-    pkg_dir: Path = _PKG_DIR,
-    gdrive_free_gb: float | None = None,
-    require_local_rclone: bool = True,
-    run_fn: Callable[..., Any] | None = None,
-    disk_usage_fn: Callable[[Any], Any] | None = None,
-) -> PreflightReport:
-    eff_mode = "deep" if str(mode or "fast").strip().lower() == "deep" else "fast"
-    paths = tool_paths or discover_tool_paths(state_path=state_path)
-    norm_profs = normalize_profiles(profiles) if profiles is not None else ["anima"]
-    eff_gpu = str(gpu or select_default_gpu(norm_profs)).strip().upper()
-    runner = run_fn or _default_sync_run
-    du_fn = disk_usage_fn or shutil.disk_usage
+    public_mode: bool | None = None,
+    default_edition: str = "personal",
+) -> str:
+    """解析当前运行版本模式（`public` 公开基础版 vs `personal` 个人增强版）。
 
+    优先级：显式 `public_mode` > 显式 `edition` > 环境变量 `COLAB_PET_EDITION` > `default_edition`。
+    """
+    if public_mode is not None:
+        return "public" if bool(public_mode) else "personal"
+    raw = str(edition if edition is not None else (os.environ.get("COLAB_PET_EDITION") or "")).strip().lower()
+    if raw in ("public", "base", "openbox", "community"):
+        return "public"
+    if raw in ("personal", "enhanced", "pro", "private"):
+        return "personal"
+    return "public" if str(default_edition or "").strip().lower() == "public" else "personal"
+
+
+def _probe_cli_version(
+    runner: Callable[..., Any],
+    cmd: list[str],
+    *,
+    take_last_line: bool,
+    throttled_key: str,
+) -> str:
+    """在深度自检中安全探测本地 CLI 工具版本号，失败时节流记日志并返回空串。"""
+    with suppress_logged("preflight", throttled_key=throttled_key, interval_sec=60.0):
+        proc = runner(cmd, timeout=10)
+        if getattr(proc, "returncode", 1) == 0:
+            lines = (getattr(proc, "stdout", "") or "").strip().splitlines()
+            if lines:
+                return (lines[-1] if take_last_line else lines[0]).strip()
+    return ""
+
+
+def _check_preflight_tools(
+    paths: ToolPaths,
+    eff_mode: str,
+    strict_rclone: bool,
+    norm_profs: list[str],
+    pkg_dir: Path,
+    runner: Callable[..., Any],
+    versions: dict[str, Any],
+) -> list[CheckItem]:
+    """检查本地 CLI 工具链（colab.exe / colab_py / rclone）与云端自举脚本完整性。"""
     items: list[CheckItem] = []
-    versions: dict[str, Any] = {"python": sys.version.split()[0]}
-
-    # 1. tools
     if paths.colab_exe and paths.colab_exe.is_file():
         items.append(CheckItem("tools", "colab.exe", "ok", "Colab CLI 已就绪", str(paths.colab_exe)))
     else:
         items.append(CheckItem("tools", "colab.exe", "fail", "未找到 colab.exe", str(paths.colab_exe or ""), "运行 uv tool install google-colab-cli 或在第 5 页指定路径"))
 
     if paths.colab_py and paths.colab_py.is_file():
-        colab_ver = ""
-        if eff_mode == "deep":
-            try:
-                vp = runner([str(paths.colab_py), "-c", "import importlib.metadata as m; print(m.version('google-colab-cli'))"], timeout=10)
-                if getattr(vp, "returncode", 1) == 0:
-                    colab_ver = (getattr(vp, "stdout", "") or "").strip().splitlines()[-1]
-            except Exception:
-                pass
+        colab_ver = (
+            _probe_cli_version(
+                runner,
+                [str(paths.colab_py), "-c", "import importlib.metadata as m; print(m.version('google-colab-cli'))"],
+                take_last_line=True,
+                throttled_key="probe_colab_ver",
+            )
+            if eff_mode == "deep"
+            else ""
+        )
         if colab_ver:
             versions["google-colab-cli"] = colab_ver
         items.append(CheckItem("tools", "colab-cli Python", "ok", f"google-colab-cli 环境已就绪{f' (v{colab_ver})' if colab_ver else ''}", str(paths.colab_py)))
@@ -246,66 +336,133 @@ def run_preflight_checks(
         items.append(CheckItem("tools", "colab-cli Python", "fail", "未找到 google-colab-cli Python 运行环境", str(paths.colab_py or ""), "运行 uv tool install google-colab-cli 安装托管工具"))
 
     if paths.rclone_exe and paths.rclone_exe.is_file():
-        rc_ver = ""
-        if eff_mode == "deep":
-            try:
-                rp = runner([str(paths.rclone_exe), "version"], timeout=10)
-                if getattr(rp, "returncode", 1) == 0:
-                    rc_ver = ((getattr(rp, "stdout", "") or "").splitlines() or [""])[0].strip()
-            except Exception:
-                pass
+        rc_ver = (
+            _probe_cli_version(
+                runner,
+                [str(paths.rclone_exe), "version"],
+                take_last_line=False,
+                throttled_key="probe_rclone_ver",
+            )
+            if eff_mode == "deep"
+            else ""
+        )
         if rc_ver:
             versions["rclone"] = rc_ver
         items.append(CheckItem("tools", "rclone", "ok", f"rclone 已就绪{f' ({rc_ver})' if rc_ver else ''}", str(paths.rclone_exe)))
     else:
-        items.append(CheckItem("tools", "rclone", "fail" if require_local_rclone else "warn", "未找到 rclone.exe", str(paths.rclone_exe or ""), "运行 winget install Rclone.Rclone 或在第 5 页指定路径"))
+        items.append(CheckItem("tools", "rclone", "fail" if strict_rclone else "warn", "未找到 rclone.exe", str(paths.rclone_exe or ""), "运行 winget install Rclone.Rclone 或在第 5 页指定路径"))
 
-    missing_boots = [profile_bootstrap_spec(p, pkg_dir=pkg_dir)[0].name for p in norm_profs if not profile_bootstrap_spec(p, pkg_dir=pkg_dir)[0].is_file()]
+    missing_boots = [
+        profile_bootstrap_spec(p, pkg_dir=pkg_dir)[0].name
+        for p in norm_profs
+        if not profile_bootstrap_spec(p, pkg_dir=pkg_dir)[0].is_file()
+    ]
     if missing_boots:
-        items.append(CheckItem("tools", "云端自举脚本", "fail", f"缺少部署脚本: {', '.join(missing_boots)}", str(pkg_dir), "请保持工作目录下所有 colab_bootstrap_*.py 完整"))
+        items.append(CheckItem("tools", "云端自举脚本", "fail", f"缺少部署脚本: {', '.join(missing_boots)}", str(pkg_dir), "请保持项目根目录下所有 colab_bootstrap_*.py 完整"))
     else:
         items.append(CheckItem("tools", "云端自举脚本", "ok", f"已就绪 ({', '.join(norm_profs)})"))
+    return items
 
-    if eff_mode == "deep":
-        if os.name == "nt":
-            wv2 = detect_webview2_version()
-            if wv2:
-                versions["webview2"] = wv2
-                items.append(CheckItem("tools", "Edge WebView2", "ok", f"WebView2 v{wv2} 已安装"))
-            else:
-                items.append(CheckItem("tools", "Edge WebView2", "warn", "未在注册表检测到 Edge WebView2 Runtime", "", "若桌宠窗口无法打开请安装 Microsoft Edge WebView2 Evergreen Runtime"))
-        try:
-            mres = verify_manifest_and_assets(pkg_dir)
-            if mres["ok"]:
-                items.append(CheckItem("tools", "stack_manifest", "ok", f"版本清单与桥接源码一致性校验通过 (默认路线={mres['default_profile']})"))
-            else:
-                items.append(CheckItem("tools", "stack_manifest", "warn", "组件一致性存在告警", "; ".join(mres["errors"][:3])))
-        except Exception as exc:
-            items.append(CheckItem("tools", "stack_manifest", "warn", f"版本清单校验异常: {exc}"))
 
-    # 2. auth
-    if has_gdrive_save_section(paths.rclone_conf):
-        items.append(CheckItem("auth", "Google 云盘配置", "ok", "已配置 [gdrive_save]", str(paths.rclone_conf)))
+def _check_preflight_deep_desktop(pkg_dir: Path, versions: dict[str, Any]) -> list[CheckItem]:
+    """在深度自检模式下核验宿主桌面依赖、Edge WebView2 与技术栈清单一致性。"""
+    items: list[CheckItem] = []
+    if getattr(sys, "frozen", False):
+        items.append(CheckItem("tools", "桌面运行依赖", "ok", "已内置独立运行时"))
     else:
+        missing_mods = [m for m in ("requests", "websocket", "webview", "clr") if not _has_desktop_module(m)]
+        if missing_mods:
+            joined = ", ".join(missing_mods)
+            items.append(CheckItem("tools", "桌面运行依赖", "fail", f"缺少宿主桌面运行依赖: {joined}", f"缺失模块: {joined}", "运行 python -m pip install -r requirements-lock.txt"))
+        else:
+            items.append(CheckItem("tools", "桌面运行依赖", "ok", "Python 桌面运行依赖已就绪"))
+
+    if os.name == "nt":
+        wv2 = detect_webview2_version()
+        if wv2:
+            versions["webview2"] = wv2
+            items.append(CheckItem("tools", "Edge WebView2", "ok", f"WebView2 v{wv2} 已安装"))
+        else:
+            items.append(CheckItem("tools", "Edge WebView2", "warn", "未在注册表检测到 Edge WebView2 Runtime", "", "若桌宠窗口无法打开请安装 Microsoft Edge WebView2 Evergreen Runtime"))
+
+    try:
+        mres = verify_manifest_and_assets(pkg_dir)
+        if mres["ok"]:
+            items.append(CheckItem("tools", "stack_manifest", "ok", f"版本清单与桥接源码一致性校验通过 (默认路线={mres['default_profile']})"))
+        else:
+            items.append(CheckItem("tools", "stack_manifest", "warn", "组件一致性存在告警", "; ".join(mres["errors"][:3])))
+    except Exception as exc:
+        items.append(CheckItem("tools", "stack_manifest", "warn", f"版本清单校验异常: {exc}"))
+    return items
+
+
+def _check_preflight_auth(
+    paths: ToolPaths,
+    eff_mode: str,
+    strict_rclone: bool,
+    gdrive_free_gb: float | None,
+    runner: Callable[..., Any],
+) -> tuple[list[CheckItem], float | None]:
+    """检查 rclone 云盘授权、深度 Colab OAuth 令牌状态并按需探测云盘余量。"""
+    items: list[CheckItem] = []
+    has_gd = has_gdrive_save_section(paths.rclone_conf)
+    if has_gd:
+        items.append(CheckItem("auth", "Google 云盘配置", "ok", "已配置 [gdrive_save]", str(paths.rclone_conf)))
+    elif strict_rclone:
         items.append(CheckItem("auth", "Google 云盘配置", "fail", "未配置 rclone [gdrive_save] 云盘", str(paths.rclone_conf or ""), "在第 5 页「云盘与环境」点击一键绑定或导入 rclone.conf"))
+    else:
+        items.append(
+            CheckItem(
+                "auth",
+                "Google 云盘配置",
+                "warn",
+                "未配置 rclone [gdrive_save] 云盘（公开基础版可跳过，仅影响可选云盘持久化与私训资产同步）",
+                str(paths.rclone_conf or ""),
+                "如需云盘持久化归档成图或拉取私训 LoRA，可在第 5 页「云盘与环境」可选绑定 rclone.conf",
+            )
+        )
 
     detected_gdrive_free = gdrive_free_gb
     if eff_mode == "deep":
         if paths.colab_py and paths.colab_py.is_file():
             try:
-                ap = runner([str(paths.colab_py), "-c", "import json; from colab_cli import auth as a; print(json.dumps({'has_token': bool(a._get_token_from_keyring())}))"], timeout=12)
+                ap = runner(
+                    [str(paths.colab_py), "-c", "import json; from colab_cli import auth as a; print(json.dumps({'has_token': bool(a._get_token_from_keyring())}))"],
+                    timeout=12,
+                )
                 if getattr(ap, "returncode", 1) == 0:
                     has_tok = bool(json.loads((getattr(ap, "stdout", "") or "").strip().splitlines()[-1]).get("has_token"))
-                    items.append(CheckItem("auth", "Colab OAuth", "ok" if has_tok else "warn", "系统凭据库已存在有效 Colab 登录令牌" if has_tok else "尚未检测到本地 Colab 登录令牌", "", "" if has_tok else "可在桌宠第 5 页「多账号」新增绑定或运行 colab whoami"))
+                    items.append(
+                        CheckItem(
+                            "auth",
+                            "Colab OAuth",
+                            "ok" if has_tok else "warn",
+                            "系统凭据库已存在有效 Colab 登录令牌" if has_tok else "尚未检测到本地 Colab 登录令牌",
+                            "",
+                            "" if has_tok else "可在桌宠第 5 页「多账号」新增绑定或运行 colab whoami",
+                        )
+                    )
             except Exception as exc:
                 items.append(CheckItem("auth", "Colab OAuth", "warn", f"探测 Colab 凭据异常: {redact_secrets(str(exc))}"))
-        if detected_gdrive_free is None and paths.rclone_exe and paths.rclone_exe.is_file() and has_gdrive_save_section(paths.rclone_conf):
+        if detected_gdrive_free is None and paths.rclone_exe and paths.rclone_exe.is_file() and has_gd:
             detected_gdrive_free, _ = query_gdrive_quota(paths.rclone_exe, paths.rclone_conf, run_fn=runner)
+    return items, detected_gdrive_free
 
-    # 3. disk
+
+def _check_preflight_disk(
+    download_dir: Path | None,
+    pkg_dir: Path,
+    detected_gdrive_free: float | None,
+    du_fn: Callable[[Any], Any],
+) -> list[CheckItem]:
+    """检查下载目录磁盘、系统临时盘以及可选 Google 云盘剩余空间。"""
+    items: list[CheckItem] = []
     dl_anchor = _existing_anchor_dir(download_dir or (pkg_dir.parent / "_downloads"))
     tmp_anchor = _existing_anchor_dir(Path(tempfile.gettempdir()))
-    disk_targets = [("下载目录磁盘", dl_anchor)] + ([("系统临时盘", tmp_anchor)] if tmp_anchor.drive.upper() != dl_anchor.drive.upper() else [])
+    disk_targets = [("下载目录磁盘", dl_anchor)]
+    if tmp_anchor.drive.upper() != dl_anchor.drive.upper():
+        disk_targets.append(("系统临时盘", tmp_anchor))
+
     for disk_label, anchor in disk_targets:
         try:
             free_b = int(du_fn(str(anchor)).free)
@@ -324,61 +481,130 @@ def run_preflight_checks(
             items.append(CheckItem("disk", "Google 云盘余量", "warn", f"Google 云盘剩余仅 {float(detected_gdrive_free):.1f} GiB (< 2 GiB)", fix_hint="建议清理旧成图防止自动归档失败"))
         else:
             items.append(CheckItem("disk", "Google 云盘余量", "ok", f"剩余 {float(detected_gdrive_free):.1f} GiB"))
+    return items
 
-    # 4. config
+
+def _check_preflight_cf_tunnel(cf_cfg_p: Path, colab_py: Path | None) -> CheckItem:
+    """校验 Cloudflare 固定隧道配置文件及系统凭据库中的令牌/密钥引用。"""
+    if not cf_cfg_p.is_file():
+        return CheckItem("config", "公网隧道配置", "ok", "使用免费 trycloudflare 临时隧道")
+    try:
+        raw_cf = json.loads(cf_cfg_p.read_text(encoding="utf-8"))
+        if not isinstance(raw_cf, dict):
+            raise ValueError("固定隧道配置文件内容必须是 JSON 对象")
+        cf_resolved = load_cf_config(cf_cfg_p, include_secrets=True, colab_py=colab_py)
+        if not any(raw_cf.get(k) for k in ("tunnel_token_ref", "tunnel_token", "comfy_url", "llm_url")):
+            return CheckItem("config", "公网隧道配置", "ok", "使用默认临时隧道")
+        for url_k in ("comfy_url", "llm_url"):
+            u_val = str(cf_resolved.get(url_k) or "").strip()
+            if u_val:
+                extract_valid_https_url(u_val)
+        if not cf_resolved.get("has_token"):
+            return CheckItem("config", "公网隧道配置", "fail", "固定隧道已启用但系统凭据库中缺少 Cloudflare Tunnel Token", str(cf_cfg_p), "请在第 5 页「配置域名 ›」重新保存令牌，或切回免费临时隧道")
+        if not is_valid_cf_tunnel_token(cf_resolved.get("tunnel_token")):
+            return CheckItem("config", "公网隧道配置", "fail", "系统凭据库中的 Cloudflare Tunnel Token 格式无效（非合法连接器令牌）", str(cf_cfg_p), "请前往 Cloudflare Zero Trust 复制最新 Tunnel Token 重新保存，或切回免费临时隧道")
+        if raw_cf.get("llm_api_key_ref") and not cf_resolved.get("has_fixed_llm_key"):
+            return CheckItem("config", "公网隧道配置", "fail", "固定 LLM API Key 引用存在但系统凭据库读取为空", str(cf_cfg_p), "请重新输入固定 LLM Key 或留空改回每次随机生成")
+        return CheckItem("config", "公网隧道配置", "ok", "已启用 Cloudflare 固定域名（系统凭据库引用校验通过）")
+    except Exception as exc:
+        return CheckItem("config", "公网隧道配置", "fail", f"隧道配置或凭据校验失败: {redact_secrets(str(exc))}", str(cf_cfg_p), "请检查域名格式与系统凭据库权限，或先切回免费临时隧道")
+
+
+def _check_preflight_config(
+    state_path: Path | None,
+    cf_config_path: Path | None,
+    pkg_dir: Path,
+    paths: ToolPaths,
+) -> list[CheckItem]:
+    """检查桌宠状态 JSON 可读性与公网隧道配置完整性。"""
+    items: list[CheckItem] = []
     if state_path is not None and Path(state_path).is_file():
         try:
             st_obj = json.loads(Path(state_path).read_text(encoding="utf-8"))
-            items.append(CheckItem("config", "桌宠状态文件", "ok" if isinstance(st_obj, dict) else "warn", "状态 JSON 校验通过" if isinstance(st_obj, dict) else "状态文件根节点非字典，启动时将自动重置"))
+            is_dict = isinstance(st_obj, dict)
+            items.append(CheckItem("config", "桌宠状态文件", "ok" if is_dict else "warn", "状态 JSON 校验通过" if is_dict else "状态文件根节点非字典，启动时将自动重置"))
         except Exception as exc:
             items.append(CheckItem("config", "桌宠状态文件", "warn", f"状态文件解析失败（将自动重建）: {exc}"))
 
-    cf_cfg_p = Path(cf_config_path if cf_config_path is not None else (os.environ.get("COLAB_PET_CF_CONFIG_PATH") or str(pkg_dir / ".cf_tunnel_secret.json")))
-    if not cf_cfg_p.is_file():
-        items.append(CheckItem("config", "公网隧道配置", "ok", "使用免费 trycloudflare 临时隧道"))
-    else:
-        try:
-            raw_cf = json.loads(cf_cfg_p.read_text(encoding="utf-8"))
-            if not isinstance(raw_cf, dict):
-                raise ValueError("固定隧道配置文件内容必须是 JSON 对象")
-            cf_resolved = load_cf_config(cf_cfg_p, include_secrets=True, colab_py=paths.colab_py)
-            if any(raw_cf.get(k) for k in ("tunnel_token_ref", "tunnel_token", "comfy_url", "llm_url")):
-                for url_k in ("comfy_url", "llm_url"):
-                    u_val = str(cf_resolved.get(url_k) or "").strip()
-                    if u_val:
-                        extract_valid_https_url(u_val)
-                if not cf_resolved.get("has_token"):
-                    items.append(CheckItem("config", "公网隧道配置", "fail", "固定隧道已启用但系统凭据库中缺少 Cloudflare Tunnel Token", str(cf_cfg_p), "请在第 5 页「配置域名 ›」重新保存令牌，或切回免费临时隧道"))
-                elif raw_cf.get("llm_api_key_ref") and not cf_resolved.get("has_fixed_llm_key"):
-                    items.append(CheckItem("config", "公网隧道配置", "fail", "固定 LLM API Key 引用存在但系统凭据库读取为空", str(cf_cfg_p), "请重新输入固定 LLM Key 或留空改回每次随机生成"))
-                else:
-                    items.append(CheckItem("config", "公网隧道配置", "ok", "已启用 Cloudflare 固定域名（系统凭据库引用校验通过）"))
-            else:
-                items.append(CheckItem("config", "公网隧道配置", "ok", "使用默认临时隧道"))
-        except Exception as exc:
-            items.append(CheckItem("config", "公网隧道配置", "fail", f"隧道配置或凭据校验失败: {redact_secrets(str(exc))}", str(cf_cfg_p), "请检查域名格式与系统凭据库权限，或先切回免费临时隧道"))
+    cf_cfg_p = Path(
+        cf_config_path
+        if cf_config_path is not None
+        else (os.environ.get("COLAB_PET_CF_CONFIG_PATH") or str(pkg_dir / ".cf_tunnel_secret.json"))
+    )
+    items.append(_check_preflight_cf_tunnel(cf_cfg_p, paths.colab_py))
+    return items
 
-    # 5. profile vs GPU 显存红线防呆（含 L4 24GB 阻断双栖）
+
+def _check_preflight_profile_gpu(norm_profs: list[str], eff_gpu: str) -> CheckItem:
+    """检查所选工作流组合与目标 GPU 显存/磁盘承载上限是否匹配（含 L4 24GB 双栖阻断）。"""
     has_comfy = any(p in COMFY_PROFILES for p in norm_profs)
+    prof_label = "+".join(norm_profs)
     if "qwen_llm" in norm_profs and eff_gpu in ("T4", "L4"):
-        items.append(CheckItem("profile", "工作流与显卡匹配", "fail", f"Qwen3.8-180B 无法在 {eff_gpu} 显卡上运行（最低需 A100/G4/H100）", f"profiles={','.join(norm_profs)}, gpu={eff_gpu}", "请改选 G4 / A100 显卡，或将对话模型切换为 Qwen3.8-27B"))
-    elif ("qwen_27b" in norm_profs and has_comfy) and eff_gpu in ("T4", "L4"):
-        items.append(CheckItem("profile", "工作流与显卡匹配", "fail", f"ComfyUI + Qwen27B 双栖同驻超出 {eff_gpu} 显存承受上限", f"profiles={','.join(norm_profs)}, gpu={eff_gpu}", "双栖请选用 G4 (96GB) / A100 / H100"))
-    elif ("minimax" in norm_profs or "drama3" in norm_profs) and eff_gpu == "T4":
-        items.append(CheckItem("profile", "工作流与显卡匹配", "fail", f"{'+'.join(norm_profs)} 对显存与磁盘需求超出 T4 (16GB) 承载范围", f"gpu={eff_gpu}", "请改选 G4 (96GB) 或 A100 显卡"))
-    elif "minimax" in norm_profs and eff_gpu == "L4":
-        items.append(CheckItem("profile", "工作流与显卡匹配", "warn", f"当前在 L4 (24GB) 上运行 {'+'.join(norm_profs)} 显存较为吃紧", fix_hint="推荐在 G4 (96GB) 上运行 MiniMax-H3"))
-    else:
-        items.append(CheckItem("profile", "工作流与显卡匹配", "ok", f"{'+'.join(norm_profs)} 与 {eff_gpu} 硬件规格兼容"))
+        return CheckItem("profile", "工作流与显卡匹配", "fail", f"Qwen3.8-180B 无法在 {eff_gpu} 显卡上运行（最低需 A100/G4/H100）", f"profiles={','.join(norm_profs)}, gpu={eff_gpu}", "请改选 G4 / A100 显卡，或将对话模型切换为 Qwen3.8-27B")
+    if ("qwen_27b" in norm_profs and has_comfy) and eff_gpu in ("T4", "L4"):
+        return CheckItem("profile", "工作流与显卡匹配", "fail", f"ComfyUI + Qwen27B 双栖同驻超出 {eff_gpu} 显存承受上限", f"profiles={','.join(norm_profs)}, gpu={eff_gpu}", "双栖请选用 G4 (96GB) / A100 / H100")
+    if ("minimax" in norm_profs or "drama3" in norm_profs) and eff_gpu == "T4":
+        return CheckItem("profile", "工作流与显卡匹配", "fail", f"{prof_label} 对显存与磁盘需求超出 T4 (16GB) 承载范围", f"gpu={eff_gpu}", "请改选 G4 (96GB) 或 A100 显卡")
+    if "minimax" in norm_profs and eff_gpu == "L4":
+        return CheckItem("profile", "工作流与显卡匹配", "warn", f"当前在 L4 (24GB) 上运行 {prof_label} 显存较为吃紧", fix_hint="推荐在 G4 (96GB) 上运行 MiniMax-H3")
+    return CheckItem("profile", "工作流与显卡匹配", "ok", f"{prof_label} 与 {eff_gpu} 硬件规格兼容")
 
-    if eff_mode == "deep" and os.environ.get("COLAB_PET_MOCK_VAULT_PATH"):
-        try:
-            vs = VaultStore()
-            vs.set_secret("__preflight_probe__", "ok")
-            vs.delete_secret("__preflight_probe__")
-        except Exception as exc:
-            items.append(CheckItem("config", "系统凭据保险箱", "warn", f"保险箱探针异常: {exc}"))
 
+def _check_preflight_mock_vault(eff_mode: str) -> list[CheckItem]:
+    """在深度自检且启用模拟凭据库时执行一次读写探针校验。"""
+    if eff_mode != "deep" or not os.environ.get("COLAB_PET_MOCK_VAULT_PATH"):
+        return []
+    try:
+        vs = VaultStore()
+        vs.set_secret("__preflight_probe__", "ok")
+        vs.delete_secret("__preflight_probe__")
+        return []
+    except Exception as exc:
+        return [CheckItem("config", "系统凭据保险箱", "warn", f"保险箱探针异常: {exc}")]
+
+
+def run_preflight_checks(
+    *,
+    mode: str = "fast",
+    profiles: list[str] | str | None = None,
+    gpu: str | None = None,
+    tool_paths: ToolPaths | None = None,
+    state_path: Path | None = None,
+    download_dir: Path | None = None,
+    cf_config_path: Path | None = None,
+    pkg_dir: Path = _PKG_DIR,
+    gdrive_free_gb: float | None = None,
+    require_local_rclone: bool | None = None,
+    edition: str | None = None,
+    public_mode: bool | None = None,
+    run_fn: Callable[..., Any] | None = None,
+    disk_usage_fn: Callable[[Any], Any] | None = None,
+) -> PreflightReport:
+    """执行启动前多维度环境、授权、磁盘、配置与显卡兼容性自检。
+
+    公开基础版（`edition="public"` / `public_mode=True` / `COLAB_PET_EDITION=public` 或 `require_local_rclone=False`）下，
+    缺失本地 rclone 与未绑定 `[gdrive_save]` 均降级为 `warn`（提示可选绑定云盘持久化）而不阻塞开机；
+    个人增强版（默认或显式 `require_local_rclone=True`）保留原有强校验语义。
+    """
+    eff_mode = "deep" if str(mode or "fast").strip().lower() == "deep" else "fast"
+    eff_edition = resolve_runtime_edition(edition, public_mode=public_mode, default_edition="personal")
+    strict_rclone = bool(require_local_rclone) if require_local_rclone is not None else (eff_edition != "public")
+    paths = tool_paths or discover_tool_paths(state_path=state_path)
+    norm_profs = normalize_profiles(profiles) if profiles is not None else ["anima"]
+    eff_gpu = str(gpu or select_default_gpu(norm_profs)).strip().upper()
+    runner = run_fn or _default_sync_run
+    du_fn = disk_usage_fn or shutil.disk_usage
+
+    versions: dict[str, Any] = {"python": sys.version.split()[0], "edition": eff_edition}
+    items = _check_preflight_tools(paths, eff_mode, strict_rclone, norm_profs, pkg_dir, runner, versions)
+    if eff_mode == "deep":
+        items.extend(_check_preflight_deep_desktop(pkg_dir, versions))
+    auth_items, detected_gdrive_free = _check_preflight_auth(paths, eff_mode, strict_rclone, gdrive_free_gb, runner)
+    items.extend(auth_items)
+    items.extend(_check_preflight_disk(download_dir, pkg_dir, detected_gdrive_free, du_fn))
+    items.extend(_check_preflight_config(state_path, cf_config_path, pkg_dir, paths))
+    items.append(_check_preflight_profile_gpu(norm_profs, eff_gpu))
+    items.extend(_check_preflight_mock_vault(eff_mode))
     return PreflightReport(mode=eff_mode, items=items, versions=versions)
 
 
